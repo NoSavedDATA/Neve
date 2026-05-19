@@ -75,6 +75,14 @@ extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) {
 
     return ret;
 }
+extern "C" void *array_pop(Scope_Struct *scope_struct, DT_array *v) { 
+    int virtual_size = v->virtual_size;
+
+    void *ret = ((void**)v->data)[virtual_size-1];
+    __atomic_store_n(&v->virtual_size, virtual_size-1, __ATOMIC_RELEASE);
+
+    return ret;
+}
 
 void array_Clean_Up(void *data_ptr, int tid) {
     DT_array *array = static_cast<DT_array *>(data_ptr);
@@ -89,6 +97,7 @@ extern "C" int array_size(Scope_Struct *scope_struct, DT_array *vec) {
 
 extern "C" int array_bad_idx(int line, int idx, int size) {
     LogErrorC(line, "Tried to index array at " + std::to_string(idx) + ", but the array size is: " + std::to_string(size));
+    std::exit(0);
     return 0;
 }
 
@@ -213,6 +222,21 @@ extern "C" float array_print_int(Scope_Struct *scope_struct, DT_array *vec) {
     return 0;
 }
 
+extern "C" float array_print_char(Scope_Struct *scope_struct, DT_array *vec) {
+    std::cout << std::dec;
+    char *ptr = static_cast<char*>(vec->data);
+    int size = vec->virtual_size;
+
+    std::cout << "[";
+    for (int i=0; i<size-1; ++i)
+        std::cout << ptr[i] << ",";
+    std::cout << ptr[size-1] << "]\n";
+    std::cout << "[";
+    for (int i=0; i<size-1; ++i)
+        std::cout << int(ptr[i]) << ",";
+    std::cout << int(ptr[size-1]) << "]\n\n";
+    return 0;
+}
 
 extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) {
     DT_array *vec = newT<DT_array>(scope_struct, "array");

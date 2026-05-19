@@ -21,6 +21,9 @@ using namespace llvm;
 
 
 Data_Tree array_clone_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
+Data_Tree array_pop_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
+Data_Tree map_keys_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
+Data_Tree map_values_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
 
 Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
                       std::string, std::string type, Data_Tree data_type,
@@ -39,13 +42,16 @@ Value *fexists(Parser_Struct parser_struct, Function *TheFunction,
 Value *print(Parser_Struct, Function *,
                  std::string, Data_Tree, std::vector<Data_Tree>&,
                  Value *, std::vector<std::unique_ptr<ExprAST>> &, std::vector<Value*>&);
+Value *to_char(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV);
 Value *i8(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV);
 Value *i16(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV);
-Value *parse_int(Parser_Struct parser_struct, Function *TheFunction,
+Value *to_int(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV);
 Value *i64(Parser_Struct parser_struct, Function *TheFunction,

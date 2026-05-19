@@ -1352,6 +1352,8 @@ void SetBreakPHIS(Parser_Struct parser_struct, std::vector<std::string> &assigne
 
         if (existed_already) {
             bool was_created = in_vec(name, created_vars);
+            if (was_created)
+                continue;
             PHINode *phi_val = Builder->CreatePHI(pair.second->getType(), 2, name.c_str());
 
             BasicBlock *preBB = was_created ? LoopBB : LoopPredecessor;
@@ -2044,11 +2046,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 BasicBlock *MapInsertBB = BasicBlock::Create(*TheContext, "map.insert.bb", TheFunction);
                 BasicBlock *MapExpandBB = BasicBlock::Create(*TheContext, "map.expand.bb", TheFunction);
 
-                Value *new_size = Builder->CreateAdd(map_size, const_int(1));
-                Builder->CreateStore(new_size, size_gep);
 
-                Value *expandCond = Builder->CreateICmpSGE(new_size, map_expand_at);
-                Builder->CreateCondBr(expandCond, MapExpandBB, MapInsertBB);
+                Builder->CreateCondBr(
+                            Builder->CreateICmpSGE(Builder->CreateAdd(map_size,const_int(1)), map_expand_at),
+                            MapExpandBB, MapInsertBB);
 
                 Builder->SetInsertPoint(MapExpandBB);
                 call("map_expand", {scope_struct, vec_ptr});
@@ -2101,7 +2102,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 // From nullptr
                 Builder->SetInsertPoint(FromNullBB);
                 // Builder->CreateStore(new_node_ptr, node_gep); 
-                call("map_node_set_bucket", {scope_struct, new_node_ptr, vec_ptr, hash_pos});
+                call("map_node_set_bucket", {scope_struct, vec_ptr, new_node_ptr, hash_pos});
                 Builder->CreateBr(AfterBB);
 
                 // Check first key
@@ -2139,7 +2140,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 // Builder->CreateStore(next_node_of_first, new_node_next_gep);
                 // Builder->CreateStore(new_node_ptr, node_gep);
                 call("map_node_overwrite_bucket", {scope_struct, new_node_ptr, vec_ptr, hash_pos});
-                Builder->CreateStore(map_size, size_gep);
                 Builder->CreateBr(AfterBB);
 
 
@@ -2183,19 +2183,18 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 // Pointer Chase Overwrite
                 Builder->SetInsertPoint(FromKeyBB);
                 call("map_node_reclaim", {scope_struct, vec_ptr, next_node});
-                call("map_node_overwrite", {scope_struct, new_node_ptr, map_phi_node, next_node});
+                call("map_node_overwrite", {scope_struct, vec_ptr, new_node_ptr, map_phi_node, next_node});
                 // Value *next_next_node_gep = Builder->CreateStructGEP(st_node, next_node, 2);
                 // Value *next_next_node = Builder->CreateLoad(int8PtrTy, next_next_node_gep);
                 // Builder->CreateStore(next_next_node, new_node_next_gep);
                 // Builder->CreateStore(new_node_ptr, next_node_gep);
-                // Builder->CreateStore(map_size, size_gep);
                 Builder->CreateBr(AfterBB);
 
 
                 // New pointer from Pointer Chase
                 Builder->SetInsertPoint(FromPtrChaseBB);
                 // Builder->CreateStore(new_node_ptr, next_node_gep); 
-                call("map_node_set_next", {scope_struct, new_node_ptr, map_phi_node});
+                call("map_node_set_next", {scope_struct, vec_ptr, new_node_ptr, map_phi_node});
                 Builder->CreateBr(AfterBB);
 
 

@@ -44,7 +44,6 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
 }
 
 extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
-    
     if (dt.Nested_Data.size()<2)
         LogErrorC(scope_struct->code_line, "map requires key and value info");
 
@@ -78,7 +77,6 @@ void map_Clean_Up(void *ptr, int tid) {
     int capacity = __atomic_load_n(&map->capacity, __ATOMIC_ACQUIRE);
     DT_map_node **nodes = __atomic_load_n(&map->nodes,__ATOMIC_ACQUIRE);
 
-    bool dang = (map->key_type=="int"&&map->val_type=="int");
 
     bool key_primary = data_name_to_type()[map->key_type] < 100;
     bool val_primary = data_name_to_type()[map->val_type] < 100;
@@ -91,8 +89,6 @@ void map_Clean_Up(void *ptr, int tid) {
                 free(node->key);
             if(val_primary) 
                 free(node->value);
-            // if (dang)
-            //     std::cout << "" << node << "\n";
             free(node);
             node = next;
         }
@@ -112,6 +108,21 @@ extern "C" int map_node_reclaim(Scope_Struct *ctx, DT_map *map, DT_map_node *nod
     return 0;
 }
 
+extern "C" int map_size(Scope_Struct *scope_struct, DT_map *map) {
+    return map->size;
+}
+// extern "C" int map_size(Scope_Struct *scope_struct, DT_map *map) {
+//     int size=0;
+//     for (int i=0; i<map->capacity; ++i) {
+//         DT_map_node *node = map->nodes[i];
+//         while (node!=nullptr) {
+//             size++;
+//             node = node->next;
+//         }
+//     }
+//     std::cout << "size " << size << " | " << map->size << "\n";
+//     return size;
+// }
 
 void DT_map::Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes) {
     DT_map_node *cur_node = nodes[hash_pos];
@@ -126,7 +137,7 @@ void DT_map::Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes) {
 }
 
 extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
-    int capacity = map->capacity*4;
+    int capacity = map->capacity*32;
 
     DT_map_node **nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
     for (int i=0; i<capacity; i++)
@@ -144,6 +155,10 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
                 int *key = static_cast<int*>(node->key);
                 hashed = *key;
                 unsigned int bucket_pos = hashed % capacity;
+            } else if (map->key_type=="i64") {
+                int64_t *key = static_cast<int64_t*>(node->key);
+                hashed = *key;
+                unsigned int bucket_pos = hashed % capacity;
             } else if (map->key_type=="float") {
                 float *key = static_cast<float*>(node->key);
                 hashed = float_hash(*key);
@@ -154,6 +169,9 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
                 else
                     LogErrorC(-1, "map expand not implemented for array of type " + map->key_type);
 
+            } else {
+                LogErrorC(-1, "map expand not implemented for " + map->key_type);
+                std::exit(0);
             }
             
             unsigned int bucket_pos = hashed % capacity;
@@ -168,7 +186,7 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
     free(map->nodes);
     __atomic_store_n(&map->nodes, nodes, __ATOMIC_RELEASE);
     __atomic_store_n(&map->capacity, capacity, __ATOMIC_RELEASE);
-    __atomic_store_n(&map->expand_at, capacity*4, __ATOMIC_RELEASE);
+    __atomic_store_n(&map->expand_at, capacity*32, __ATOMIC_RELEASE);
 }
 
 
@@ -241,14 +259,18 @@ extern "C" int map_print(Scope_Struct *scope_struct, DT_map *map) {
 }
 
 
-extern "C" int map_node_set_bucket(Scope_Struct *scope_struct, DT_map_node *new_node,
-                        DT_map *map, int hash_pos) {
+extern "C" int map_node_set_bucket(Scope_Struct *scope_struct, DT_map *map,
+                        DT_map_node *new_node, int hash_pos) {
     __atomic_store_n(&map->nodes[hash_pos], new_node, __ATOMIC_RELEASE);
+    int size = __atomic_load_n(&map->size, __ATOMIC_ACQUIRE); 
+    __atomic_store_n(&map->size, size+1, __ATOMIC_RELEASE);
     return 0;
 }
-extern "C" int map_node_set_next(Scope_Struct *scope_struct, DT_map_node *new_node,
+extern "C" int map_node_set_next(Scope_Struct *scope_struct, DT_map *map, DT_map_node *new_node,
                         DT_map_node *bucket_last) {
     __atomic_store_n(&bucket_last->next, new_node, __ATOMIC_RELEASE);
+    int size = __atomic_load_n(&map->size, __ATOMIC_ACQUIRE); 
+    __atomic_store_n(&map->size, size+1, __ATOMIC_RELEASE);
     return 0;
 }
 extern "C" int map_node_overwrite_bucket(Scope_Struct *scope_struct, DT_map_node *new_node,
@@ -260,7 +282,7 @@ extern "C" int map_node_overwrite_bucket(Scope_Struct *scope_struct, DT_map_node
 
     return 0;
 }
-extern "C" int map_node_overwrite(Scope_Struct *scope_struct, DT_map_node *new_node,
+extern "C" int map_node_overwrite(Scope_Struct *scope_struct, DT_map *map, DT_map_node *new_node,
                         DT_map_node *prev, DT_map_node *replaced) {
     DT_map_node *replaced_next = __atomic_load_n(&replaced->next, __ATOMIC_ACQUIRE);
     __atomic_store_n(&new_node->next, replaced_next, __ATOMIC_RELEASE);
@@ -269,20 +291,74 @@ extern "C" int map_node_overwrite(Scope_Struct *scope_struct, DT_map_node *new_n
 }
 
 
-extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
+extern "C" DT_array *map_keys_str(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->key_size, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+
+    DT_str *vec = static_cast<DT_str*>(array->data);
     
     int idx=0;
     for (int i=0; i<map->capacity; ++i) {
         DT_map_node *node = map->nodes[i];
         while (node!=nullptr) {
-            if (map->key_type=="str") {
-                char *key = static_cast<char*>(node->key);
-                DT_str *vec = static_cast<DT_str*>(array->data);
-                int size = strlen(key);
-                vec[idx] = DT_str(key, size);
-            } else if (map->key_type=="int") {
+            char *key = static_cast<char*>(node->key);
+            int size = strlen(key);
+            vec[idx++] = DT_str(key, size);
+            node = node->next;
+        }
+    }
+    array->virtual_size = idx;
+    return array;
+}
+
+extern "C" DT_array *map_keys_array(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+
+    DT_array **vec = static_cast<DT_array**>(array->data);
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            DT_array *key = static_cast<DT_array*>(node->key);
+            vec[idx++] = key;
+            node = node->next;
+        }
+    }
+    array->virtual_size = idx;
+    return array;
+}
+
+extern "C" DT_array *map_keys_i64(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+
+    int64_t *vec = static_cast<int64_t*>(array->data);
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            int64_t *key = static_cast<int64_t*>(node->key);
+            vec[idx++] = *key;
+            node = node->next;
+        }
+    }
+    array->virtual_size = idx;
+    return array;
+}
+
+extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            if (map->key_type=="int") {
                 int *key = static_cast<int*>(node->key);
                 int *vec = static_cast<int*>(array->data);
                 vec[idx] = *key;
@@ -294,8 +370,7 @@ extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
                 DT_array *key = static_cast<DT_array*>(node->key);
                 DT_array **vec = static_cast<DT_array**>(array->data);
                 vec[idx] = key;
-            }
-             
+            }             
             
             idx++;
             node = node->next;
@@ -307,9 +382,7 @@ extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
 
 extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    // std::cout << "map has size " << map->size << "\n";
-    array->New(scope_struct, map->size, map->val_size, data_name_to_type()[map->val_type]);
-    // std::cout << "post" << "\n";
+    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, data_name_to_type()[map->val_type]);
     
     int idx=0;
     for (int i=0; i<map->capacity; ++i) {
@@ -321,15 +394,25 @@ extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
                 int size = strlen(value);
                 vec[idx] = DT_str(value, size);
             } else if (map->val_type=="int") {
-                int *value = static_cast<int*>(node->value);
                 int *vec = static_cast<int*>(array->data);
+                int *value = static_cast<int*>(node->value);
+                vec[idx] = *value;
+            } else if (map->key_type=="i64") {
+                int64_t *value = static_cast<int64_t*>(node->value);
+                int64_t *vec = static_cast<int64_t*>(array->data);
                 vec[idx] = *value;
             } else if (map->val_type=="float") {
                 float *value = static_cast<float*>(node->value);
                 float *vec = static_cast<float*>(array->data);
                 vec[idx] = *value;
+            } else if (map->key_type=="array") {
+                DT_array *value = static_cast<DT_array*>(node->value);
+                DT_array **vec = static_cast<DT_array**>(array->data);
+                vec[idx] = value;
+            } else {
+                LogErrorC(-1, "unsupported keys of " + map->key_type);
+                std::exit(0);
             }
-             
             
             idx++;
             node = node->next;
@@ -339,36 +422,47 @@ extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
     return array;
 }
 
-extern "C" int map_size(Scope_Struct *scope_struct, DT_map *map) {
-
-    int size=0;
+extern "C" DT_array *map_values_int(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, data_name_to_type()[map->val_type]);
+    int *vec = static_cast<int*>(array->data);
+    
+    int idx=0;
     for (int i=0; i<map->capacity; ++i) {
         DT_map_node *node = map->nodes[i];
         while (node!=nullptr) {
-            size++;
+            int *value = static_cast<int*>(node->value);
+            vec[idx++] = *value;
             node = node->next;
         }
     }
-    return size;
+    array->virtual_size = idx;
+    return array;
 }
+
 
 extern "C" void map_bad_key_str(Scope_Struct *scope_struct, char *key) {
     std::string key_str = key;
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + key_str);
+    std::exit(0);
 }
 
 extern "C" void map_bad_key_int(Scope_Struct *scope_struct, int key) {
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + std::to_string(key));
+    std::exit(0);
 }
 extern "C" void map_bad_key_i64(Scope_Struct *scope_struct, int64_t key) {
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + std::to_string(key));
+    std::exit(0);
 }
 extern "C" void map_bad_key_array(Scope_Struct *scope_struct, DT_array *key) {
     LogErrorC(scope_struct->code_line, "Map does not contain array: ");
+    std::exit(0);
 }
 
 extern "C" void map_bad_key_float(Scope_Struct *scope_struct, float key) {
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + std::to_string(key));
+    std::exit(0);
 }
 
 

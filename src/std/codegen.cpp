@@ -38,6 +38,19 @@ Data_Tree array_clone_dt(Parser_Struct parser_struct, std::vector<std::unique_pt
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
   return dt;
 }
+Data_Tree array_pop_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+  return inner->GetDataTree().Nested_Data[0];
+}
+Data_Tree map_keys_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+  Data_Tree dt = Data_Tree("array");
+  dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
+  return dt;
+}
+Data_Tree map_values_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+  Data_Tree dt = Data_Tree("array");
+  dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[1]);
+  return dt;
+}
 
 Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
                       std::string name, std::string type, Data_Tree data_type,
@@ -88,6 +101,14 @@ Value *DT_vec_Create(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
+Value *to_char(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    const std::string &type = Args[0]->GetDataTree().Type;
+    if(!in_vec(type, int_types))
+        LogError(parser_struct.line, "Cannot cast " + type + " to i8.");
+    return Builder->CreateIntCast(ArgsV[0], int8Ty, true); // true for signed extend
+}
 Value *i8(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
@@ -104,7 +125,7 @@ Value *i16(Parser_Struct parser_struct, Function *TheFunction,
         LogError(parser_struct.line, "Cannot cast " + type + " to i16.");
     return Builder->CreateIntCast(ArgsV[0], int16Ty, true); // true for signed extend
 }
-Value *parse_int(Parser_Struct parser_struct, Function *TheFunction,
+Value *to_int(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;

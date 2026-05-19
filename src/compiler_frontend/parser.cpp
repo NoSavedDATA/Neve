@@ -582,8 +582,11 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   } 
 
 
-  if (IdName=="append" && CurTok=='(' && depth>1)
-      return Parse_Append_Expr(parser_struct, std::move(nameable), class_name);
+  if (IdName=="append" && CurTok=='(' && depth>1) {
+      std::string inner_type = nameable->Inner->GetDataTree().Type;
+      if (in_vec(inner_type, compound_tokens))
+          return Parse_Append_Expr(parser_struct, std::move(nameable), class_name);
+  }
   
   if(in_str(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
     return ParseLLVM_IR_CallExpr(parser_struct, std::move(nameable), class_name);

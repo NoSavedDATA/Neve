@@ -491,7 +491,7 @@ static int get_token(bool block) {
     LastChar = tokenizer->get();
     return tok_lshift;
   }
-  if(ThisChar=='>' && LastChar=='|') {
+  if(ThisChar=='|' && LastChar=='>') {
     LastChar = tokenizer->get();
     return tok_rshift;
   }

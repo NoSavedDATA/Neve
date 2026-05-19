@@ -48,6 +48,8 @@ struct GC_Arena;
 struct GC_Node;
 struct GC;
 
+
+
 extern std::array<GC_span_traits*, GC_obj_sizes> GC_span_traits_vec;
 
 struct GC_Node{

@@ -433,6 +433,15 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_node_reclaim"].push_back("1");
 		Function_Arg_Names["map_node_reclaim"].push_back("2");
 		
+		Function_Arg_Types["map_size"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_size"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_size"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_size"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_size"].push_back("0");
+		Function_Arg_Names["map_size"].push_back("1");
+		
 		Function_Arg_Types["map_expand"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_expand"]["1"] = "map";
 		
@@ -512,13 +521,13 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_print"].push_back("1");
 		
 		Function_Arg_Types["map_node_set_bucket"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_node_set_bucket"]["1"] = "map_node";
-		Function_Arg_Types["map_node_set_bucket"]["2"] = "map";
+		Function_Arg_Types["map_node_set_bucket"]["1"] = "map";
+		Function_Arg_Types["map_node_set_bucket"]["2"] = "map_node";
 		Function_Arg_Types["map_node_set_bucket"]["3"] = "int";
 		
 		Function_Arg_DataTypes["map_node_set_bucket"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_node_set_bucket"]["1"] = Data_Tree("map_node");
-		Function_Arg_DataTypes["map_node_set_bucket"]["2"] = Data_Tree("map");
+		Function_Arg_DataTypes["map_node_set_bucket"]["1"] = Data_Tree("map");
+		Function_Arg_DataTypes["map_node_set_bucket"]["2"] = Data_Tree("map_node");
 		Function_Arg_DataTypes["map_node_set_bucket"]["3"] = Data_Tree("int");
 		
 		Function_Arg_Names["map_node_set_bucket"].push_back("0");
@@ -527,16 +536,19 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_node_set_bucket"].push_back("3");
 		
 		Function_Arg_Types["map_node_set_next"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_node_set_next"]["1"] = "map_node";
+		Function_Arg_Types["map_node_set_next"]["1"] = "map";
 		Function_Arg_Types["map_node_set_next"]["2"] = "map_node";
+		Function_Arg_Types["map_node_set_next"]["3"] = "map_node";
 		
 		Function_Arg_DataTypes["map_node_set_next"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_node_set_next"]["1"] = Data_Tree("map_node");
+		Function_Arg_DataTypes["map_node_set_next"]["1"] = Data_Tree("map");
 		Function_Arg_DataTypes["map_node_set_next"]["2"] = Data_Tree("map_node");
+		Function_Arg_DataTypes["map_node_set_next"]["3"] = Data_Tree("map_node");
 		
 		Function_Arg_Names["map_node_set_next"].push_back("0");
 		Function_Arg_Names["map_node_set_next"].push_back("1");
 		Function_Arg_Names["map_node_set_next"].push_back("2");
+		Function_Arg_Names["map_node_set_next"].push_back("3");
 		
 		Function_Arg_Types["map_node_overwrite_bucket"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_node_overwrite_bucket"]["1"] = "map_node";
@@ -554,19 +566,49 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_node_overwrite_bucket"].push_back("3");
 		
 		Function_Arg_Types["map_node_overwrite"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_node_overwrite"]["1"] = "map_node";
+		Function_Arg_Types["map_node_overwrite"]["1"] = "map";
 		Function_Arg_Types["map_node_overwrite"]["2"] = "map_node";
 		Function_Arg_Types["map_node_overwrite"]["3"] = "map_node";
+		Function_Arg_Types["map_node_overwrite"]["4"] = "map_node";
 		
 		Function_Arg_DataTypes["map_node_overwrite"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_node_overwrite"]["1"] = Data_Tree("map_node");
+		Function_Arg_DataTypes["map_node_overwrite"]["1"] = Data_Tree("map");
 		Function_Arg_DataTypes["map_node_overwrite"]["2"] = Data_Tree("map_node");
 		Function_Arg_DataTypes["map_node_overwrite"]["3"] = Data_Tree("map_node");
+		Function_Arg_DataTypes["map_node_overwrite"]["4"] = Data_Tree("map_node");
 		
 		Function_Arg_Names["map_node_overwrite"].push_back("0");
 		Function_Arg_Names["map_node_overwrite"].push_back("1");
 		Function_Arg_Names["map_node_overwrite"].push_back("2");
 		Function_Arg_Names["map_node_overwrite"].push_back("3");
+		Function_Arg_Names["map_node_overwrite"].push_back("4");
+		
+		Function_Arg_Types["map_keys_str"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_keys_str"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_keys_str"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_keys_str"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_keys_str"].push_back("0");
+		Function_Arg_Names["map_keys_str"].push_back("1");
+		
+		Function_Arg_Types["map_keys_array"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_keys_array"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_keys_array"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_keys_array"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_keys_array"].push_back("0");
+		Function_Arg_Names["map_keys_array"].push_back("1");
+		
+		Function_Arg_Types["map_keys_i64"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_keys_i64"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_keys_i64"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_keys_i64"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_keys_i64"].push_back("0");
+		Function_Arg_Names["map_keys_i64"].push_back("1");
 		
 		Function_Arg_Types["map_keys"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_keys"]["1"] = "map";
@@ -586,14 +628,14 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_values"].push_back("0");
 		Function_Arg_Names["map_values"].push_back("1");
 		
-		Function_Arg_Types["map_size"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_size"]["1"] = "map";
+		Function_Arg_Types["map_values_int"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_values_int"]["1"] = "map";
 		
-		Function_Arg_DataTypes["map_size"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_size"]["1"] = Data_Tree("map");
+		Function_Arg_DataTypes["map_values_int"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_values_int"]["1"] = Data_Tree("map");
 		
-		Function_Arg_Names["map_size"].push_back("0");
-		Function_Arg_Names["map_size"].push_back("1");
+		Function_Arg_Names["map_values_int"].push_back("0");
+		Function_Arg_Names["map_values_int"].push_back("1");
 		
 		Function_Arg_Types["map_bad_key_str"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_bad_key_str"]["1"] = "str";
@@ -684,6 +726,17 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["array_clone"].push_back("0");
 		Function_Arg_Names["array_clone"].push_back("1");
+		
+		Function_Arg_Types["array_pop"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_pop"]["1"] = "array";
+		
+		Function_Arg_DataTypes["array_pop"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_pop_1 = Data_Tree("array");
+		array_pop_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_pop"]["1"] = array_pop_1;
+		
+		Function_Arg_Names["array_pop"].push_back("0");
+		Function_Arg_Names["array_pop"].push_back("1");
 		
 		Function_Arg_Types["array_size"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_size"]["1"] = "array";
@@ -806,6 +859,17 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["array_print_int"].push_back("0");
 		Function_Arg_Names["array_print_int"].push_back("1");
+		
+		Function_Arg_Types["array_print_char"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_print_char"]["1"] = "array";
+		
+		Function_Arg_DataTypes["array_print_char"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_print_char_1 = Data_Tree("array");
+		array_print_char_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_print_char"]["1"] = array_print_char_1;
+		
+		Function_Arg_Names["array_print_char"].push_back("0");
+		Function_Arg_Names["array_print_char"].push_back("1");
 		
 		Function_Arg_Types["arange_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["arange_int"]["1"] = "int";

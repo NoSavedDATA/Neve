@@ -1,6 +1,97 @@
+class FreqNode
+	int freq
+	i64 key
+	ctor(int freq, i64 key)
+		self.freq = freq
+		self.key = key
+
+	def int print()
+		print(self.freq, ", ", self.key)
+
+class BinaryHeap
+	array<FreqNode> v
+	ctor()
+		0
+	def int append(FreqNode node)
+		self.v.append(node)
+		int i = self.v.size()-1
+
+		while i>0
+			int parent = (i-1)//2
+			if self.v[parent].freq >= self.v[i].freq
+				break
+
+			var tmp = self.v[parent]
+			self.v[parent] = self.v[i]
+			self.v[i] = tmp
+			i = parent
+
+	def FreqNode pop_max()
+		int size = self.v.size()
 
 
-	
+		FreqNode top = self.v[0]
+
+		if size == 1
+			self.v.pop()
+			return top
+
+		self.v[0] = self.v[size-1]
+		self.v.pop()
+
+		size = size - 1
+
+		int i = 0
+
+		while true
+			int left = i*2 + 1
+			int right = i*2 + 2
+
+			int largest = i
+
+			if left < size
+				if self.v[left].freq > self.v[largest].freq
+					largest = left
+
+			if right < size
+				if self.v[right].freq > self.v[largest].freq
+					largest = right
+
+			if largest == i
+				break
+
+			var tmp = self.v[i]
+			self.v[i] = self.v[largest]
+			self.v[largest] = tmp
+
+			i = largest
+
+		return top
+
+	def int size()
+		return self.v.size()
+
+	def int print()
+		int size = self.v.size()
+		for i=0, i<size
+			var node = self.v[i]
+			print(i, ": ", node.freq)
+
+class Token
+	int id
+	i64 key
+	int l, r
+	array<int> toks 
+	array<char> toks_c
+	ctor(int id, i64 key, int l, int r)
+		self.id=id
+		self.key=key
+		self.l=l
+		self.r=r
+
+	def int print()
+		print(self.id, ": ", self.l, "-", self.r)
+
 
 class BPE
 	int fd, col, lines
@@ -9,10 +100,12 @@ class BPE
 	int padding, word_end, bos, eos, highest_b, highest_p, highest_freq, last_tok, vocab_size
 	str cur_buffer, fname
 	map<str,int> word_freqs
-	map<int, map<int, int>> freqs
+	map<i64, int> freqs
 	map<array<int>,int> arr_freqs
-	map<i64,int> tokens
+	map<i64,Token> tokens
+	map<int,Token> id_to_token
 	char sep
+	BinaryHeap bh
 
 	ctor(str fname, char sep, int vocab_size)
 		self.fd = c_open(fname)
@@ -26,6 +119,7 @@ class BPE
 		self.word_end = 3
 		self.last_tok = 256
 		self.vocab_size = vocab_size
+		self.bh = new BinaryHeap()
 
 		
 	def float get_buff()
@@ -104,24 +198,41 @@ class BPE
 			if self.lines%2000==0
 				print(self.lines)
 
-			if self.lines>30000
+			if self.lines>200000
 				#self.print()
 				#GC_print()
 				self.get_freqs()
 				return 0
+	
+	def int rebuild_bh()
+		int fsize = self.freqs.size()
+		var v = self.bh.v
+		v.clear()
+		var keys = self.freqs.keys()
+		var values = self.freqs.values()
+		for i=0, i<fsize
+			i64 k = keys[i]
+			int l = k |> 32
+			int r = k
+			self.bh.append(new FreqNode(values[i], keys[i]))
+
+	def int update_top(int freq, i64 key)
+		if freq<=2
+			return 0
+		int fsize = self.freqs.size()
+		if self.bh.size() > fsize*4
+			self.rebuild_bh()
+		else
+			self.bh.append(new FreqNode(freq, key))
 
 	def int inc_freq(int b, int p, int freq)
-		if b<10 or p<10
-			return 0
-		if !self.freqs.has(b)
-			map<int,int> inner_freq
-			self.freqs[b] = inner_freq
-		var pair = self.freqs[b]
-		if !pair.has(p)
-			pair[p] = 0
+		i64 key = (i64(b) <| 32) | p
+		if !self.freqs.has(key)
+			self.freqs[key] = 0
 		
-		freq = pair[p] + freq
-		pair[p] = freq
+		freq = self.freqs[key] + freq
+		self.freqs[key] = freq
+		self.update_top(freq, key)
 
 		if freq > self.highest_freq
 			self.highest_freq = freq
@@ -131,7 +242,7 @@ class BPE
 
 	def int get_freqs()
 		print("freq")
-		int msize = self.word_freqs.size()
+		int msize = self.word_freqs.size()-1
 		var keys = self.word_freqs.keys()
 		var values = self.word_freqs.values()
 		self.highest_freq = 0
@@ -140,88 +251,118 @@ class BPE
 			int freq = values[i]
 			if freq>2
 				str word = keys[i]
+				int wsize = word.size()
 				array<int> token
-				for i=0, i<word.size()-1
-					int b = parse_int(word[i])
+				for i=0, i< wsize-1
+					int b = to_int(word[i])
 					token.append(b)
-					self.inc_freq(b, parse_int(word[i+1]), freq)
+					self.inc_freq(b, to_int(word[i+1]), freq)
 				token.append(self.word_end)
-				self.inc_freq(parse_int(word[word.size()-1]), self.word_end, freq)
+				self.inc_freq(to_int(word[wsize-1]), self.word_end, freq)
 				self.arr_freqs[token] = freq
 		self.merge_freqs()
 
+	
+	def int tok_add(Token tok, int c)
+		if self.id_to_token.has(c)
+			var nested = self.id_to_token[c]
+			self.tok_add(tok, nested.l)
+			self.tok_add(tok, nested.r)
+		else
+			tok.toks.append(c)
+			tok.toks_c.append(to_char(c))
+
+	def int set_token_chars(Token tok)
+	
+		self.tok_add(tok, tok.l)
+		self.tok_add(tok, tok.r)
+
+		tok.toks.print()
+		tok.toks_c.print()
+
+
+	def Token pop_heap()
+		while true
+			var top_freq = self.bh.pop_max()
+			i64 key = top_freq.key
+			i64 freq = top_freq.freq
+			
+			if !self.tokens.has(key)
+				if freq == self.freqs[key]
+					int l = key |> 32
+					int r = key
+					Token tok = new Token(self.last_tok, key, l, r)
+					#print("pop_head tokens")
+					self.tokens[key] = tok
+					self.id_to_token[self.last_tok] = tok
+					tok.print()
+					self.set_token_chars(tok)
+					#self.rebuild_bh()
+					return tok
+
+	def Token from_max()
+		int l = self.highest_b
+		int r = self.highest_p
+		i64 key = (i64(l) <| 32) | r
+		Token _tok = new Token(self.last_tok, key, l, r)
+		self.tokens[key] = _tok
+		self.id_to_token[self.last_tok] = _tok
+		_tok.print()
+		self.set_token_chars(_tok)
+		return _tok
+	
 	def int merge_freqs()
-		print("merge")
-		#join_gc()
 		while self.last_tok<self.vocab_size
-			i64 key = (i64(self.highest_b) <| 32) | self.highest_p
-			print("tok ", self.last_tok, " -> ", self.highest_b, "-", self.highest_p)
-			self.tokens[key] = self.last_tok
-			self.last_tok = self.last_tok + 1
+			var t = self.pop_heap()
+			#var t = self.from_max()
+			i64 key = t.key
 			self.highest_freq=0
 
-			self.freqs.clear()
-			#GC_print()
 
-			int asize = self.arr_freqs.size()
+			int asize = self.arr_freqs.size()-1
 			var token_keys = self.arr_freqs.keys()
 			var token_values = self.arr_freqs.values()
 
 			map<array<int>, int> next_tokens
 
-			
 			for i=0, i<asize
 				var tok = token_keys[i]
 				int freq = token_values[i]
+
 				array<int> new_tok
-
-				while true
-					int wsize = tok.size()
-					int changes=0
-					bool changed=false
-					int w=0
-					while w<wsize-1
-						i64 tkey = (i64(tok[w]) <| 32) | tok[w+1]
-						if self.tokens.has(tkey)
-							changed=true
-							int b = self.tokens[tkey]
-							new_tok.append(self.tokens[tkey])
-							changes=changes+1
-							w = w + 2
-						else
-							new_tok.append(tok[w])
-							w = w + 1
-					if w<wsize
+				int wsize = tok.size()
+				int w=0
+				while w<wsize-1
+					i64 tkey = (i64(tok[w]) <| 32) | tok[w+1]
+					if tkey==key
+						new_tok.append(self.last_tok)
+						w = w + 2
+					else
 						new_tok.append(tok[w])
-					if !changed
-						if changes>1
-							new_tok.print()
-						break
-					tok = new_tok.clone()
-					new_tok.clear()
+						w = w + 1
+				if w<wsize
+					new_tok.append(tok[w])
 
 
-
-				next_tokens[tok] = freq 
+				next_tokens[new_tok] = freq 
 
 				w=0
-				while w<tok.size()-1
-					self.inc_freq(tok[w], tok[w+1], freq)
+				while w<new_tok.size()-1
+					int _b = new_tok[w]
+					if _b==self.last_tok and new_tok.size()>w+1
+						self.inc_freq(_b, new_tok[w+1], freq)
 					w=w+1
 
 			self.arr_freqs.clear()
 			self.arr_freqs = next_tokens
-
+			self.last_tok = self.last_tok + 1
 		#self.tokens.print()
 
 
 
 def float Build_vocab()
-	
-	BPE bpe = new BPE("/Datasets/openwebtxt/openwebtext.txt", ' ', 10000)
+	BPE bpe = new BPE("/Datasets/openwebtxt/openwebtext.txt", ' ', 15000)
 	bpe.train()
-
-
 
 
 main

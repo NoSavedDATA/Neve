@@ -1245,10 +1245,14 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 
   Data_Tree ret = functions_return_data_type[Callee];
 
-  if (function_return_overwrite.count(Callee)>0)
-    ret = function_return_overwrite[Callee](parser_struct, Args);
-  if (method_return_overwrite.count(Callee)>0)
-    ret = method_return_overwrite[Callee](parser_struct, Args, Inner);
+
+  std::string callee = (begins_with(Callee, "map_keys")) ? "map_keys" : Callee;
+  callee = (begins_with(callee, "map_values")) ? "map_values" : callee;
+
+  if (function_return_overwrite.count(callee)>0)
+    ret = function_return_overwrite[callee](parser_struct, Args);
+  if (method_return_overwrite.count(callee)>0)
+    ret = method_return_overwrite[callee](parser_struct, Args, Inner);
   
 
    
@@ -1436,6 +1440,10 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
   }
 
 
+  if(Callee=="map_keys")
+    Callee += "_" + this->Inner->GetDataTree().Nested_Data[0].Type;
+  if(Callee=="map_values")
+    Callee += "_" + this->Inner->GetDataTree().Nested_Data[1].Type;
   if(Callee=="map_has")
     Callee += "_" + this->Args[0]->GetDataTree().Type;
 
@@ -1450,6 +1458,7 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   // check if exists
   if (functions_return_data_type.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
+        &&method_return_overwrite.count(Callee)==0\
           &&!this->isSelf&&!is_first_citizen) {
     // std::cout << "" << Callee << "|" << std::to_string(!in_vec(Callee, template_fn)) << "\n";
     // std::cout << "" << this->isSelf << "\n";

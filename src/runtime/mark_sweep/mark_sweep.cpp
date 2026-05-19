@@ -125,7 +125,6 @@ void GC_Observer(Scope_Struct *scope_struct) {
     }
     std::cout << "sweeps " << sweeps << "\n";
 }
-
 extern "C" float psweep(Scope_Struct *scope_struct) {
     {
         std::lock_guard<std::mutex> lock(scope_struct->mtx);
@@ -195,6 +194,7 @@ GC_Node::GC_Node() {}
 
 
 void GC::DoubleSize(Scope_Struct *ctx) {
+    // Not working
     std::unique_lock<std::mutex> lock(arena->sweep_mtx);
     std::cout << "DOUBLE ARENA SIZE" << "\n";
 

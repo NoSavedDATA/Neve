@@ -376,6 +376,12 @@ void build_dicts() {
 
 
   
+  // to_char
+  functions_return_data_type["to_char"] = Data_Tree("char");
+  Function_Arg_DataTypes["to_char"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["to_char"]["1"] = Data_Tree("any");
+  Function_Arg_Names["to_char"] = {"0", "1"};
+  Function_Required_Arg_Count["to_char"] = 1;
   // i8
   functions_return_data_type["i8"] = Data_Tree("i8");
   Function_Arg_DataTypes["i8"]["0"] = Data_Tree("Scope_Struct");
@@ -389,11 +395,11 @@ void build_dicts() {
   Function_Arg_Names["i16"] = {"0", "1"};
   Function_Required_Arg_Count["i16"] = 1;
   // int
-  functions_return_data_type["parse_int"] = Data_Tree("int");
-  Function_Arg_DataTypes["parse_int"]["0"] = Data_Tree("Scope_Struct");
-  Function_Arg_DataTypes["parse_int"]["1"] = Data_Tree("any");
-  Function_Arg_Names["parse_int"] = {"0", "1"};
-  Function_Required_Arg_Count["parse_int"] = 1;
+  functions_return_data_type["to_int"] = Data_Tree("int");
+  Function_Arg_DataTypes["to_int"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["to_int"]["1"] = Data_Tree("any");
+  Function_Arg_Names["to_int"] = {"0", "1"};
+  Function_Required_Arg_Count["to_int"] = 1;
   // i64
   functions_return_data_type["i64"] = Data_Tree("i64");
   Function_Arg_DataTypes["i64"]["0"] = Data_Tree("Scope_Struct");
@@ -447,6 +453,13 @@ void build_dicts() {
 
   // array_copy
   method_return_overwrite["array_clone"] = array_clone_dt;
+  // array_pop
+  method_return_overwrite["array_pop"] = array_pop_dt;
+
+  // map_keys
+  method_return_overwrite["map_keys"] = map_keys_dt;
+  // map_values
+  method_return_overwrite["map_values"] = map_values_dt;
 
 
 
