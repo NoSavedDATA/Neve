@@ -807,9 +807,12 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
+
+  auto prev_vars = data_typeVars[parser_struct.function_name];
   Parser_Struct loop_parser_struct = parser_struct;
   loop_parser_struct.loop_depth++;
   Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
+  data_typeVars[parser_struct.function_name] = prev_vars;
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body), parser_struct);

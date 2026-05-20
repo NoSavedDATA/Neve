@@ -192,11 +192,6 @@ class BPE
 				int has_high
 				mask, has_high = self.get_masks(pos)
 
-				int next_special=0#1<<32
-				if has_high!=0
-					next_special = has_high
-				
-
 				if mask==0 and has_high==0
 					pos = pos + 32
 				else
@@ -421,25 +416,39 @@ class BPE
 						self.nodes[new_key].append(node_id)
 				self.last_tok = self.last_tok + 1
 
+
 	def array<int> encode(str msg)
 		array<int> toks
-		for i=0, i<msg.size() 
+
+		for i=0, i<msg.size()
 			int c = to_int(msg[i])
 			if c==32
 				c=3
 			toks.append(c)
-
-		
 		toks.print()
-		array<int> encoded
 
 		while true
-			bool changed = false
+			bool found = false
 
-			encoded.clear()
+			int best_rank = 0x7fffffff
+
+			for i=0, i<toks.size()-1
+				i64 key = (i64(toks[i]) <| 32) | toks[i+1]
+
+
+				if self.tokens.has(key)
+					var tok = self.tokens[key]
+
+					if tok.id < best_rank
+						best_rank = tok.id
+						found = true
+
+			if !found
+				break
+
+			array<int> encoded
 
 			int w = 0
-
 			while w < toks.size()
 				if w < toks.size()-1
 					i64 key = (i64(toks[w]) <| 32) | toks[w+1]
@@ -447,21 +456,17 @@ class BPE
 					if self.tokens.has(key)
 						var tok = self.tokens[key]
 
-						encoded.append(tok.id)
-
-						w = w+2
-						changed = true
-						continue
+						if tok.id == best_rank
+							encoded.append(tok.id)
+							w = w + 2
+							continue
 
 				encoded.append(toks[w])
 				w = w + 1
 
 			toks = encoded.clone()
 
-			if !changed
-				break
-
-		return encoded
+		return toks
 
 	def array<char> decode(array<int> toks)
 		int w=0
@@ -494,11 +499,8 @@ def float Build_vocab()
 	BPE bpe = new BPE("/Datasets/openwebtxt/openwebtext.txt", 32000)
 	bpe.train()
 
-
 	debug_bpe(bpe, "hello world this is a tokenizer test")
 	debug_bpe(bpe, "I like drinking coffee in rainy days")
-
-
 
 
 main
