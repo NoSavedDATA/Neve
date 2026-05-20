@@ -715,8 +715,10 @@ class IfExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Else);
 
   Value *codegen(Value *scope_struct) override;
-  Value *codegen_from_loop(Value *, BasicBlock *, BasicBlock *,
-                std::map<std::string, Value*> &break_values_snapshot, std::vector<BasicBlock *> &BreakBB);
+  Value *codegen_from_loop(Value *, BasicBlock *, BasicBlock *, BasicBlock *,
+                std::map<std::string, Value*> &break_values_snapshot,
+                std::vector<BasicBlock *> &BreakBB,
+                std::vector<BasicBlock *> &ContinueBB);
 };
 
 
@@ -765,10 +767,14 @@ class WhileExprAST : public ExprAST {
 
 class BreakExprAST : public ExprAST {
   Parser_Struct parser_struct;
-
   public:
     BreakExprAST();
-
+  Value *codegen(Value *scope_struct) override;
+};
+class ContinueExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+  public:
+    ContinueExprAST();
   Value *codegen(Value *scope_struct) override;
 };
 

@@ -223,7 +223,12 @@ std::unique_ptr<ExprAST> ParseNilExpr(Parser_Struct parser_struct) {
 
 std::unique_ptr<ExprAST> ParseBreakExpr(Parser_Struct parser_struct) {
   auto Result = std::make_unique<BreakExprAST>();
-  getNextToken(); // break
+  getNextToken(); // eat break
+  return std::move(Result);
+}
+std::unique_ptr<ExprAST> ParseContinueExpr(Parser_Struct parser_struct) {
+  auto Result = std::make_unique<ContinueExprAST>();
+  getNextToken(); // eat continue
   return std::move(Result);
 }
 
@@ -602,6 +607,9 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   if (CurTok=='[')
     return ParseIdxExpr(parser_struct, std::move(nameable), class_name, depth);
   
+  // std::cout << "DEPTH " << depth << "\n";
+  // if (depth==1)
+      nameable->GetDataTree();
   
   std::unique_ptr<ExprAST> expr_ptr(static_cast<ExprAST*>(nameable.release()));
   return std::move(expr_ptr);
@@ -642,8 +650,9 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
   
   std::vector<std::unique_ptr<ExprAST>> Then, Else;
   
-  while(true)
-  {
+
+  auto prev_vars = data_typeVars[parser_struct.function_name];
+  while(true) {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
       break;
 
@@ -665,6 +674,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
     LogError(parser_struct.line, "Then is null");
     return nullptr;
   }
+  data_typeVars[parser_struct.function_name] = prev_vars;
   
   
   if(CurTok == tok_space)
@@ -679,6 +689,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
                                       std::move(Else));
   }
   else {
+    prev_vars = data_typeVars[parser_struct.function_name];
     getNextToken(); //eat else
     if(CurTok != tok_space)
       LogError(parser_struct.line, "else requer barra de espaço.");
@@ -701,6 +712,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
         return nullptr;
       Else.push_back(std::move(body));
     }
+    data_typeVars[parser_struct.function_name] = prev_vars;
 
   
     if (CurTok==tok_space)
@@ -1905,6 +1917,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseWhileExpr(parser_struct, class_name);
   case tok_break:
     return ParseBreakExpr(parser_struct);
+  case tok_continue:
+    return ParseContinueExpr(parser_struct);
   case tok_async_finish:
     return ParseFinishExpr(parser_struct, class_name);
   case tok_async:

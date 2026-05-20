@@ -216,7 +216,9 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"any", tok_any},
                                              {"proto", tok_proto}, {"operation", tok_op},
                                              {"and", tok_and},
-										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}, {"break", tok_break},
+										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor},
+                                             {"break", tok_break},
+                                             {"continue", tok_continue},
                                              {"offby", tok_offby},
                                              {"new", tok_new}};
 

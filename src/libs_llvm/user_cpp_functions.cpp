@@ -56,6 +56,8 @@ void set_user_functions() {
 	struct_create_fn["DT_vec_Create"] = DT_vec_Create;
 	llvm_callee["fexists"] = fexists;
 	llvm_callee["print"] = print;
+	llvm_callee["print_bb"] = print_bb;
+	llvm_callee["print_Value"] = print_Value;
 	llvm_callee["to_char"] = to_char;
 	llvm_callee["i8"] = i8;
 	llvm_callee["i16"] = i16;

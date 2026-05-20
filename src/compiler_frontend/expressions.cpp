@@ -975,6 +975,7 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
   : Cond(std::move(Cond)), Body(std::move(Body)), parser_struct(parser_struct) {}
 
 BreakExprAST::BreakExprAST() {}
+ContinueExprAST::ContinueExprAST() {}
 
 IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vector<std::unique_ptr<ExprAST>> Second_Idxs, bool IsSlice)
             : Idxs(std::move(Idxs)), Second_Idxs(std::move(Second_Idxs)), IsSlice(IsSlice) {
@@ -1294,6 +1295,7 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 
 
 Data_Tree Nameable::GetDataTree(bool from_assignment) {  
+    // std::cout << "Get dt of " << Name << "\n";
     if (data_type.Type!="")
         return data_type;
 

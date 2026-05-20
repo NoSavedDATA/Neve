@@ -28,6 +28,7 @@ namespace fs = std::filesystem;
 std::map<std::string, int> fn_stack_offset;
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
 std::map<std::string, std::map<std::string, Value *>> function_values;
+std::map<BasicBlock*, std::map<std::string, Value *>> block_values;
 std::map<std::string, std::map<Value *, Value *>> function_vecs;
 std::map<std::string, std::map<Value *, Value *>> function_vecs_size;
 std::map<std::string, std::map<std::string, Value *>> function_pointers;
@@ -63,6 +64,16 @@ inline void printTy(Value *v) {
     llvm::errs() << "\n";
 }
 
+inline void bb_name(BasicBlock *bb) {
+    errs() << "bb: " << bb->getName() << "\n";
+}
+inline void v_name(Value *v) {
+    errs() << v->getName() << "\n";
+}
+inline void v_ir(Value *v) {
+    v->print(errs());
+    errs() << "\n";
+}
 
 Value *load_alloca(std::string name, std::string type, std::string from_function) {
     llvm::Type *load_type;
@@ -645,7 +656,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
 }
 
 
-void MakeWriteBarrier(Function *TheFunction, Value *scope_struct,
+void MakeWriteBarrier(Parser_Struct parser_struct, Function *TheFunction, Value *scope_struct,
                         Value *src, Value *ptr, Value *ref,
                         std::string type) {
     Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
@@ -1124,7 +1135,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 
     // Create blocks for the then and else cases.  Insert the 'then' block at the
     // end of the function.
-    BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
+    BasicBlock *ThenPostBB, *ElsePostBB;
     BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "if_then", TheFunction);
     BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "if_else");
     BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "if_cont");
@@ -1138,7 +1149,6 @@ Value *IfExprAST::codegen(Value *scope_struct) {
                             cast<PointerType>(int8PtrTy)
                         ));
 
-
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
@@ -1148,16 +1158,17 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     Value *ThenV;
     for (auto &then_body : Then)
         ThenV = then_body->codegen(scope_struct);
-    auto then_values = function_values[parser_struct.function_name];
+    ThenPostBB = Builder->GetInsertBlock();
+    block_values[ThenPostBB] = function_values[parser_struct.function_name];
 
 
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ThenV)
         return nullptr;
     if (!ThenTerminated) {
+        ThenPostBB = Builder->GetInsertBlock();
+        block_values[ThenPostBB] = function_values[parser_struct.function_name];
         Builder->CreateBr(MergeBB);
-        // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
-        ThenBB = Builder->GetInsertBlock();
     }
 
     // Emit else block.
@@ -1169,23 +1180,21 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     Value *ElseV;
     for (auto &else_body : Else)
         ElseV = else_body->codegen(scope_struct);
+    ElsePostBB = Builder->GetInsertBlock();
 
-    std::map<std::string, Value *> else_values;
     if(Else.size()>0)
-        else_values = function_values[parser_struct.function_name];
+        block_values[ElsePostBB] = function_values[parser_struct.function_name];
     else {
         ElseV = const_int(0);
-        else_values = old_values;
+        block_values[ElsePostBB] = old_values;
     }
 
     bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ElseV)
         return nullptr;
-    if (!ElseTerminated) {
+    if (!ElseTerminated)
         Builder->CreateBr(MergeBB);
-        // Codegen of 'Else' can change the current block, update ElseBB for the PHI.
-        ElseBB = Builder->GetInsertBlock();
-    }
+
 
     if (ThenTerminated && ElseTerminated)
         return nullptr;
@@ -1194,24 +1203,30 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), MergeBB);
     Builder->SetInsertPoint(MergeBB);
 
+    auto then_values = block_values[ThenPostBB];
+    auto else_values = block_values[ElsePostBB];
     for (auto &[name, value] : old_values) {
-        Value *then_val = then_values.count(name) ? then_values.at(name) : value;
-        Value *else_val = else_values.count(name) ? else_values.at(name) : value;
-        if (then_val != value || else_val != value) {
-            int incoming = (!ThenTerminated) + (!ElseTerminated);
-            PHINode *phi = Builder->CreatePHI(value->getType(), incoming);
-            if (!ThenTerminated)
-                phi->addIncoming(then_val, ThenBB);
-            if (!ElseTerminated)
-                phi->addIncoming(else_val, ElseBB);
-            function_values[parser_struct.function_name][name] = phi;
-        }
+        if (!ThenTerminated&&!ElseTerminated) {
+            if (then_values[name]!=value || else_values[name]!=value) {
+                PHINode *phi = Builder->CreatePHI(value->getType(), 2);
+                phi->addIncoming(then_values[name], ThenPostBB);
+                phi->addIncoming(else_values[name], ElsePostBB);
+                function_values[parser_struct.function_name][name] = phi;
+            }
+        } else if (!ThenTerminated)
+            function_values[parser_struct.function_name][name] = then_values[name];
+        else if (!ElseTerminated)
+            function_values[parser_struct.function_name][name] = else_values[name];
+        else {}
     }
     return const_float(0.0f);
 }
 
 
-Value *IfExprAST::codegen_from_loop(Value *scope_struct, BasicBlock *LoopBody, BasicBlock *LoopAfter, std::map<std::string, Value*> &break_values_snapshot, std::vector<BasicBlock *> &BreakBB) {
+Value *IfExprAST::codegen_from_loop(Value *scope_struct,
+        BasicBlock *LoopBB, BasicBlock *IncBB, BasicBlock *LoopAfter,
+        std::map<std::string, Value*> &break_values_snapshot,
+        std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {
     if (not ShallCodegen)
         return const_float(0.0f);
 
@@ -1226,9 +1241,11 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct, BasicBlock *LoopBody, B
 
     // Create blocks for the then and else cases.  Insert the 'then' block at the
     // end of the function.
-    BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "if_then", TheFunction);
-    BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "if_else");
-    BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "if_cont");
+
+    BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "if.then", TheFunction);
+    BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "if.else");
+    BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "if.after");
+    BasicBlock *ThenPostBB, *ElsePostBB;
 
 
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
@@ -1240,26 +1257,33 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct, BasicBlock *LoopBody, B
     Value *ThenV;
     for (auto &then_body : Then) {
         if (auto *if_stmt = dynamic_cast<IfExprAST*>(then_body.get()))
-            if_stmt->codegen_from_loop(scope_struct, ThenBB, LoopAfter, break_values_snapshot, BreakBB);
+            if_stmt->codegen_from_loop(scope_struct,
+                    ThenBB, IncBB, LoopAfter, break_values_snapshot, BreakBB, ContinueBB);
         else if (auto *break_stmt = dynamic_cast<BreakExprAST*>(then_body.get())) {
             break_values_snapshot = function_values[parser_struct.function_name];
-            BreakBB.push_back(ThenBB);
+            auto bb = Builder->GetInsertBlock();
+            block_values[bb] = function_values[parser_struct.function_name];
+            BreakBB.push_back(bb);
             Builder->CreateBr(LoopAfter);
+        }
+        else if (auto *stmt = dynamic_cast<ContinueExprAST*>(then_body.get())) {
+            auto bb = Builder->GetInsertBlock();
+            block_values[bb] = function_values[parser_struct.function_name];
+            ContinueBB.push_back(bb);
+            Builder->CreateBr(IncBB);
         }
         else
             ThenV = then_body->codegen(scope_struct);
     }
-    auto then_values = function_values[parser_struct.function_name];
+    ThenPostBB = Builder->GetInsertBlock();
+    block_values[ThenPostBB] = function_values[parser_struct.function_name];
 
 
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ThenV)
         return nullptr;
-    if (!ThenTerminated) {
+    if (!ThenTerminated)
         Builder->CreateBr(MergeBB);
-        // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
-        ThenBB = Builder->GetInsertBlock();
-    }
 
     // Emit else block.
     TheFunction->insert(TheFunction->end(), ElseBB);
@@ -1270,23 +1294,21 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct, BasicBlock *LoopBody, B
     Value *ElseV;
     for (auto &else_body : Else)
         ElseV = else_body->codegen(scope_struct);
+    ElsePostBB = Builder->GetInsertBlock();
 
-    std::map<std::string, Value *> else_values;
     if(Else.size()>0)
-        else_values = function_values[parser_struct.function_name];
+        block_values[ElsePostBB] = function_values[parser_struct.function_name];
     else {
         ElseV = const_int(0);
-        else_values = old_values;
+        block_values[ElsePostBB] = old_values;
     }
 
     bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ElseV)
         return nullptr;
-    if (!ElseTerminated) {
+    if (!ElseTerminated)
         Builder->CreateBr(MergeBB);
-        // Codegen of 'Else' can change the current block, update ElseBB for the PHI.
-        ElseBB = Builder->GetInsertBlock();
-    }
+
 
     if (ThenTerminated && ElseTerminated)
         return nullptr;
@@ -1296,15 +1318,23 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct, BasicBlock *LoopBody, B
     Builder->SetInsertPoint(MergeBB);
 
 
-
+    auto then_values = block_values[ThenPostBB];
+    auto else_values = block_values[ElsePostBB];
     for (auto &[name, value] : old_values) {
-        if (then_values[name]!=value || else_values[name]!=value) {
-            PHINode *phi = Builder->CreatePHI(value->getType(), 2);
-            phi->addIncoming(then_values[name], ThenBB);
-            phi->addIncoming(else_values[name], ElseBB);
-            function_values[parser_struct.function_name][name] = phi;
-        }
+        if (!ThenTerminated&&!ElseTerminated) {
+            if (then_values[name]!=value || else_values[name]!=value) {
+                PHINode *phi = Builder->CreatePHI(value->getType(), 2);
+                phi->addIncoming(then_values[name], ThenPostBB);
+                phi->addIncoming(else_values[name], ElsePostBB);
+                function_values[parser_struct.function_name][name] = phi;
+            }
+        } else if (!ThenTerminated)
+            function_values[parser_struct.function_name][name] = then_values[name];
+        else if (!ElseTerminated)
+            function_values[parser_struct.function_name][name] = else_values[name];
+        else {}
     }
+
     return const_float(0.0f);
 }
 
@@ -1340,37 +1370,45 @@ Value *BreakExprAST::codegen(Value *scope_struct) {
     p2t("break");
     return const_int(0);
 }
+Value *ContinueExprAST::codegen(Value *scope_struct) { 
+    return const_int(0);
+}
 
 
 void SetBreakPHIS(Parser_Struct parser_struct, std::vector<std::string> &assigned_vars, 
-            std::vector<std::string> &created_vars,
-            std::map<std::string,PHINode*> &function_phi_values, std::map<std::string, Value*> &break_values_snapshot, std::vector<BasicBlock *> &BreakBB, BasicBlock *LoopPredecessor, BasicBlock *LoopBB) {
+            std::map<std::string, Value*> &old_values,
+            std::map<std::string, PHINode*> &function_phi_values,
+            std::vector<BasicBlock *> &BreakBB, BasicBlock *LoopPredecessor) {
+    for (auto &bb : BreakBB) {
+        auto break_values_snapshot = block_values[bb];
+        for (const auto &pair : break_values_snapshot) {
+            std::string name = pair.first;
+            bool existed_already = in_vec(pair.first, assigned_vars);
 
-    for (const auto &pair : break_values_snapshot) {
-        std::string name = pair.first;
-        bool existed_already = in_vec(pair.first, assigned_vars);
+            if (existed_already) {
+                bool was_created = old_values.count(name)==0;
+                if (was_created)
+                    continue;
+                PHINode *phi_val = Builder->CreatePHI(pair.second->getType(), 2, name.c_str());
 
-        if (existed_already) {
-            bool was_created = in_vec(name, created_vars);
-            if (was_created)
-                continue;
-            PHINode *phi_val = Builder->CreatePHI(pair.second->getType(), 2, name.c_str());
+                phi_val->addIncoming(function_phi_values[name], LoopPredecessor);
+                phi_val->addIncoming(pair.second, bb);
 
-            BasicBlock *preBB = was_created ? LoopBB : LoopPredecessor;
-            Value *val = was_created ? function_values[parser_struct.function_name][name] : function_phi_values[name];
-            phi_val->addIncoming(val, preBB);
-            phi_val->addIncoming(pair.second, BreakBB[0]);
-
-            function_values[parser_struct.function_name][name] = phi_val;
+                function_values[parser_struct.function_name][name] = phi_val;
+            }
         }
     }
 }
 
-void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> Body, BasicBlock *LoopBody, BasicBlock *AfterBB, std::map<std::string, Value*> &break_values_snapshot, std::vector<BasicBlock *> &BreakBB) {  
+void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> Body,
+        BasicBlock *LoopBB, BasicBlock *IncBB, BasicBlock *AfterBB,
+        std::map<std::string, Value*> &break_values_snapshot,
+        std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {  
     // Handle break stmt
+    
     for (auto &body : Body) {
         if (auto *if_stmt = dynamic_cast<IfExprAST*>(body.get()))
-            if_stmt->codegen_from_loop(scope_struct, LoopBody, AfterBB, break_values_snapshot, BreakBB);
+            if_stmt->codegen_from_loop(scope_struct, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
         else
             body->codegen(scope_struct);
     }
@@ -1407,35 +1445,6 @@ void Get_Recursive_Assign_Statements(const std::vector<std::unique_ptr<ExprAST>>
     }
 
 }
-void Get_Recursive_Create_Statements(const std::vector<std::unique_ptr<ExprAST>> &stmt, std::vector<std::string> &created_vars) {
-
-    for (auto &body : stmt) {
-        if (auto *if_stmt = dynamic_cast<IfExprAST*>(body.get())) {
-            Get_Recursive_Create_Statements(if_stmt->Then, created_vars);
-            Get_Recursive_Create_Statements(if_stmt->Else, created_vars);
-        }
-        if (auto *while_stmt = dynamic_cast<WhileExprAST*>(body.get()))
-            Get_Recursive_Create_Statements(while_stmt->Body, created_vars);
-        if (auto *while_stmt = dynamic_cast<ForExprAST*>(body.get()))
-            Get_Recursive_Create_Statements(while_stmt->Body, created_vars);
-        if (auto *while_stmt = dynamic_cast<ForEachExprAST*>(body.get()))
-            Get_Recursive_Create_Statements(while_stmt->Body, created_vars);
-        
-        if (auto *stmt = dynamic_cast<DataExprAST*>(body.get())) {
-            for (const auto &pair : stmt->VarNames) 
-                created_vars.push_back(pair.first);
-        }
-        if (auto *stmt = dynamic_cast<UnkVarExprAST*>(body.get())) {
-            for (const auto &pair : stmt->VarNames) 
-                created_vars.push_back(pair.first);
-        }
-        if (auto *stmt = dynamic_cast<ObjectExprAST*>(body.get())) {
-            for (const auto &pair : stmt->VarNames) 
-                created_vars.push_back(pair.first);
-        }
-    }
-
-}
 
 
 Value *ForExprAST::codegen(Value *scope_struct) {
@@ -1457,19 +1466,21 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
     // Make the new basic block for the loop header, inserting after current
     // block.
-    BasicBlock *CondBB = BasicBlock::Create(*TheContext, "for expr cond", TheFunction);
-    BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "for expr loop");
-    BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for expr after");
+    BasicBlock *CondBB = BasicBlock::Create(*TheContext, "for.cond", TheFunction);
+    BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "for.loop");
+    BasicBlock *IncBB  = BasicBlock::Create(*TheContext, "for.inc");
+    BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for.after");
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
+    block_values[PreheaderBB] = function_values[parser_struct.function_name];
 
     Builder->CreateBr(CondBB);
     Builder->SetInsertPoint(CondBB);
 
 
-    std::vector<std::string> assigned_vars, changed_vars, created_vars;
+    std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
-    Get_Recursive_Create_Statements(Body, created_vars);
+
     // Possible phi for each value
     auto old_function_values = function_values[parser_struct.function_name];
     std::map<std::string, PHINode*> function_phi_values;
@@ -1518,8 +1529,14 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
     int j=0;
     std::map<std::string, Value*> break_values_snapshot;
-    std::vector<BasicBlock *> BreakBB;
-    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, AfterBB, break_values_snapshot, BreakBB);
+    std::vector<BasicBlock *> BreakBB, ContinueBB;
+
+    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    block_values[Builder->GetInsertBlock()] = function_values[parser_struct.function_name];
+
+    Builder->CreateBr(IncBB);
+    TheFunction->insert(TheFunction->end(), IncBB);
+    Builder->SetInsertPoint(IncBB);
 
 
     BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
@@ -1529,21 +1546,23 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     if (start_type=="float")
         NextVal = Builder->CreateFAdd(LoopVar, StepVal, "nextvar"); // Increment 
 
-    Builder->CreateBr(CondBB);
-
-
     LoopVar->addIncoming(NextVal, CurBB);
     for (auto &name : changed_vars) {
         Value *val = function_values[parser_struct.function_name][name];
         function_phi_values[name]->addIncoming(val, CurBB);
+        function_values[parser_struct.function_name][name] = function_phi_values[name];
     }
+    Builder->CreateBr(CondBB);
+
+
 
 
 
     TheFunction->insert(TheFunction->end(), AfterBB);
     Builder->SetInsertPoint(AfterBB);
 
-    SetBreakPHIS(parser_struct, assigned_vars, created_vars, function_phi_values, break_values_snapshot, BreakBB, CondBB, LoopBB);
+    SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values,
+                 BreakBB, CondBB);
 
     // verifyFunction(*TheFunction);
     // TheModule->print(llvm::errs(), nullptr);
@@ -1580,12 +1599,14 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     // Make the new basic block for the loop header, inserting after current
     // block.
-    BasicBlock *CondBB = BasicBlock::Create(*TheContext, "cond", TheFunction);
-    BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "loop");
-    BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "after");
+    BasicBlock *CondBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
+    BasicBlock *IncBB  = BasicBlock::Create(*TheContext, "foreach.inc");
+    BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "foreach.loop");
+    BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "foreach.after");
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
 
+    block_values[PreheaderBB] = function_values[parser_struct.function_name];
 
     // Insert an explicit fall through from the current block to the LoopBB.
     Builder->CreateBr(CondBB); 
@@ -1593,9 +1614,8 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
 
     // --- PHI Nodes --- //
-    std::vector<std::string> assigned_vars, changed_vars, created_vars;
+    std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
-    Get_Recursive_Create_Statements(Body, created_vars);
     // Possible phi for each value
     auto old_function_values = function_values[parser_struct.function_name];
     std::map<std::string, PHINode*> function_phi_values;
@@ -1660,15 +1680,23 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     function_values[parser_struct.function_name][VarName] = vec_value;
 
     std::map<std::string, Value*> break_values_snapshot;
-    std::vector<BasicBlock *> BreakBB;
-    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, AfterBB, break_values_snapshot, BreakBB);
+    std::vector<BasicBlock *> BreakBB, ContinueBB;
+    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    block_values[Builder->GetInsertBlock()] = function_values[parser_struct.function_name];
+
+
+    Builder->CreateBr(IncBB);
+    TheFunction->insert(TheFunction->end(), IncBB);
+    Builder->SetInsertPoint(IncBB);
 
     BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
     Value *NextVal = Builder->CreateAdd(LoopVar, StepVal, "nextvar"); // Increment  
 
     LoopVar->addIncoming(NextVal, CurBB);
-    for (auto &name : changed_vars)
+    for (auto &name : changed_vars) {
         function_phi_values[name]->addIncoming(function_values[parser_struct.function_name][name], CurBB);
+        function_values[parser_struct.function_name][name] = function_phi_values[name];
+    }
 
 
     Builder->CreateBr(CondBB);
@@ -1679,7 +1707,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), AfterBB);
     Builder->SetInsertPoint(AfterBB);
 
-    SetBreakPHIS(parser_struct, assigned_vars, created_vars, function_phi_values, break_values_snapshot, BreakBB, CondBB, LoopBB);
+    SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values, BreakBB, CondBB);
 
     return const_float(0.0f);
 }
@@ -1699,14 +1727,16 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
+    block_values[PreheaderBB] = function_values[parser_struct.function_name];
+
     // Jump to the condition block
     Builder->CreateBr(CondBB);
     Builder->SetInsertPoint(CondBB);
 
 
-    std::vector<std::string> assigned_vars, changed_vars, created_vars;
+    std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
-    Get_Recursive_Create_Statements(Body, created_vars);
+
     // Possible phi for each value
     auto old_function_values = function_values[parser_struct.function_name];
     std::map<std::string, PHINode*> function_phi_values;
@@ -1714,7 +1744,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
         if (old_function_values.count(name)>0) {
             changed_vars.push_back(name);
             Value *val = old_function_values[name];
-            PHINode *phi_val = Builder->CreatePHI(val->getType(), 2, name.c_str());
+            PHINode *phi_val = Builder->CreatePHI(val->getType(), 0, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
             function_values[parser_struct.function_name][name] = phi_val;
@@ -1731,24 +1761,32 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
     Builder->SetInsertPoint(LoopBB);
 
     std::map<std::string, Value*> break_values_snapshot;
-    std::vector<BasicBlock *> BreakBB;
-    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, AfterBB, break_values_snapshot, BreakBB);
+    std::vector<BasicBlock *> BreakBB, ContinueBB;
+    Codegen_Loop_Body(scope_struct, std::move(Body),
+            LoopBB, CondBB, AfterBB,
+            break_values_snapshot,
+            BreakBB, ContinueBB);
     BasicBlock *CurBB = Builder->GetInsertBlock(); // handles branching
-     
+    block_values[CurBB] = function_values[parser_struct.function_name];
+
     for (auto &name : changed_vars) {
+        PHINode *phi = function_phi_values[name];
         Value *val = function_values[parser_struct.function_name][name]; 
-        function_phi_values[name]->addIncoming(val, CurBB);
+        phi->addIncoming(val, CurBB);
+        for (auto &bb : ContinueBB)
+            phi->addIncoming(block_values[bb][name], bb);
+        function_values[parser_struct.function_name][name] = phi;
     }
 
     Builder->CreateBr(CondBB);
 
 
-
-    // Insert the after loop block
     Builder->SetInsertPoint(AfterBB);
+    // if (ContinueBB.size()>0)
 // TheFunction->print(llvm::errs());
 
-    SetBreakPHIS(parser_struct, assigned_vars, created_vars, function_phi_values, break_values_snapshot, BreakBB, CondBB, LoopBB);
+    SetBreakPHIS(parser_struct, assigned_vars,
+            old_function_values, function_phi_values, BreakBB, CondBB);
 
     return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
@@ -2280,7 +2318,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 // Store trigger behavior for supported types (i.e, function <DT>_StoreTrigger exists)
                 Function *F = TheModule->getFunction(store_trigger);
 
-                if (F && function_allocas[parser_struct.function_name].count(Lname)>0) {
+                if (F && function_values[parser_struct.function_name].count(Lname)>0) {
                     Value *old_val = LoadVal(parser_struct.function_name, Lname, L_dt);
                     Val = callret(store_trigger, {scope_struct, old_val, Val});
                 }
@@ -2301,7 +2339,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 
                 if (!in_vec(LType, primary_data_tokens) && LType!="charv") {
                     // p2t("Store " + LHSV->Inner->GetDataTree().Type + " -- " + LType);
-                    MakeWriteBarrier(Builder->GetInsertBlock()->getParent(), scope_struct,
+                    MakeWriteBarrier(parser_struct, Builder->GetInsertBlock()->getParent(), scope_struct,
                                         src, obj_ptr, Val, LType);
 
                 } else
@@ -2765,12 +2803,13 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
     }
     function_values[async_scope]["QQ_stack_top"] = const_int(0);
 
+    block_values[BB] = function_values[parser_struct.function_name];
     for (auto &body : asyncBody)
         V = body->codegen(scope_struct_typed);
 
 
     Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 3);
-    Builder->CreateStore(const_int(0), stack_top_value_gep);
+    Builder->CreateStore(const_int(0), stack_top_value_gep); // for gc reclaim
     call("scope_struct_Delete", {scope_struct_typed});
 
 
@@ -2804,6 +2843,7 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn");
     Builder->SetInsertPoint(CurrentBB);
+    block_values[CurrentBB] = function_values[parser_struct.function_name];
 
     PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
@@ -2843,6 +2883,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async");
     Builder->SetInsertPoint(CurrentBB);
+    block_values[CurrentBB] = function_values[parser_struct.function_name];
 
     Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
@@ -2886,6 +2927,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs");
 
     Builder->SetInsertPoint(CurrentBB);
+    block_values[CurrentBB] = function_values[parser_struct.function_name];
 
 
 
@@ -3053,18 +3095,6 @@ Value *MainExprAST::codegen(Value *scope_struct) {
 
 
 Value *ExitCheckExprAST::codegen(Value *scope_struct) {
-    // Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    // BasicBlock *okBB = BasicBlock::Create(*TheContext, "shall_exit.no", TheFunction);
-    // BasicBlock *exitBB = BasicBlock::Create(*TheContext, "shall_exit.exit", TheFunction);
-
-    // std::cout << "shall exit: " << Shall_Exit << "\n";
-    // Builder->CreateCondBr(const_bool(Shall_Exit), exitBB, okBB);
-
-    // Builder->SetInsertPoint(exitBB);
-    // call("_quit_", {});
-    // Builder->CreateUnreachable();
-
-    // Builder->SetInsertPoint(okBB);
     return const_float(0.0f);
 }
 
@@ -3356,7 +3386,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                     Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
 
                     // p2t("obj() " + ClassName);
-                    MakeWriteBarrier(TheFunction, scope_struct, ptr, compound_gep, compound, type);
+                    MakeWriteBarrier(parser_struct, TheFunction, scope_struct, ptr, compound_gep, compound, type);
                   }
                 }
 
@@ -3427,7 +3457,7 @@ Value *NewExprAST::codegen(Value *scope_struct) {
             // Builder->CreateStore(compound, compound_gep);
 
             // p2t("new " + DataName);
-            MakeWriteBarrier(TheFunction, scope_struct, ptr, compound_gep, compound, type);
+            MakeWriteBarrier(parser_struct, TheFunction, scope_struct, ptr, compound_gep, compound, type);
           }
         }
         set_scope_obj(scope_struct, ptr);
@@ -4155,6 +4185,7 @@ Value *NameableAppend::codegen(Value *scope_struct) {
 
         //post
         Builder->SetInsertPoint(postBB); 
+        // std::cout << "append post: " << parser_struct.function_name  << " " << postBB << "\n";
     }
 
 

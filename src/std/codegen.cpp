@@ -31,7 +31,13 @@ inline void printTy(Value *v) {
     ty->print(llvm::errs());
     llvm::errs() << "\n";
 }
-
+inline void bb_name(BasicBlock *bb) {
+    errs() << "bb: " << bb->getName() << "\n";
+}
+inline void v_ir(Value *v) {
+    v->print(errs());
+    errs() << "\n";
+}
 
 Data_Tree array_clone_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
@@ -100,6 +106,18 @@ Value *DT_vec_Create(Parser_Struct parser_struct, Function *TheFunction,
     return vec;
 }
 
+
+Value *print_bb(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    bb_name(Builder->GetInsertBlock());
+    return const_int(0);
+}Value *print_Value(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    v_ir(ArgsV[0]);
+    return const_int(0);
+}
 
 Value *to_char(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,

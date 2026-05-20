@@ -231,10 +231,10 @@ extern "C" float array_print_char(Scope_Struct *scope_struct, DT_array *vec) {
     for (int i=0; i<size-1; ++i)
         std::cout << ptr[i] << ",";
     std::cout << ptr[size-1] << "]\n";
-    std::cout << "[";
-    for (int i=0; i<size-1; ++i)
-        std::cout << int(ptr[i]) << ",";
-    std::cout << int(ptr[size-1]) << "]\n\n";
+    // std::cout << "[";
+    // for (int i=0; i<size-1; ++i)
+    //     std::cout << int(ptr[i]) << ",";
+    // std::cout << int(ptr[size-1]) << "]\n\n";
     return 0;
 }
 

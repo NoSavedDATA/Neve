@@ -301,11 +301,11 @@ void set_functions_args_type() {
 		
 		Function_Arg_Types["allocate_pool"]["0"] = "Scope_Struct";
 		Function_Arg_Types["allocate_pool"]["1"] = "int";
-		Function_Arg_Types["allocate_pool"]["2"] = "uint16_t";
+		Function_Arg_Types["allocate_pool"]["2"] = "i16";
 		
 		Function_Arg_DataTypes["allocate_pool"]["0"] = Data_Tree("Scope_Struct");
 		Function_Arg_DataTypes["allocate_pool"]["1"] = Data_Tree("int");
-		Function_Arg_DataTypes["allocate_pool"]["2"] = Data_Tree("uint16_t");
+		Function_Arg_DataTypes["allocate_pool"]["2"] = Data_Tree("i16");
 		
 		Function_Arg_Names["allocate_pool"].push_back("0");
 		Function_Arg_Names["allocate_pool"].push_back("1");
@@ -313,11 +313,11 @@ void set_functions_args_type() {
 	
 		
 		Function_Arg_Types["channel_Create"]["0"] = "Scope_Struct";
-		Function_Arg_Types["channel_Create"]["1"] = "uint16_t";
+		Function_Arg_Types["channel_Create"]["1"] = "i16";
 		Function_Arg_Types["channel_Create"]["2"] = "int";
 		
 		Function_Arg_DataTypes["channel_Create"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["channel_Create"]["1"] = Data_Tree("uint16_t");
+		Function_Arg_DataTypes["channel_Create"]["1"] = Data_Tree("i16");
 		Function_Arg_DataTypes["channel_Create"]["2"] = Data_Tree("int");
 		
 		Function_Arg_Names["channel_Create"].push_back("0");
