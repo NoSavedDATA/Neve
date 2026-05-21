@@ -17,6 +17,7 @@ foo_backup.nk
 foo.nv
 foo_backup.nv
 .build_flag
+mall.sh
 *backup/
 *.csv
 *.txt

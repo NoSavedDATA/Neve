@@ -14,15 +14,12 @@ All the code is open sourced.
 </div>
 
 Features: 
-- Parallel coding with finish async expressions.
 - Pythonic syntax;
-- Object Oriented (no inheritance, just composition);
-- The low-level background C++ functions are compiled;
-- High-level uses Just-in-Time Compilation;
+- Compiled C++ FFI, and JIT for high-level;
 - Close to C++ performance;
+- Parallel coding with finish async expressions.
 - Easy to read threads syntax that resemble go routines;
-- Mark-sweep garbage collector with a go-like memory pool;
-- Ease of extending it with C++ functions.
+- Mark-sweep concurrent garbage collector with a go-like memory pool.
 
 ---
 
@@ -30,24 +27,15 @@ Features:
 
 
 
-**Ubuntu**
+**Linux**
 
-- WSL 2 or Ubuntu 20.04.6 or higher
-
-Install on /usr/bin/neve
-```bash
-wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/install.sh
-chmod +x install.sh
-./install.sh 
-source ~/.bashrc
-```
+- Ubuntu 20.04.6 or higher
+- WSL 2
+- And other modern Linux distros
 
 Install on ~/.local/neve
 ```bash
-wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/install.sh
-chmod +x install.sh
-./install.sh 
-source ~/.bashrc
+wget -qO- https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/install.sh | bash
 ```
 ---
 
@@ -65,16 +53,10 @@ chmod +x llvm.sh
 
 apt-get install llvm clang zlib1g-dev libzstd-dev libeigen3-dev libopencv-dev
 ```
-- Add commands `neve` to `PATH`:
+- Add `neve` to `PATH`:
 
-```bash
-chmod +x alias.sh
-./alias.sh
-source ~/.bashsr
-```
 
 - Make:
-
 ```bash
 make -j8
 ```
