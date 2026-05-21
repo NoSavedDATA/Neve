@@ -34,17 +34,17 @@ Features:
 
 - WSL 2 or Ubuntu 20.04.6 or higher
 
-Install on /usr/bin/nsk
+Install on /usr/bin/neve
 ```bash
-wget https://github.com/NoSavedDATA/Neve/releases/download/nsk-bin/install.sh
+wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/install.sh
 chmod +x install.sh
 ./install.sh 
 source ~/.bashrc
 ```
 
-Install on ~/.local/nsk
+Install on ~/.local/neve
 ```bash
-wget https://github.com/NoSavedDATA/Neve/releases/download/nsk-bin/install.sh
+wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/install.sh
 chmod +x install.sh
 ./install.sh 
 source ~/.bashrc
@@ -65,7 +65,7 @@ chmod +x llvm.sh
 
 apt-get install llvm clang zlib1g-dev libzstd-dev libeigen3-dev libopencv-dev
 ```
-- Add commands `nsk` to `PATH`:
+- Add commands `neve` to `PATH`:
 
 ```bash
 chmod +x alias.sh
@@ -79,5 +79,5 @@ source ~/.bashsr
 make -j8
 ```
 
-This adds nsk to bin/nsk
+This adds neve to bin/neve
 
