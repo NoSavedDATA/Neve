@@ -248,7 +248,7 @@ Tokenizer::Tokenizer(std::string file, std::unique_ptr<Tokenizer> inner)
 }
 
 
-bool import_NSK_File(std::string filename) {
+bool import_NEVE_File(std::string filename) {
     // std::cout << "current " << tokenizer->file_name << "\n";
     // std::cout << "import of " << filename << "\n\n";
     

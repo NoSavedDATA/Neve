@@ -2358,12 +2358,12 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   
   getNextToken(true);
   
-  std::string full_path_lib = tokenizer->dir+"/"+lib_name+".nk";
+  std::string full_path_lib = tokenizer->dir+"/"+lib_name+".nv";
   // std::cout << "full_path_lib  " << full_path_lib<< "\n";
 
   // Import logic
   if(fs::exists(full_path_lib)) {
-    import_NSK_File(full_path_lib); // changed current
+    import_NEVE_File(full_path_lib); // changed current
     return nullptr;
   } else
     return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);

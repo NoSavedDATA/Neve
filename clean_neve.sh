@@ -5,10 +5,10 @@ set -e
 
 
 if [ -n "$SUDO_USER" ]; then
-    PREFIX="/usr/bin/nsk"
+    PREFIX="/usr/bin/neve"
     USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 else
-    PREFIX="$HOME/.local/nsk"
+    PREFIX="$HOME/.local/neve"
     USER_HOME="$HOME"
 fi
 
@@ -17,10 +17,10 @@ rm -r "$PREFIX"
 
 BASHRC="$USER_HOME/.bashrc"
 
-# remove nsk PATH entry
+# remove neve PATH entry
 sed -i "\|^export PATH=\"$PREFIX/bin:\$PATH\"$|d" "$BASHRC"
-# remove NSK_LIBS export
-sed -i "\|^export NSK_LIBS=$PREFIX/lib$|d" "$BASHRC"
+# remove NEVE_LIBS export
+sed -i "\|^export NEVE_LIBS=$PREFIX/lib$|d" "$BASHRC"
 
-echo "✅ nsk environment entries removed"
+echo "✅ neve environment entries removed"
 echo "ℹ️  Run: source ~/.bashrc (or open a new shell)"

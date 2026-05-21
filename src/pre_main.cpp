@@ -269,8 +269,8 @@ void MainLoop() {
 
 
 void InitializeTokenizer() {
-    std::string lib_path = std::getenv("NSK_LIBS");
-    std::string std_path = lib_path + "/std_lib/include.nk";
+    std::string lib_path = std::getenv("NEVE_LIBS");
+    std::string std_path = lib_path + "/std_lib/include.nv";
 
     ParseClasses(std_path);
     if (Sys_Arguments.size()>0)

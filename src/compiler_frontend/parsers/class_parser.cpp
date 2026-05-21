@@ -32,10 +32,10 @@ static void ParseImport(std::unique_ptr<TokenizerClass> &class_tokenizer) {
         tok = class_tokenizer->getToken();
     }
 
-    std::string full_path_lib = class_tokenizer->dir+"/"+lib_name+".nk";
+    std::string full_path_lib = class_tokenizer->dir+"/"+lib_name+".nv";
 
-    std::string lib_path = std::getenv("NSK_LIBS");
-    std::string as_include = lib_path + "/" + lib_name + "/include.nk";
+    std::string lib_path = std::getenv("NEVE_LIBS");
+    std::string as_include = lib_path + "/" + lib_name + "/include.nv";
 
 
     if (fs::exists(full_path_lib)) {
@@ -43,7 +43,7 @@ static void ParseImport(std::unique_ptr<TokenizerClass> &class_tokenizer) {
     } else if (fs::exists(as_include)) {
         ParseClasses(as_include);
     } else {
-        LogErrorC(-1, "Could not find include.nk for " + lib_name);
+        LogErrorC(-1, "Could not find include.nv for " + lib_name);
     }
 }
 

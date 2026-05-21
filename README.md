@@ -1,10 +1,10 @@
-# No Saved Kaleidoscope Compiler
+# Neve Compiler
 
 Documentation: [https://nsk-lang.dev](https://nsk-lang.dev)
 
 Official repository of: [https://arxiv.org/abs/2409.11600](https://arxiv.org/abs/2409.11600)
 
-NSK is a LLVM/C++ programming language. 
+Neve is a LLVM/C++ programming language. 
 
 All the code is open sourced.
 
@@ -36,7 +36,7 @@ Features:
 
 Install on /usr/bin/nsk
 ```bash
-wget https://github.com/NoSavedDATA/NSK/releases/download/nsk-bin/install.sh
+wget https://github.com/NoSavedDATA/Neve/releases/download/nsk-bin/install.sh
 chmod +x install.sh
 ./install.sh 
 source ~/.bashrc
@@ -44,7 +44,7 @@ source ~/.bashrc
 
 Install on ~/.local/nsk
 ```bash
-wget https://github.com/NoSavedDATA/NSK/releases/download/nsk-bin/install.sh
+wget https://github.com/NoSavedDATA/Neve/releases/download/nsk-bin/install.sh
 chmod +x install.sh
 ./install.sh 
 source ~/.bashrc

@@ -593,13 +593,13 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
 
 
-  std::string ai_path = LibName+".nk";
+  std::string ai_path = LibName+".nv";
 
   if (!(in_str(LibName, imported_libs))) {
     // std::cout << "import " << LibName << ".\n";
     
-    bool has_nk=false, has_so_lib=false;
-    std::string lib_path = std::getenv("NSK_LIBS");
+    bool has_nv=false, has_so_lib=false;
+    std::string lib_path = std::getenv("NEVE_LIBS");
 
     std::string lib_dir = lib_path + "/" + LibName;
     std::string so_lib_path = lib_dir + "/lib.so";
@@ -616,19 +616,19 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 
 
 
-    std::string include_path = lib_dir + "/include.nk";
+    std::string include_path = lib_dir + "/include.nv";
     if(fs::exists(include_path)) {
-      has_nk=true;
+      has_nv=true;
       get_tok_until_space();
-      import_NSK_File(include_path);
+      import_NEVE_File(include_path);
     } else 
       getNextToken(); // eat lib name
     
 
 
 
-    if(!(has_nk||has_so_lib))
-      LogErrorS(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .nk or lib.so file.");
+    if(!(has_nv||has_so_lib))
+      LogErrorS(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .nv or lib.so file.");
     else
       imported_libs.push_back(LibName);
   }

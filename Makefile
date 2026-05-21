@@ -62,7 +62,7 @@ RUNTIME_SRC := runtime.cpp
 RUNTIME_LIB := static/runtime.a
 # Executable name
 LIB_PARSER := bin/lib_parser.o
-OBJ := bin/nsk
+OBJ := bin/neve
 SRC := main.cpp
 COMPILER_OBJ := bin/nsc
 COMPILER_SRC := main_compiler.cpp

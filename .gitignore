@@ -13,10 +13,13 @@ sys_lib/
 Dockerfile
 foo.nk
 foo_backup.nk
+foo.nv
+foo_backup.nv
 .build_flag
 *backup/
 *.csv
 *.txt
 *.nk
+*.nv
 *.py
 *.o

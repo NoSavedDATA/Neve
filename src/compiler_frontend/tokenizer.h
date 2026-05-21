@@ -139,7 +139,7 @@ struct Tokenizer : TokenizerIF {
         Tokenizer(std::string, std::unique_ptr<Tokenizer>);
 };
   
-bool import_NSK_File(std::string filename);
+bool import_NEVE_File(std::string filename);
 
 std::string ReverseToken(int _char);
 static int get_token(bool);
