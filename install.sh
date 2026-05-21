@@ -9,6 +9,8 @@ wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/sys.tar.bz2
 PREFIX="$HOME/.local/neve"
 USER_HOME="$HOME"
 
+BIN_DIR="$HOME/.local/bin"
+mkdir -p "$BIN_DIR"
 
 mkdir -p "$PREFIX/bin"
 mkdir -p "$PREFIX/lib"
@@ -24,18 +26,16 @@ tar -xjf sys.tar.bz2 -C "$PREFIX"
 rm sys.tar.bz2
 
 
-# Set up bashrc
-BASHRC="$USER_HOME/.bashrc"
+
+cat > "$BIN_DIR/neve" <<EOF
+#!/usr/bin/env bash
+export NEVE_LIBS="$PREFIX/lib"
+exec "$PREFIX/bin/neve" "\$@"
+EOF
+
+chmod +x "$BIN_DIR/neve"
 
 
-# add neve binary
-if ! grep -q 'export PATH=.*/neve/bin' "$BASHRC"; then
-    echo "export PATH=\"$PREFIX/bin:\$PATH\"" >> "$BASHRC"
-fi
-# track neve .so libs
-if ! grep -q 'export NEVE_LIBS=.*/lib' "$BASHRC"; then
-    echo "export NEVE_LIBS=$PREFIX/lib" >> "$BASHRC"
-fi
+
 
 echo "✅ neve installed"
-echo "run ~/.bashrc"

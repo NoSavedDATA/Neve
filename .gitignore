@@ -11,6 +11,7 @@ lib/
 src_reference/
 sys_lib/
 Dockerfile
+Makefile_*
 foo.nk
 foo_backup.nk
 foo.nv
