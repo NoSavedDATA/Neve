@@ -1065,8 +1065,6 @@ std::unique_ptr<ExprAST> ParseProtoExpr(Parser_Struct parser_struct, std::string
     getNextToken(); // eat proto
     Data_Tree Return;
     std::string Name;
-    // std::vector<std::string> ArgNames = {"scope_struct"};
-    // std::vector<Data_Tree> Types = {Data_Tree("Scope_Struct")};
     std::vector<std::string> ArgNames = {"scope_struct"};
     std::vector<Data_Tree> Types = {Data_Tree("Scope_Struct")};
  
@@ -1104,6 +1102,8 @@ std::unique_ptr<ExprAST> ParseProtoExpr(Parser_Struct parser_struct, std::string
         Types.push_back(ParseDataTree(data_type, is_struct, parser_struct));
         ArgNames.push_back(std::to_string(arg_id++));
         if (CurTok==',')
+            getNextToken();
+        if (CurTok==tok_space)
             getNextToken();
     }
 
@@ -1328,6 +1328,8 @@ inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(Parser_Struct p
 
   
   getNextToken(); // eat (
+  if (CurTok == tok_space)
+      getNextToken();
   if (CurTok != ')') {
     while (true) {
       if (auto Arg = ParseExpression(parser_struct, class_name))
@@ -1338,13 +1340,16 @@ inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(Parser_Struct p
       else
         return std::move(Args);
 
+      if (CurTok == tok_space)
+          getNextToken();
       if (CurTok == ')')
         break;
-      if (CurTok != ',')
-      {
+      if (CurTok != ',') {
         LogErrorBreakLine(parser_struct.line, "Expected ')' or ',' on the Function Call arguments list.");
         return std::move(Args);
       }
+      if (CurTok == tok_space)
+          getNextToken();
       getNextToken();
     }
   } 
@@ -2197,6 +2202,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
   if (CurTok != '(')
     return LogErrorProto(parser_struct.line, "Expected \"(\" at function prototype.");
   getNextToken(); // eat (
+  if (CurTok == tok_space)
+    getNextToken();
 
   int required_args=0;
   while (CurTok != ')')
@@ -2281,6 +2288,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
         required_args++;
     }
     
+    if (CurTok == tok_space)
+        getNextToken();
 
     if (CurTok == ')')
         break;
@@ -2288,6 +2297,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     if (CurTok != ',')
       return LogErrorProto(parser_struct.line, "Expected ')' or ',' at prototype arguments list.");
     getNextToken();
+
+    if (CurTok == tok_space)
+        getNextToken();
   }
   getNextToken(); // eat ')'.
     
