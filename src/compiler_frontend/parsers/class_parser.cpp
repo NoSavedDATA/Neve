@@ -102,6 +102,8 @@ static void ParseDef(std::unique_ptr<TokenizerClass> &class_tokenizer, std::stri
     Function_Arg_DataTypes[fn_name]["scope_struct"] = Data_Tree("Scope_Struct");
 
     tok = class_tokenizer->getToken(); // eat (
+    if (tok==10)
+        tok = class_tokenizer->getToken(); 
     while (true) {
         if (tok==')')
             break;
@@ -137,8 +139,9 @@ static void ParseDef(std::unique_ptr<TokenizerClass> &class_tokenizer, std::stri
         if (tok==',')
             tok = class_tokenizer->getToken(); 
 
+        if (tok==10)
+            tok = class_tokenizer->getToken(); 
     }
-
 }
 
 

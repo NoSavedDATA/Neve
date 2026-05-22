@@ -5,6 +5,7 @@ set -e
 wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/neve
 wget https://github.com/NoSavedDATA/nsm/releases/download/latest/nsm
 wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/sys.tar.bz2
+wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/std.tar.bz2
 
 PREFIX="$HOME/.local/neve"
 USER_HOME="$HOME"
@@ -23,7 +24,9 @@ chmod +x "$PREFIX/bin/neve"
 chmod +x "$PREFIX/bin/nsm"
 
 tar -xjf sys.tar.bz2 -C "$PREFIX"
+tar -xjf std.tar.bz2 -C "$PREFIX"
 rm sys.tar.bz2
+rm std.tar.bz2
 
 
 

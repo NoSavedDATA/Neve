@@ -2206,8 +2206,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     getNextToken();
 
   int required_args=0;
-  while (CurTok != ')')
-  {
+  while (CurTok != ')') {
     if (IdentifierStr=="s"||IdentifierStr=="str")
       type="str";
     else if (IdentifierStr=="t"||IdentifierStr=="tensor")
@@ -2235,8 +2234,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
         Types.push_back(data_tree);
         getNextToken(); // get arg name;
       }
-      else if(CurTok==tok_channel)
-      {
+      else if(CurTok==tok_channel) {
         Data_Tree channel_data_tree = Data_Tree("channel");
         channel_data_tree.Nested_Data.push_back(data_tree);
         data_tree = channel_data_tree;
@@ -2293,10 +2291,10 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
 
     if (CurTok == ')')
         break;
-      
+    
     if (CurTok != ',')
       return LogErrorProto(parser_struct.line, "Expected ')' or ',' at prototype arguments list.");
-    getNextToken();
+    getNextToken(); // eat ,
 
     if (CurTok == tok_space)
         getNextToken();
@@ -2393,8 +2391,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
 
   bool has_safe_point=false;
-  while(!in_char(CurTok, terminal_tokens))
-  {
+  while(!in_char(CurTok, terminal_tokens)) {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
       break;
        
@@ -2535,6 +2532,8 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
           Ty = intTy;
       } else if(data_type=="i64") {
           Ty = int64Ty;
+      } else if(data_type=="i16") {
+          Ty = int16Ty;
       } else if(data_type=="bool") {
           Ty = boolTy;
       } else if(data_type=="str") {
