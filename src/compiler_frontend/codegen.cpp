@@ -25,6 +25,7 @@ using namespace llvm;
 namespace fs = std::filesystem;
 
 
+std::unordered_map<std::string, llvm::Type*> tuple_cache;
 std::map<std::string, int> fn_stack_offset;
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
 std::map<std::string, std::map<std::string, Value *>> function_values;
@@ -266,54 +267,49 @@ Value *IndexExprAST::codegen(Value *scope_struct) {
 }
 
 
+Value *CalcArrayIdx(Value *scope_struct, Value *vec, std::unique_ptr<ExprAST> &idx) {
+    if (!idx)
+        return Builder->CreateLoad(intTy, Builder->CreateStructGEP(struct_types["array"], vec, 0));
+
+    if (auto *stmt = dynamic_cast<UnaryExprAST*>(idx.get())) {
+        if (stmt->Opcode=='-') {
+            Value *idx = stmt->Operand->codegen(scope_struct);  
+            Value *arr_size = Builder->CreateLoad(intTy,
+                                        Builder->CreateStructGEP(struct_types["array"], vec, 0));
+            return Builder->CreateSub(arr_size, idx);
+        }
+    }
+    return idx->codegen(scope_struct);
+}
+
 Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct) {
-  if (!idxs->IsSlice && !TheModule->getFunction(type+"_CalculateIdx")) {
-    if (type=="array") {
-       if (auto *stmt = dynamic_cast<UnaryExprAST*>(idxs->Idxs[0].get())) {
-            if (stmt->Opcode=='-') {
-                Value *idx = stmt->Operand->codegen(scope_struct);  
-                Value *arr_size = Builder->CreateLoad(intTy,
-                                            Builder->CreateStructGEP(struct_types["array"], vec, 0));
-                return Builder->CreateSub(arr_size, idx);
-            }
-       }
-    }
-    return idxs->Idxs[0]->codegen(scope_struct); 
-  }
-  std::vector<Value *> idxs_values;
-
-  idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
-
-  for (int i=0; i<idxs->size(); i++) {
-    Value *idx = idxs->Idxs[i]->codegen(scope_struct);
+  auto &indices = idxs->Idxs;
+  auto &first = indices[0].start; 
+  if (!has_slice(indices)) {
+    if (type=="array")
+        return CalcArrayIdx(scope_struct, vec, first);
     
-    if (i==0 && (idxs->Idxs[i]->GetDataTree().Type=="str"))  {// dict query 
-      idxs->idx_slice_or_query = "query";
-      return idx;
-    }
-    idxs_values.push_back(idxs->Idxs[i]->codegen(scope_struct));
+    if (first->GetDataTree().Type=="str")
+        idxs->idx_slice_or_query = "query";
+    return first->codegen(scope_struct); 
   }
-  // Has Terminate_Vararg inserted from the parser.
+  return const_int(0);
 
-
-  if (!idxs->IsSlice)
-  {
-    std::string fn = type+"_CalculateIdx";
-    Function *F = TheModule->getFunction(fn);
-    if (F)
-      return callret(fn, idxs_values);
-  } else {
-
-    for (int i=0; i<idxs->size(); i++)
-      idxs_values.push_back(idxs->Second_Idxs[i]->codegen(scope_struct));
-
-    std::string fn = type+"_CalculateSliceIdx";
-    Function *F = TheModule->getFunction(fn);
-    if (F)
-      return callret(fn, idxs_values);
-    else
-      return callret("__sliced_idx__", idxs_values);
-  }
+  // if (!idxs->IsSlice) {
+  //   std::string fn = type+"_CalculateIdx";
+  //   Function *F = TheModule->getFunction(fn);
+  //   if (F)
+  //     return callret(fn, idxs_values);
+  // } else {
+  //   for (int i=0; i<idxs->size(); i++)
+  //     idxs_values.push_back(idxs->Second_Idxs[i]->codegen(scope_struct));
+  //   std::string fn = type+"_CalculateSliceIdx";
+  //   Function *F = TheModule->getFunction(fn);
+  //   if (F)
+  //     return callret(fn, idxs_values);
+  //   else
+  //     return callret("__sliced_idx__", idxs_values);
+  // }
 }
 
 
@@ -463,14 +459,18 @@ llvm::Type *get_type_from_data(Data_Tree dt) {
   if (str_toTy.count(type)>0)
       llvm_type = str_toTy[type];
   else if (type=="tuple") {
+    std::string dt_str = dt.toString();
+    if (tuple_cache.count(dt_str)>0)
+        return tuple_cache[dt_str];
     std::vector<llvm::Type *> tupleTypes;
     for (auto dt : dt.Nested_Data)
         tupleTypes.push_back(get_type_from_data(dt));
     llvm_type = StructType::create(
         *TheContext,
         tupleTypes,
-        "ret_type"
+        dt_str
     );
+    tuple_cache[dt_str] = llvm_type;
   }
   else if (type=="charv") {
     int size = std::stoi(dt.Nested_Data[0].Type);
@@ -1017,7 +1017,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
         if(Init->GetIsMsg()) {
             Value *void_ptr = Constant::getNullValue(int8PtrTy);
-            if (!in_vec(Type, primary_data_tokens))
+            if (!in_vec(Type, primary_data_tokens)&&Type!="str")
                 initial_value = callret("void_channel_message", {scope_struct, void_ptr, initial_value});
             else
                 initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
@@ -1945,8 +1945,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if (LHS->GetIsList()) {
             VariableListExprAST *VarList = static_cast<VariableListExprAST *>(LHS.get());
 
-
-            std::cout << "\n";
+            // std::cout << "\n";
 
             for (int i=0; i<VarList->ExprList.size(); ++i) {
                 Nameable *LHSE = static_cast<Nameable *>(VarList->ExprList[i].get()); 
@@ -1955,8 +1954,14 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 Data_Tree ldt = LHSE->GetDataTree();
                 std::string list_LType = ldt.Type;
 
+                // ldt.Print();
+                // RHS->GetDataTree().Print();
+                // printTy(R);
+
 
                 std::string store_trigger = list_LType + "_StoreTrigger";
+                // std::cout << "got " <<  list_LType << "\n";
+                // std::cout << "idx " <<  i << "\n";
 
                 Value *Val_indexed = Builder->CreateExtractValue(Val, {static_cast<unsigned>(i)});
 
@@ -2001,11 +2006,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
             Value *idx = Idx_Calc_Codegen(type, vec_ptr, LHSV->Idx, scope_struct); //StoreIdx
 
-            if(type=="list"||type=="dict") {
-                std::string nested_type = dt.Nested_Data[0].Type;
-                if (in_str(nested_type, primary_data_tokens))
-                    type = nested_type + "_" + type;
-            }
 
             if(type=="map") {
                 Data_Tree map_dt = dt, key_dt = map_dt.Nested_Data[0], val_dt = map_dt.Nested_Data[1];
@@ -3134,7 +3134,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     StructType *retTy = StructType::create(
         *TheContext,
         retTypes,
-        "ret_type"
+        "ret_expr_type"
     );
 
     Value *ret_val = UndefValue::get(retTy);
@@ -3647,34 +3647,12 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
 
 std::string NestedVectorIdxExprAST::GetType(bool from_assignment) {  
-    if (from_assignment)
-        return Type;
-    return Extract_List_Prefix(Type);
+    return "";
 }
 
 
 Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {  
-    if(skip)
-        return Inner_Expr->codegen(scope_struct);
-
-    Value *obj_ptr = Inner_Expr->codegen(scope_struct);
-    Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idx, scope_struct);
-
-    std::string homogeneous_type = Extract_List_Suffix(Type);
-    std::string type = Extract_List_Prefix(Type);
-
-    if (homogeneous_type=="dict") {
-        return callret("dict_Query", {scope_struct, obj_ptr, idx});
-    }
-
-    if (!Idx->IsSlice)
-        return callret(homogeneous_type+"_Idx", {scope_struct, obj_ptr, idx});
-    else
-    {
-        Value *ret = callret(homogeneous_type+"_Slice", {scope_struct, obj_ptr, idx});
-        call("Delete_Ptr", {idx});
-        return ret;
-    }  
+    return const_int(0);
 }
 
 
@@ -3850,12 +3828,12 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     std::string compound_type = UnmangleVec(inner_dt);
     std::string type;
     if (compound_type=="tuple") {
-        if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].get())) {
+        if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].start.get())) {
             int idx = expr->Val;
             type = inner_dt.Nested_Data[idx].Type;
         }
     }  
-    else if(in_str(compound_type, compound_tokens)||ends_with(compound_type, "_vec")) {
+    else if(in_vec(compound_type, compound_tokens)||ends_with(compound_type, "_vec")) {
         if (inner_dt.Nested_Data.size()==0) {
             if(compound_type=="list")
                 type = "any";
@@ -3866,7 +3844,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     }
     else
         type = compound_type;
-
 
 
     Value *loaded_var = Inner->codegen(scope_struct);
@@ -4011,60 +3988,40 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
 
 
-    if(Idx->idx_slice_or_query=="query") {
-        Value *ret_val = callret(compound_type+"_Query", {scope_struct, loaded_var, idx});
-        return ret_val;
-    }
+    if(Idx->idx_slice_or_query=="query")
+        return callret(compound_type+"_Query", {scope_struct, loaded_var, idx});
 
-    if (!Idx->IsSlice) {
-        std::string idx_fn = compound_type + "_Idx";
+    auto &indices = Idx->Idxs;
+    if (compound_type=="array") {
+
+        Data_Tree elem_dt = Inner->GetDataTree().Nested_Data[0];
+        llvm::Type *elemTy = get_type_from_data(elem_dt); 
 
 
-        Value *ret_val;
-        if (TheModule->getFunction(idx_fn))
-            ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
-        else {
-            llvm::Type *elemTy;
-            std::string elem_type;
-            if(compound_type=="array")  {
-                elem_type = Inner->GetDataTree().Nested_Data[0].Type;
-                elemTy = get_type_from_str(elem_type); 
-            }
-            else {
-                elem_type = remove_suffix(compound_type, "_vec");
-                elemTy = get_type_from_str(elem_type); 
-            }
 
-            Check_Is_Array_Inbounds(parser_struct, loaded_var, idx);
+        // v[i:j]
+        if (indices[0].is_slice) {
+            Value *start = CalcArrayIdx(scope_struct, loaded_var, indices[0].start);
+            Value *end = CalcArrayIdx(scope_struct, loaded_var, indices[0].end);
 
-            Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+            return callret("array_slice", {scope_struct, loaded_var,\
+                    const_int16(data_name_to_type()[elem_dt.Type]),\
+                    start, end});
 
-            llvm::Type *idxTy;
-            if (elem_type=="int")
-                idxTy = intTy;
-            else if (elem_type=="float")
-                idxTy = floatTy;
-            else if (elem_type=="bool")
-                idxTy = boolTy;
-            else if (elem_type=="str")
-                idxTy = struct_types["DT_str"];
-            else
-                idxTy = int8PtrTy; 
-
-            Value *element = Builder->CreateGEP(idxTy, vec, idx);
-            ret_val = Builder->CreateLoad(elemTy, element, "elem"); 
         }
 
-        if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool") && compound_type!="array")
-            ret_val = callret("to_"+type, {scope_struct, ret_val});
-
-        return ret_val;
-    } else {
-        std::string slice_fn = compound_type + "_Slice";    
-        Value *ret =  callret(slice_fn, {scope_struct, loaded_var, idx});
-        call("Delete_Ptr", {idx});
-        return ret;
+        // v[i]
+        Check_Is_Array_Inbounds(parser_struct, loaded_var, idx);
+        Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+        Value *element = Builder->CreateGEP(elemTy, vec, idx);
+        return Builder->CreateLoad(elemTy, element, "elem"); 
     }
+
+    std::string idx_fn = compound_type + "_Idx";
+    if (TheModule->getFunction(idx_fn))
+        return callret(idx_fn, {scope_struct, loaded_var, idx});
+
+    LogError(parser_struct.line, "Could not handle idx expression for " + compound_type);
 }
 
 
@@ -4315,6 +4272,25 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if(ReturnType=="void_ptr")
     LogErrorS(-1, "return " + Callee);
 
+
+  if(begins_with(Callee, "map_get_")) {
+    Value *packed_val = Builder->CreateExtractValue(ret, {0});
+    Value *packed_bool = Builder->CreateExtractValue(ret, {1});
+    packed_bool = Builder->CreateIntCast(packed_bool, boolTy, true);
+
+    ret = Builder->CreateInsertValue(ret, packed_bool, {1});
+    Data_Tree dt = GetDataTree().Nested_Data[0];
+
+    StructType *structTy = StructType::create(
+        *TheContext,
+        {get_type_from_data(dt),boolTy},
+        "tulpe_ty"
+    );
+    Value *struct_ret = UndefValue::get(structTy);
+    struct_ret = Builder->CreateInsertValue(struct_ret, packed_val, {0});
+    struct_ret = Builder->CreateInsertValue(struct_ret, packed_bool, {1});
+    ret = struct_ret;
+  }
 
   return ret;
 }

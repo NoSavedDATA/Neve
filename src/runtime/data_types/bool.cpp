@@ -16,9 +16,13 @@ extern "C" char *bool_to_str(bool x) {
 }
 
 
-extern "C" int64_t bool_to_str_buffer(Scope_Struct *scope_struct, bool x, char *buffer) {
+extern "C" int bool_to_str_buffer(Scope_Struct *scope_struct, bool x, char *buffer) {
     const char *word = x ? "true" : "false";
-    size_t len = std::strlen(word);
+
+    std::cout << "x: " << x << "\n";
+    int len = x ? 4 : 5;
+    std::cout << "bool size: " << len << "\n";
+    // std::cout << "WORD: " << word << "\n";
     std::memcpy(buffer, word, len);
     return len;
 }

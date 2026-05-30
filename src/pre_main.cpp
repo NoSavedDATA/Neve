@@ -323,6 +323,24 @@ void build_dicts() {
 
 
 
+  // min
+  function_return_overwrite["min"] = min_ret_dt;
+  Function_Arg_DataTypes["min"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["min"]["1"] = Data_Tree("any");
+  Function_Arg_DataTypes["min"]["2"] = Data_Tree("any");
+  Function_Arg_Names["min"] = {"0", "1", "2"};
+  Function_Required_Arg_Count["min"] = 2;
+
+  // max
+  function_return_overwrite["max"] = max_ret_dt;
+  Function_Arg_DataTypes["max"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["max"]["1"] = Data_Tree("any");
+  Function_Arg_DataTypes["max"]["2"] = Data_Tree("any");
+  Function_Arg_Names["max"] = {"0", "1", "2"};
+  Function_Required_Arg_Count["max"] = 2;
+
+
+
   // c_open
   functions_return_data_type["c_open"] = Data_Tree("int");
   Function_Arg_DataTypes["c_open"]["0"] = Data_Tree("Scope_Struct");
@@ -460,6 +478,10 @@ void build_dicts() {
   method_return_overwrite["map_keys"] = map_keys_dt;
   // map_values
   method_return_overwrite["map_values"] = map_values_dt;
+  // map_get
+  method_return_overwrite["map_get_i64_any"] = map_get_dt;
+  method_return_overwrite["map_get_i64_int"] = map_get_dt;
+  method_return_overwrite["map_get_str_int"] = map_get_dt;
 
 
 

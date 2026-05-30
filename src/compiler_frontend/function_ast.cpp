@@ -27,7 +27,8 @@
 #include "../include.h"
 
 ExitOnError ExitOnErr;
-std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 
@@ -76,11 +77,18 @@ void InitializeModule() {
   voidTy = Type::getVoidTy(*TheContext);
   ShallCodegen = true;
   seen_var_attr = false;
+  tuple_cache.clear();
 
   Generate_Struct_Types();
   str_toTy = {{"char", int8Ty}, {"i8", int8Ty}, {"int", intTy}, {"i64", int64Ty}, {"i16", int16Ty},
               {"bool", boolTy}, {"float_ptr", floatPtrTy},
               {"float", floatTy}, {"void", voidTy}, {"str", struct_types["DT_str"]}};
+
+  for (auto &pair : PriorityProtos) {
+      pair.second->codegen();
+  }
+
+
   Generate_LLVM_Functions();
   Generate_Lib_Functions();
   RegisterData();

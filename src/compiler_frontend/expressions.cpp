@@ -977,13 +977,13 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
 BreakExprAST::BreakExprAST() {}
 ContinueExprAST::ContinueExprAST() {}
 
-IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vector<std::unique_ptr<ExprAST>> Second_Idxs, bool IsSlice)
-            : Idxs(std::move(Idxs)), Second_Idxs(std::move(Second_Idxs)), IsSlice(IsSlice) {
+IndexExprAST::IndexExprAST(std::vector<DimSlice> Idxs)
+            : Idxs(std::move(Idxs)) {
   Size = this->Idxs.size();
 }
 
 Data_Tree IndexExprAST::GetDataTree(bool from_assignment) { 
-    return Idxs[0]->GetDataTree();
+    return Idxs[0].start->GetDataTree();
 }
   
 
@@ -1133,6 +1133,13 @@ std::string Nameable::GetLibCallee() {
 }
 
 
+bool has_slice(std::vector<DimSlice> &indices) {
+    bool has_slice = false;
+    for (auto &idx : indices)
+        has_slice |= idx.is_slice;
+    return has_slice;
+}
+
 Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   Data_Tree inner_dt = Inner->GetDataTree();
   const std::string &compound_type = inner_dt.Type;
@@ -1141,18 +1148,19 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
       return Data_Tree("char");
  
   if(Idx_Fn_Return.count(compound_type+"_Idx")) {
-      std::cout <<"1\n";
     Data_Tree idx_data_tree = Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
-
     return Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
   }
   
-
-  if (from_assignment || !in_str(compound_type, {"vec", "map", "list", "dict", "tuple", "array"}))
+  auto &indices = Idx->Idxs;
+  
+  if (from_assignment || has_slice(indices) ||\
+          !in_vec(compound_type, compound_tokens))
     return inner_dt; //e.g: for list_Store_Idx
 
+
   if(compound_type=="tuple") {
-    if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].get())) {
+    if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].start.get())) {
 
       int idx = expr->Val;
       if (idx>=inner_dt.Nested_Data.size())
@@ -1448,6 +1456,12 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
     Callee += "_" + this->Inner->GetDataTree().Nested_Data[1].Type;
   if(Callee=="map_has")
     Callee += "_" + this->Args[0]->GetDataTree().Type;
+  if(Callee=="map_get") {
+    std::string value_ty = this->Inner->GetDataTree().Nested_Data[1].Type;
+    if (!in_vec(value_ty,primary_data_tokens)&&!in_vec(value_ty,compound_tokens))
+        value_ty = "any";
+    Callee += "_" + this->Args[0]->GetDataTree().Type + "_" + value_ty;
+  }
 
 
   // specify list type

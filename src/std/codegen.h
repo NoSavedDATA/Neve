@@ -20,10 +20,18 @@ using namespace llvm;
 
 
 
-Data_Tree array_clone_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
-Data_Tree array_pop_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
-Data_Tree map_keys_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
-Data_Tree map_values_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &);
+Data_Tree min_ret_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&);
+Data_Tree max_ret_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&);
+Data_Tree array_clone_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&,\
+                    std::unique_ptr<Nameable> &);
+Data_Tree array_pop_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&,\
+                    std::unique_ptr<Nameable> &);
+Data_Tree map_keys_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&,\
+                    std::unique_ptr<Nameable> &);
+Data_Tree map_values_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&,\
+                    std::unique_ptr<Nameable> &);
+Data_Tree map_get_dt(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&,\
+                    std::unique_ptr<Nameable> &);
 
 Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
                       std::string, std::string type, Data_Tree data_type,
@@ -97,6 +105,12 @@ Value *str_offset(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);
 Value *alloc(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);
+Value *min(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);
+Value *max(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);
 

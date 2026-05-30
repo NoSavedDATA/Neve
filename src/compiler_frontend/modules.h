@@ -33,9 +33,11 @@ extern std::unique_ptr<TargetMachine> CTM;
 extern std::map<std::string, StructType*> struct_types;
 extern std::unordered_map<std::string, int> struct_type_size;
 
-extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+extern std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+extern std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 extern std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 extern std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
+extern std::unordered_map<std::string, llvm::Type*> tuple_cache;
 
 extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, std::string, std::string, Data_Tree,
                                                        Value*, Value*,

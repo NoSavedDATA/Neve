@@ -6,3 +6,4 @@ src_backup/
 .git/
 *.d
 *.o
+*.bz2

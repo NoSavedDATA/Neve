@@ -25,8 +25,7 @@ unsigned int get_millisecond_time() {
 #endif
 
 
-extern "C" void __slee_p_(Scope_Struct *scope_struct, int duration)
-{
+extern "C" int __slee_p_(Scope_Struct *scope_struct, int duration) {
   // std::cout << "\n\nSleep " << duration << " begin" << "\n";
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -40,6 +39,7 @@ extern "C" void __slee_p_(Scope_Struct *scope_struct, int duration)
   // std::cout << "Sleep " << duration << " finish" << "\n";
 
   //return id;
+  return 0;
 }
 
 

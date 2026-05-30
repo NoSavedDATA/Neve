@@ -39,6 +39,12 @@ inline void v_ir(Value *v) {
     errs() << "\n";
 }
 
+Data_Tree min_ret_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+  return Args[0]->GetDataTree();
+}
+Data_Tree max_ret_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+  return Args[0]->GetDataTree();
+}
 Data_Tree array_clone_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
@@ -55,6 +61,12 @@ Data_Tree map_keys_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<E
 Data_Tree map_values_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[1]);
+  return dt;
+}
+Data_Tree map_get_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+  Data_Tree dt = Data_Tree("tuple");
+  dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[1]);
+  dt.Nested_Data.push_back(Data_Tree("bool"));
   return dt;
 }
 
@@ -133,7 +145,8 @@ Value *i8(Parser_Struct parser_struct, Function *TheFunction,
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"int", "i16", "i64"}))
         LogError(parser_struct.line, "Cannot cast " + type + " to i8.");
-    return Builder->CreateIntCast(ArgsV[0], int8Ty, true); // true for signed extend
+    bool is_signed = type!="char";
+    return Builder->CreateIntCast(ArgsV[0], int8Ty, is_signed); // true for signed extend
 }
 Value *i16(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
@@ -141,7 +154,8 @@ Value *i16(Parser_Struct parser_struct, Function *TheFunction,
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"int", "i8", "i64", "char"}))
         LogError(parser_struct.line, "Cannot cast " + type + " to i16.");
-    return Builder->CreateIntCast(ArgsV[0], int16Ty, true); // true for signed extend
+    bool is_signed = type!="char";
+    return Builder->CreateIntCast(ArgsV[0], int16Ty, is_signed); // true for signed extend
 }
 Value *to_int(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
@@ -149,7 +163,8 @@ Value *to_int(Parser_Struct parser_struct, Function *TheFunction,
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"i8", "i16", "i64", "char"}))
         LogError(parser_struct.line, "Cannot cast " + type + " to int.");
-    return Builder->CreateIntCast(ArgsV[0], intTy, true); // true for signed extend
+    bool is_signed = type!="char";
+    return Builder->CreateIntCast(ArgsV[0], intTy, is_signed);
 }
 Value *i64(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
@@ -300,6 +315,49 @@ Value *c_memchr(Parser_Struct parser_struct, Function *TheFunction,
     return ret;
 }
 
+Value *min(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+
+    std::string type = args_type[0].Type;
+    Value *x=Args[0]->codegen(scope_struct), *y=Args[1]->codegen(scope_struct);
+    if (type=="float")
+        return Builder->CreateMinNum(x, y, "float_min");
+    if (in_vec(type,int_types)) {
+        Value* cond = Builder->CreateICmpSLT(x, y); // signed min
+        return Builder->CreateSelect(cond, x, y, "int_min");
+    }
+    
+    std::string fn = "min_"+type;
+    if (auto *F = TheModule->getFunction(fn))
+        return callret(fn, {scope_struct, x, y});
+
+    LogErrorC(parser_struct.line, "Could not handle min op for: " + type);
+
+    return const_int(0);
+}
+
+Value *max(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    std::string type = args_type[0].Type;
+    Value *x=Args[0]->codegen(scope_struct), *y=Args[1]->codegen(scope_struct);
+    if (type=="float")
+        return Builder->CreateMaxNum(x, y, "float_max");
+    if (in_vec(type,int_types)) {
+        Value* cond = Builder->CreateICmpSGT(x, y); // signed max
+        return Builder->CreateSelect(cond, x, y, "int_max");
+    }
+    
+    std::string fn = "max_"+type;
+    if (auto *F = TheModule->getFunction(fn))
+        return callret(fn, {scope_struct, x, y});
+
+    LogErrorC(parser_struct.line, "Could not handle max op for: " + type);
+
+    return const_int(0);
+}
+
 Value *err(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
@@ -338,8 +396,15 @@ Value *print(Parser_Struct parser_struct, Function *TheFunction,
             size = const_int(1);
             Builder->CreateStore(print_val, print_gep);
         } else {
-            std::string call = arg_type + "_to_str_buffer";
-            size = callret(call, {scope_struct, print_val, print_gep});
+            std::string callee = arg_type + "_to_str_buffer";
+            // if (arg_type=="bool") {
+            //     printTy(print_val);
+            //     call("print_bool", {print_val});
+            // }
+            size = callret(callee, {scope_struct, print_val, print_gep});
+            if (arg_type=="bool")
+                return const_int(0);
+
         }
 
         offset = Builder->CreateAdd(offset, size);

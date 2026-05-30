@@ -9,3 +9,8 @@ void LogErrorEE(int line, std::string Str) {
     std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0m " << Str << "\n\n"; 
   std::exit(0);
 }
+void LogErrorQ(int line, std::string Str) {
+  if (Str!=" ")
+    std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0m " << Str << "\n\n"; 
+  std::exit(0);
+}

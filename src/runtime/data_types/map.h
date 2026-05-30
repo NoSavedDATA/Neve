@@ -431,6 +431,15 @@ struct DT_map {
 };
 
 
+struct map_get_any {
+    void *ptr;
+    int has;
+};
+struct map_get_int {
+    int val;
+    int has;
+};
+
 
 
 void map_node_Clean_Up(void *ptr, int);

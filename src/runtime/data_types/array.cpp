@@ -5,6 +5,7 @@
 
 #include "../codegen/random.h"
 
+#include "../compiler_frontend/logging_execution.h"
 #include "../compiler_frontend/logging_v.h"
 #include "../mangler/scope_struct.h"
 #include "../pool/include.h"
@@ -75,6 +76,30 @@ extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) {
 
     return ret;
 }
+
+extern "C" DT_array *array_slice(Scope_Struct *scope_struct, DT_array *vec,\
+                uint16_t elem_type, int start, int end) { 
+  int vec_size = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
+  if (end>vec_size)
+      LogErrorQ(scope_struct->code_line, "Slice with end idx " + std::to_string(end) + " out of bounds. Array has size " + std::to_string(vec_size));
+  if (start>end)
+      LogErrorQ(scope_struct->code_line, "Array slice end \"" + std::to_string(end) + "\" is smaller than start: " + std::to_string(start));
+
+  int elem_size, size = end-start;
+  if(data_type_to_size.count(elem_type)>0)
+      elem_size = data_type_to_size[elem_type];
+  else
+      elem_size = 8;
+
+  DT_array *new_vec = newT<DT_array>(scope_struct, "array");
+  new_vec->New(scope_struct, size, elem_size, scope_struct->thread_id, elem_type);
+
+  void *data = __atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+  void *new_data = __atomic_load_n(&new_vec->data, __ATOMIC_ACQUIRE);
+  memcpy(new_data, (char*)data+start*elem_size, size*elem_size);
+  return new_vec;
+}
+
 extern "C" void *array_pop(Scope_Struct *scope_struct, DT_array *v) { 
     int virtual_size = v->virtual_size;
 

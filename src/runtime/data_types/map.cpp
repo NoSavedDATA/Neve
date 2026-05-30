@@ -191,7 +191,6 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
 
 
 extern "C" bool map_has_str(Scope_Struct *ctx, DT_map *map, DT_str query) {
-    std::unique_lock<std::mutex> lock(ctx->gc->arena->sweep_mtx);
     int hash_pos = str_hash(query.str, query.size) % map->capacity;
     DT_map_node *cur_node = map->nodes[hash_pos];
     while(cur_node!=nullptr) {
@@ -224,6 +223,49 @@ extern "C" bool map_has_i64(Scope_Struct *scope_struct, DT_map *map, int64_t que
         cur_node = cur_node->next;
     }
     return false;
+}
+
+
+
+extern "C" map_get_int map_get_str_int(Scope_Struct *scope_struct, DT_map *map, DT_str query) {
+    int hash_pos = str_hash(query.str, query.size) % map->capacity;
+    DT_map_node *cur_node = map->nodes[hash_pos];
+    while(cur_node!=nullptr) {
+        char *key = static_cast<char*>(cur_node->key);
+        if(query.size == strlen(key) &&
+           std::memcmp(query.str, key, query.size) == 0)
+            return {*(int*)cur_node->value, 1};
+        cur_node = cur_node->next;
+    }
+    return {-1, 0};
+}
+
+extern "C" map_get_any map_get_i64_any(Scope_Struct *scope_struct, DT_map *map, int64_t query) {
+    int hash_pos = query % map->capacity;
+    DT_map_node *cur_node = map->nodes[hash_pos];
+    
+    while(cur_node!=nullptr) {
+        int64_t *key = static_cast<int64_t*>(cur_node->key);
+        if (query == *key)
+            return {cur_node->value, 1};
+        cur_node = cur_node->next;
+    }
+    
+    return {nullptr, 0};
+}
+
+extern "C" map_get_int map_get_i64_int(Scope_Struct *scope_struct, DT_map *map, int64_t query) {
+    int hash_pos = query % map->capacity;
+    DT_map_node *cur_node = map->nodes[hash_pos];
+    
+    while(cur_node!=nullptr) {
+        int64_t *key = static_cast<int64_t*>(cur_node->key);
+        if (query == *key)
+            return {*(int*)cur_node->value, 1};
+        cur_node = cur_node->next;
+    }
+    
+    return {-1, 0};
 }
 extern "C" bool map_has_float(Scope_Struct *scope_struct, DT_map *map, float query) {
     int hash_pos = float_hash(query) % map->capacity;

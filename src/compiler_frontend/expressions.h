@@ -78,18 +78,19 @@ class ExprAST {
     // virtual nlohmann::json toJSON();
 };
 
-  
+struct DimSlice {
+    std::unique_ptr<ExprAST> start, end;
+    bool is_slice;
+};
+bool has_slice(std::vector<DimSlice> &indices);
+
 class IndexExprAST : public ExprAST {
-  
   public:
     int Size;
-    std::vector<std::unique_ptr<ExprAST>> Idxs;
-    std::vector<std::unique_ptr<ExprAST>> Second_Idxs;
-    bool IsSlice=false;
-
+    std::vector<DimSlice> Idxs;
     std::string idx_slice_or_query = "idx";
 
-    IndexExprAST(std::vector<std::unique_ptr<ExprAST>>, std::vector<std::unique_ptr<ExprAST>>, bool);
+    IndexExprAST(std::vector<DimSlice>);
 
     Value *codegen(Value *scope_struct) override;
     Data_Tree GetDataTree(bool from_assignment=false) override;

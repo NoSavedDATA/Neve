@@ -168,8 +168,7 @@ void Data_Tree::Print() {
 
 std::string Data_Tree::toString() {
     std::string str = Type; 
-    if (Nested_Data.size()>0)
-    {
+    if (Nested_Data.size()>0) {
         str += "<";
         Data_Tree dt = Nested_Data[0];
         str += dt.toString();

@@ -3,6 +3,7 @@
 #include <cstring>
 
 
+#include "../data_types/str_view.h"
 #include "../pool/include.h"
 #include "../threads/cas.h"
 #include "channels.h"
@@ -72,6 +73,111 @@ extern "C" void *channel_Create(Scope_Struct *scope_struct, uint16_t type, int b
 
 
 
+
+// str x <- ch
+extern "C" DT_str str_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+    DT_str *data = (DT_str*)ch->data;
+    
+    int backoff_us = 1;
+    while(!ch->terminated) {
+        size_t pos = __atomic_load_n(&ch->head, __ATOMIC_RELAXED) ;
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(&ch->seq[ring_pos], __ATOMIC_ACQUIRE);
+
+        intptr_t diff = (intptr_t)seq - (intptr_t)(pos+1);
+        if (diff==0) {
+            if (__atomic_compare_exchange_n(
+                            &ch->head, &pos, pos+1,
+                            false,
+                            __ATOMIC_RELAXED,
+                            __ATOMIC_RELAXED
+                        )) {
+
+                DT_str x;
+                __atomic_load(&data[ring_pos], &x, __ATOMIC_RELAXED); 
+                __atomic_store_n(&ch->seq[ring_pos], pos + ch->buffer_size, __ATOMIC_RELEASE);
+                return x;
+            }
+        } 
+        cas_sleep(backoff_us);
+    }
+}
+
+
+// ch <- msg
+extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT_str str) {
+    DT_str *data = (DT_str*)ch->data;
+    
+    int backoff_us = 1;
+    while(!ch->terminated) {
+        size_t pos = __atomic_load_n(&ch->tail, __ATOMIC_RELAXED) ;
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(&ch->seq[ring_pos], __ATOMIC_ACQUIRE);
+
+        intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+        if (diff==0) {
+            if (__atomic_compare_exchange_n(
+                            &ch->tail, &pos, pos+1,
+                            false,
+                            __ATOMIC_RELAXED,
+                            __ATOMIC_RELAXED
+                        )) {
+                DT_str tmp(str.str, str.size);
+                __atomic_store(&data[ring_pos], &tmp, __ATOMIC_RELEASE);
+                __atomic_store_n(&ch->seq[ring_pos], pos+1, __ATOMIC_RELEASE);
+                return 0;
+            }
+        }
+        cas_sleep(backoff_us);
+    }
+    
+    return 0;
+}
+
+extern "C" DT_str str_channel_Idx(
+        Scope_Struct *scope_struct,
+        Channel *ch,
+        int idx) {
+    DT_str *data = (DT_str*)ch->data;
+
+    int backoff_us = 1;
+    while (!ch->terminated) {
+        size_t head = __atomic_load_n(&ch->head, __ATOMIC_ACQUIRE);
+        size_t tail = __atomic_load_n(&ch->tail, __ATOMIC_ACQUIRE);
+
+        size_t size = tail - head;
+
+        if ((size_t)idx >= size) {
+            cas_sleep(backoff_us);
+            continue;
+        }
+
+        size_t pos = head + idx;
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(
+            &ch->seq[ring_pos],
+            __ATOMIC_ACQUIRE
+        );
+
+        // slot contains valid data?
+        if (seq == pos + 1) {
+            DT_str ret;
+            __atomic_load(
+                &data[ring_pos],
+                &ret,
+                __ATOMIC_ACQUIRE
+            );
+            return ret;
+        }
+    }
+
+    return DT_str(nullptr,0);
+}
+
+
 extern "C" void str_channel_terminate(Scope_Struct *scope_struct, Channel *ch) {
     {
         std::unique_lock<std::mutex> lock(ch->mtx);
@@ -113,45 +219,6 @@ extern "C" int float_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 
 
 
-
-// // int x <- ch
-// extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
-//     std::unique_lock<std::mutex> lock(ch->mtx);
-//     std::cout << "consumer " <<ch->size << ", " << ch->head << " - " << ch->tail << "\n";
-//     ch->pop_cv.wait(lock, [&]{ return ch->terminated || ch->size > 0; } );
-//     if(ch->terminated)
-//         return -1;
-
-//     DT_array *arr = ch->_array;
-//     int *data = (int*)arr->data;
-//     int x = data[ch->head];
-//     ch->head = (ch->head+1)%ch->buffer_size;
-//     ch->size--;
-
-//     ch->push_cv.notify_all();
-
-//     return x;
-// }
-// // ch <- msg
-// extern "C" float channel_int_message(Scope_Struct *scope_struct, Channel *ch, int x) {
-//     std::unique_lock<std::mutex> lock(ch->mtx);
-//     DT_array *arr = ch->_array;
-//     std::cout << "producer " <<ch->size << ", " << ch->head << " - " << ch->tail << "\n";
-//     ch->push_cv.wait(lock, [&]{ return ch->terminated || \
-//                 ch->size < ch->buffer_size; } );
-//     if(ch->terminated)
-//         return -1;
-
-//     int *data = (int*)arr->data;
-//     data[ch->tail] = x;
-//     ch->tail = (ch->tail+1)%ch->buffer_size;
-//     ch->size++;
-
-//     std::cout << "producer DONE " <<ch->size << ", " << ch->head << " - " << ch->tail << "\n";
-//     ch->pop_cv.notify_all();
-    
-//     return 0;
-// }
 
 
 
@@ -215,23 +282,44 @@ extern "C" float channel_int_message(Scope_Struct *scope_struct, Channel *ch, in
     return 0;
 }
 
-// extern "C" int int_channel_Idx(Scope_Struct *scope_struct, Channel *ch, int idx) {
-//     std::unique_lock<std::mutex> lock(ch->mtx);
-//     DT_array *arr = ch->_array;
+extern "C" int int_channel_Idx(
+        Scope_Struct *scope_struct,
+        Channel *ch,
+        int idx) {
+    int *data = (int*)ch->data;
 
-//     ch->cv.wait(lock, [&]{ return ch->terminated || ch->size > 0; } );    
-//     if(ch->terminated)
-//         return -1;
+    int backoff_us = 1;
+    while (!ch->terminated) {
+        size_t head = __atomic_load_n(&ch->head, __ATOMIC_ACQUIRE);
+        size_t tail = __atomic_load_n(&ch->tail, __ATOMIC_ACQUIRE);
 
-//     int *data = (int*)arr->data;
-//     int res = data[idx];
-//     std::cout << "todo  int_channel_Idx check size" << "\n";
-//     // ch->size--;
+        size_t size = tail - head;
 
-//     ch->cv.notify_all();
+        if ((size_t)idx >= size) {
+            cas_sleep(backoff_us);
+            continue;
+        }
 
-//     return res;
-// }
+        size_t pos = head + idx;
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(
+            &ch->seq[ring_pos],
+            __ATOMIC_ACQUIRE
+        );
+
+        // slot contains valid data?
+        if (seq == pos + 1) {
+            return __atomic_load_n(
+                &data[ring_pos],
+                __ATOMIC_ACQUIRE
+            );
+        }
+    }
+
+    return -1;
+}
+
 
 extern "C" int int_channel_sum(Scope_Struct *scope_struct, Channel *ch) {
     std::unique_lock<std::mutex> lock(ch->mtx);

@@ -52,6 +52,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("print_void_ptrC", print_void_ptrCTy);
 
+	FunctionType *print_boolTy= FunctionType::get(
+		Type::getVoidTy(*TheContext),
+		{Type::getInt1Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("print_bool", print_boolTy);
+
 	FunctionType *print_int16Ty= FunctionType::get(
 		Type::getVoidTy(*TheContext),
 		{Type::getInt16Ty(*TheContext)},
@@ -280,6 +287,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_has_i64", map_has_i64Ty);
 
+	FunctionType *map_get_str_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, struct_types["DT_str"]},
+		false
+	);
+	TheModule->getOrInsertFunction("map_get_str_int", map_get_str_intTy);
+
+	FunctionType *map_get_i64_anyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt64Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("map_get_i64_any", map_get_i64_anyTy);
+
+	FunctionType *map_get_i64_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt64Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("map_get_i64_int", map_get_i64_intTy);
+
 	FunctionType *map_has_floatTy= FunctionType::get(
 		Type::getInt1Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -427,6 +455,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);
 
+	FunctionType *str_channel_messageTy= FunctionType::get(
+		struct_types["DT_str"],
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_message", str_channel_messageTy);
+
+	FunctionType *channel_str_messageTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, struct_types["DT_str"]},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
+
+	FunctionType *str_channel_IdxTy= FunctionType::get(
+		struct_types["DT_str"],
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, struct_types["DT_str"]->getPointerTo(), int8PtrTy, struct_types["DT_str"]->getPointerTo(), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_Idx", str_channel_IdxTy);
+
 	FunctionType *str_channel_terminateTy= FunctionType::get(
 		Type::getVoidTy(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -468,6 +517,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("channel_int_message", channel_int_messageTy);
+
+	FunctionType *int_channel_IdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_Idx", int_channel_IdxTy);
 
 	FunctionType *int_channel_sumTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -524,6 +580,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("Add_To_NotesVector_str", Add_To_NotesVector_strTy);
+
+	FunctionType *memp_startTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("memp_start", memp_startTy);
+
+	FunctionType *memp_endTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("memp_end", memp_endTy);
 
 	FunctionType *_quit_Ty= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -722,7 +792,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("tuple_Idx", tuple_IdxTy);
 
 	FunctionType *__slee_p_Ty= FunctionType::get(
-		Type::getVoidTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
@@ -792,7 +862,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("bool_to_str", bool_to_strTy);
 
 	FunctionType *bool_to_str_bufferTy= FunctionType::get(
-		Type::getInt64Ty(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt1Ty(*TheContext), int8PtrTy},
 		false
 	);
@@ -1098,6 +1168,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("array_clone", array_cloneTy);
+
+	FunctionType *array_sliceTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("array_slice", array_sliceTy);
 
 	FunctionType *array_popTy= FunctionType::get(
 		int8PtrTy,

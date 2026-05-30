@@ -404,7 +404,7 @@ void GC::Sweep(Scope_Struct *scope_struct) {
     __atomic_store_n(&marking, true, __ATOMIC_RELEASE);
     std::unique_lock<std::mutex> lock(arena->sweep_mtx, std::defer_lock);
 
-    std::cout << "sweep" << "\n";
+    // std::cout << "sweep" << "\n";
     arena->gen += 2;
 
     lock.lock();

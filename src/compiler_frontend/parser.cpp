@@ -372,49 +372,38 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
 
 std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string class_name) {
   
-  std::vector<std::unique_ptr<ExprAST>> idx, second_idx;
+  std::vector<DimSlice> slices;
+  while (true) {
+      std::unique_ptr<ExprAST> idx, second_idx=nullptr;
+      bool is_slice = false;
 
-  bool has_sliced_vec=false;
+      if (CurTok==':') { // [:-1]
+        is_slice = true;
+        getNextToken(); // :
 
-  if (CurTok==':') { // [:-1]
-    getNextToken();
-    has_sliced_vec=true;
+        idx = std::make_unique<IntExprAST>(0);
+        if (!(CurTok==','||CurTok==']'))
+          second_idx = ParseExpression(parser_struct, class_name, false);
+      } else { 
 
-    idx.push_back(std::make_unique<IntExprAST>(0));
-    if (CurTok==','||CurTok==']')
-      second_idx.push_back(std::make_unique<IntExprAST>(COPY_TO_END_INST));
-    else
-      second_idx.push_back(ParseExpression(parser_struct, class_name, false));
-  } else { 
+        idx = ParseExpression(parser_struct, class_name, false);
 
-    idx.push_back(ParseExpression(parser_struct, class_name, false));
+        if (CurTok==':') {
+          is_slice = true;
+          getNextToken(); // :
 
-    if (CurTok==':') {
+          if (!(CurTok==','||CurTok==']'))
+            second_idx = ParseExpression(parser_struct, class_name, false);
+        }
+      }
+      slices.push_back({std::move(idx), std::move(second_idx), is_slice});
+      if (CurTok!=',')
+          break;
       getNextToken();
-      has_sliced_vec=true;
-
-      if (CurTok==','||CurTok==']')
-        second_idx.push_back(std::make_unique<IntExprAST>(COPY_TO_END_INST));
-      else
-        second_idx.push_back(ParseExpression(parser_struct, class_name, false));
-    }
   }
 
-  while(CurTok==',') {
-    getNextToken(); // eat ,
-    idx.push_back(ParseExpression(parser_struct, class_name, false));
 
-    if (CurTok==':') {
-      getNextToken();
-      second_idx.push_back(ParseExpression(parser_struct, class_name, false));
-      has_sliced_vec=true;
-    }
-  }
-  idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
-  second_idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
-
-
-  return std::make_unique<IndexExprAST>(std::move(idx), std::move(second_idx), has_sliced_vec);
+  return std::make_unique<IndexExprAST>(std::move(slices));
 }
 
 
@@ -501,6 +490,8 @@ std::unique_ptr<ExprAST> Parse_Append_Expr(Parser_Struct parser_struct, std::uni
     return std::make_unique<NameableAppend>(parser_struct, std::move(inner), std::move(*Args));
 }
 
+
+
 std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
   
   getNextToken(); // eat [
@@ -508,10 +499,9 @@ std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_p
   if(CurTok!=']')
     LogError(parser_struct.line, "Expected \"]\"");
   getNextToken(); // eat ]
-  
 
-  std::unique_ptr<NameableIdx> vec_expr = std::make_unique<NameableIdx>(parser_struct, std::move(inner), std::move(index_expr));
-
+  std::unique_ptr<NameableIdx> vec_expr = std::make_unique<NameableIdx>(parser_struct,
+                                std::move(inner), std::move(index_expr));
 
 
   if (CurTok=='(')
@@ -899,9 +889,11 @@ std::unique_ptr<ExprAST> ParseWhileExpr(Parser_Struct parser_struct, std::string
   if (!Cond)
     return nullptr;
   
+  auto prev_vars = data_typeVars[parser_struct.function_name];
   Parser_Struct loop_parser_struct = parser_struct;
   loop_parser_struct.loop_depth++;
   std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
+  data_typeVars[parser_struct.function_name] = prev_vars;
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body), parser_struct);
 }
@@ -1119,6 +1111,9 @@ std::unique_ptr<ExprAST> ParseProtoExpr(Parser_Struct parser_struct, std::string
     FunctionProtos[Name] = std::make_unique<PrototypeAST>(Name, Return, "", "",
                                                 std::move(ArgNames),
                                                 std::move(Types));
+    if (begins_with(Name, "map_get_")) {
+        PriorityProtos[Name] = FunctionProtos[Name].get(); 
+    }
 
     return std::make_unique<NumberExprAST>(0.0f);
 }

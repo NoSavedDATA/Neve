@@ -14,6 +14,10 @@ extern "C" float print_void_ptrC(Scope_Struct *scope_struct, void *x) {
     return 0;
 }
 
+extern "C" void print_bool(bool x) {
+    // if(x!=0)
+    std::cout << "GOT BOOL: " << x << ".\n";
+}
 extern "C" void print_int16(uint16_t x) {
     // if(x!=0)
     std::cout << "GOT INT: " << x << ".\n";

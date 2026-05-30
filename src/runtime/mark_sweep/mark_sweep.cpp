@@ -123,7 +123,7 @@ void GC_Observer(Scope_Struct *scope_struct) {
         gc->retire_clean();
         next = std::chrono::steady_clock::now() + std::chrono::microseconds(5000);
     }
-    std::cout << "sweeps " << sweeps << "\n";
+    // std::cout << "sweeps " << sweeps << "\n";
 }
 extern "C" float psweep(Scope_Struct *scope_struct) {
     {
