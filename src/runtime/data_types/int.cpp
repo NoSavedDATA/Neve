@@ -39,63 +39,33 @@ extern "C" int read_int(Scope_Struct *scope_struct) {
 // }
 
 
-extern "C" char* int_to_str(Scope_Struct *scope_struct, int value)
-{
-    // Handle special case: minimum int
-    if (value == std::numeric_limits<int>::min()) {
-        const char* min_str = "-2147483648";
-        char *result = allocate<char>(scope_struct, 12, "str");
-        std::memcpy(result, min_str, 12);
-        return result;
+
+
+
+template<typename T>
+static int intT_to_str_buffer(T value, char *buffer) {
+    if (value == std::numeric_limits<T>::min()) {
+        constexpr auto min_str =
+            std::numeric_limits<T>::digits == 7  ? "-128" :
+            std::numeric_limits<T>::digits == 15 ? "-32768" :
+                                                   "-9223372036854775808";
+
+        constexpr int len =
+            std::numeric_limits<T>::digits == 7  ? 4 :
+            std::numeric_limits<T>::digits == 15 ? 6 :
+                                                   20;
+
+        std::memcpy(buffer, min_str, len);
+        return len;
     }
 
-    bool negative = (value < 0);
+    bool negative = value < 0;
     if (negative)
         value = -value;
 
-    // Count digits
-    int temp = value;
+    T temp = value;
     int digits = 1;
-    while (temp >= 10) {
-        temp /= 10;
-        ++digits;
-    }
 
-    int total_len = digits + (negative ? 1 : 0);
-
-    char *result = allocate<char>(scope_struct, total_len+1, "str");
-    result[total_len] = '\0';
-
-    // Fill digits from end
-    for (int i = 0; i < digits; ++i) {
-        result[total_len - 1 - i] = '0' + (value % 10);
-        value /= 10;
-    }
-
-    if (negative)
-        result[0] = '-';
-
-    return result;
-}
-
-
-extern "C" int i64_to_str_buffer(Scope_Struct *scope_struct, int64_t value, char *buffer)
-{
-    // printf("scope=%p buffer=%p value=%d\n", scope_struct, buffer, value);
-    // fflush(stdout);
-    if (value == std::numeric_limits<int64_t>::min()) {
-        const char* min_str = "-9223372036854775808";
-        std::memcpy(buffer, min_str, 20);
-        return 20;
-    }
-
-    bool negative = (value < 0);
-    if (negative)
-        value = -value;
-
-    // Count digits
-    int64_t temp = value;
-    int digits = 1;
     while (temp >= 10) {
         temp /= 10;
         ++digits;
@@ -104,7 +74,8 @@ extern "C" int i64_to_str_buffer(Scope_Struct *scope_struct, int64_t value, char
     int total_len = digits + (negative ? 1 : 0);
 
     for (int i = 0; i < digits; ++i) {
-        buffer[total_len - 1 - i] = static_cast<char>('0' + (value % 10));
+        buffer[total_len - 1 - i] =
+            static_cast<char>('0' + (value % 10));
         value /= 10;
     }
 
@@ -114,46 +85,54 @@ extern "C" int i64_to_str_buffer(Scope_Struct *scope_struct, int64_t value, char
     return total_len;
 }
 
-extern "C" int int_to_str_buffer(Scope_Struct *scope_struct, int value, char *buffer)
-{
-    if (value == std::numeric_limits<int>::min()) {
-        const char* min_str = "-2147483648";
-        std::memcpy(buffer, min_str, 12);
-        return 12;
-    }
+extern "C" int i64_to_str_buffer(Scope_Struct *scope_struct, int64_t value, char *buffer) {
+    return intT_to_str_buffer(value, buffer);
+}
 
-    bool negative = (value < 0);
-    if (negative)
-        value = -value;
+extern "C" int i16_to_str_buffer(Scope_Struct *scope_struct, int16_t value, char *buffer) {
+    return intT_to_str_buffer(value, buffer);
+}
 
-    // Count digits
-    int temp = value;
-    int digits = 1;
-    while (temp >= 10) {
-        temp /= 10;
-        ++digits;
-    }
+extern "C" int i8_to_str_buffer(Scope_Struct *scope_struct, int8_t value, char *buffer) {
+    return intT_to_str_buffer(value, buffer);
+}
 
-    int total_len = digits + (negative ? 1 : 0);
-
-    for (int i = 0; i < digits; ++i) {
-        buffer[total_len - 1 - i] = '0' + (value % 10);
-        value /= 10;
-    }
-
-    if (negative)
-        buffer[0] = '-';
-
-    return total_len;
+extern "C" int int_to_str_buffer(Scope_Struct *scope_struct, int value, char *buffer) {
+    return intT_to_str_buffer(value, buffer);
 }
 
 
-extern "C" int int_print_bits(Scope_Struct *scope_struct, int value) {
-    unsigned int u = static_cast<unsigned int>(value);
 
-    for (int i = sizeof(int)*8 - 1; i >= 0; --i) {
+
+
+
+
+
+template<typename T>
+static int print_bits_impl(T value) {
+    using U = std::make_unsigned_t<T>;
+
+    U u = static_cast<U>(value);
+
+    for (int i = sizeof(T) * 8 - 1; i >= 0; --i)
         std::putchar((u >> i) & 1 ? '1' : '0');
-    }
+
     std::putchar('\n');
     return 0;
+}
+
+extern "C" int int_print_bits(Scope_Struct *scope_struct, int value) {
+    return print_bits_impl(value);
+}
+
+extern "C" int i8_print_bits(Scope_Struct *scope_struct, int8_t value) {
+    return print_bits_impl(value);
+}
+
+extern "C" int i16_print_bits(Scope_Struct *scope_struct, int16_t value) {
+    return print_bits_impl(value);
+}
+
+extern "C" int i64_print_bits(Scope_Struct *scope_struct, int64_t value) {
+    return print_bits_impl(value);
 }

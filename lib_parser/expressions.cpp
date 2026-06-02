@@ -72,6 +72,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         return_type = "float_ptr";
     else if (in_return_type=="uint64_t")
         return_type = "uint64_t";
+    else if (in_return_type=="uint8_t")
+        return_type = "uint8_t";
     else if (in_return_type=="int64_t")
         return_type = "int64_t";
     else if (in_return_type=="float")
@@ -191,6 +193,7 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
 std::unordered_map<std::string, std::string> str_to_type = \
     {{"float", "Type::getFloatTy(*TheContext)"}, {"int", "Type::getInt32Ty(*TheContext)"},
      {"uint64_t", "Type::getInt64Ty(*TheContext)"}, {"int64_t", "Type::getInt64Ty(*TheContext)"},
+     {"uint8_t", "Type::getInt8Ty(*TheContext)"}, {"int8_t", "Type::getInt8Ty(*TheContext)"},
      {"bool", "Type::getInt1Ty(*TheContext)"}, {"void", "Type::getVoidTy(*TheContext)"},
      {"DT_str", "struct_types[\"DT_str\"]"}, {"DT_str*", "struct_types[\"DT_str\"]->getPointerTo()"},
      {"int16_t", "Type::getInt16Ty(*TheContext)"}, {"uint16_t", "Type::getInt16Ty(*TheContext)"}};

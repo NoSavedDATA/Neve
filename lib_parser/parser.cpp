@@ -28,8 +28,7 @@ Lib_Info::Lib_Info() {};
 
 
 
-Lib_Info *Generate_LLVMs(Lib_Info *lib_info, std::vector<std::unique_ptr<Expr>> functions)
-{
+Lib_Info *Generate_LLVMs(Lib_Info *lib_info, std::vector<std::unique_ptr<Expr>> functions) {
     for (auto &function : functions)
         lib_info = function->Generate_LLVM(file_name, lib_info);
 

@@ -113,8 +113,8 @@ class NumberExprAST : public ExprAST {
   
 class IntExprAST : public ExprAST {
   public:
-    int Val;
-    IntExprAST(int Val); 
+    int64_t Val;
+    IntExprAST(int64_t Val); 
   Value *codegen(Value *scope_struct) override;
 }; 
 

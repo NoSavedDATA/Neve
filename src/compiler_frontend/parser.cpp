@@ -174,7 +174,7 @@ std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct parser_struct) {
 }
 
 std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct parser_struct) {
-  auto Result = std::make_unique<IntExprAST>((int)NumVal);
+  auto Result = std::make_unique<IntExprAST>(IntVal);
   getNextToken(); // consume the number
   return std::move(Result);
 }
@@ -2319,8 +2319,7 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     return LogError(parser_struct.line, "Expected library name after \"import\". Got token: " + std::to_string(CurTok) + " - " + ReverseToken(CurTok) + ".");
 
   bool is_default = false;
-  if(IdentifierStr=="default")
-  {
+  if(IdentifierStr=="default") {
     // std::cout << "Got a default import" << ".\n";
     is_default=true;
     getNextToken();
@@ -2329,26 +2328,17 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   // Get lib name
   std::string lib_name = IdentifierStr;
   int dots=0; 
-  if (tokenizer->cur_c=='.') {
-      char c = tokenizer->get();
-
-      while(c!=10&&c!=13) {
-        lib_name += "/";
-        dots++;
-        while (isalnum(c)||c=='_') {
-            lib_name += c;
-            c = tokenizer->get();
-        }
-        // std::cout << "get: " << c << ".\n";
-        if (c=='.')
-            c = tokenizer->get();
-      }
+  while (tokenizer->seen_dot) {
+      getNextToken(); // eat dot
+      getNextToken();
+      lib_name += "/" + IdentifierStr;
   }
-  
+
   getNextToken(true);
   
-  std::string full_path_lib = tokenizer->dir+"/"+lib_name+".nv";
-  // std::cout << "full_path_lib  " << full_path_lib<< "\n";
+  std::string full_path_lib = lib_name+".nv";
+  if (tokenizer->dir!="")
+      full_path_lib = tokenizer->dir+"/"+full_path_lib;
 
   // Import logic
   if(fs::exists(full_path_lib)) {

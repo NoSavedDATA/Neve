@@ -32,19 +32,22 @@ static void ParseImport(std::unique_ptr<TokenizerClass> &class_tokenizer) {
         tok = class_tokenizer->getToken();
     }
 
-    std::string full_path_lib = class_tokenizer->dir+"/"+lib_name+".nv";
+    // std::string full_path_lib = class_tokenizer->dir+"/"+lib_name+".nv";
+    std::string full_path_lib = lib_name+".nv";
+    if (class_tokenizer->dir!="")
+        full_path_lib = class_tokenizer->dir + "/" + full_path_lib;
 
     std::string lib_path = std::getenv("NEVE_LIBS");
     std::string as_include = lib_path + "/" + lib_name + "/include.nv";
+
 
 
     if (fs::exists(full_path_lib)) {
         ParseClasses(full_path_lib);
     } else if (fs::exists(as_include)) {
         ParseClasses(as_include);
-    } else {
+    } else
         LogErrorC(-1, "Could not find include.nv for " + lib_name);
-    }
 }
 
 static Data_Tree ParseDataTree(std::unique_ptr<TokenizerClass> &class_tokenizer, int &tok) {
@@ -188,6 +191,7 @@ void ParseClasses(std::string fname) {
     int tok = 0;
     while (tok!=class_tok_eof) {
         tok = class_tokenizer->getToken();
+
         switch (tok) {
             case(class_tok_import):
                 ParseImport(class_tokenizer);

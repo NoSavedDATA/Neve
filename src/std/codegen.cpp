@@ -287,6 +287,10 @@ Value *str_offset(Parser_Struct parser_struct, Function *TheFunction,
     return Builder->CreateGEP(int8Ty, offset, ArgsV[1]);
 }
 
+
+
+
+
 Value *c_memchr(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {

@@ -32,4 +32,5 @@ enum TokenizerClassTokens {
     class_tok_float = -8,
     class_tok_def = -9,
     class_tok_ctor = -10,
+    class_tok_string = -11,
 };

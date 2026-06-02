@@ -207,7 +207,8 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"finish", tok_async_finish},
 											 {"in", tok_in}, {"global", tok_global}, {"no_grad", tok_no_grad},
                                              {"lock", tok_lock},
-											 {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary},
+											 {"unlock", tok_unlock}, {"binary", tok_binary},
+                                             {"unary", tok_unary},
                                              {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel},
                                              {"main", tok_main},
@@ -224,7 +225,8 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
-int HexaVal;
+int64_t IntVal;             // Filled in if tok_number
+size_t HexaVal;
 bool BoolVal;
 
 std::string ReverseToken(int _char) {
@@ -251,7 +253,6 @@ Tokenizer::Tokenizer(std::string file, std::unique_ptr<Tokenizer> inner)
 bool import_NEVE_File(std::string filename) {
     // std::cout << "current " << tokenizer->file_name << "\n";
     // std::cout << "import of " << filename << "\n\n";
-    
     tokenizer->LastToken = CurTok;
     tokenizer = std::make_unique<Tokenizer>(filename, std::move(tokenizer));
     return true;
@@ -268,6 +269,7 @@ std::unique_ptr<Tokenizer> tokenizer;
 /// get_token - Return the next token from standard input.
 static int get_token(bool block) {
   static int LastChar = ' ';
+  tokenizer->seen_dot = false;
   if (block)
     return tok_space;
 
@@ -360,6 +362,8 @@ static int get_token(bool block) {
       break;
     }
 
+    if (LastChar=='.')
+        tokenizer->seen_dot = true;
  
     if (in_vec(IdentifierStr, compound_tokens))
       return tok_struct;
@@ -414,8 +418,10 @@ static int get_token(bool block) {
 
     if (is_hexa)
         HexaVal = strtoull(NumStr.c_str(), nullptr, 16);
-    else
+    else {
         NumVal = strtod(NumStr.c_str(), nullptr);
+        IntVal = strtoull(NumStr.c_str(), nullptr, 10);
+    }
     
     if (is_float) return tok_number;
     if (is_hexa) return tok_hexa;
@@ -562,8 +568,7 @@ void get_tok_until_space() {
 
 /// get_tokenPrecedence - Get the precedence of the pending binary operator token.
 int get_tokenPrecedence() {
-  if (CurTok==tok_space)
-  {
+  if (CurTok==tok_space) {
     // if (CurTok==10)
     //   LineCounter++;
     return 1;

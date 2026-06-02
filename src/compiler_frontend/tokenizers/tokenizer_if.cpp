@@ -42,6 +42,7 @@ char TokenizerIF::get() {
         if (!current) return if_tok_eof;
  
         char c = current->get();
+
         // line_read += c;
         if (c != EOF)
           return c;
@@ -63,6 +64,8 @@ bool TokenizerIF::openFile(std::string filename) {
     std::string base = fs::path(filename).parent_path().string();
     if(filename[0]=='/')
       dir = base;
+    else if (base=="")
+      dir = "";
     else
       dir = dir + "/" + base;
     current = file.get();

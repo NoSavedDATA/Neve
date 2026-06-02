@@ -45,8 +45,10 @@ std::unordered_map<std::string, int> Classes;
 std::map<size_t, std::vector<char *>> CharPool;
 
 
-std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"int", {"float", "i64"}},
-                                                                    {"i64", {"int"}},
+std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"int", {"float", "i8", "i16", "i64"}},
+                                                                    {"i64", {"int", "i8", "i16"}},
+                                                                    {"i16", {"int", "i8", "i64"}},
+                                                                    {"i8", {"int", "i16", "i64"}},
                                                                     {"char", {"i8"}}};
 
 std::vector<std::string> int_types = {"int", "i64", "i8", "i16", "char"};

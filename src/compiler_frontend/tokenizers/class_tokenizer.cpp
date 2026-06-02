@@ -59,6 +59,14 @@ int TokenizerClass::getToken() {
     LastChar = get();
     return '.';
   }
+
+  if(LastChar=='\"') {
+    LastChar = get();
+    while(LastChar!='\"')
+        LastChar = get();
+    LastChar = get();
+    return class_tok_string;
+  }
     
   if(LastChar=='#') {
     while(LastChar!=10) {

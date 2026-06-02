@@ -36,7 +36,15 @@ export NEVE_LIBS="$PREFIX/lib"
 exec "$PREFIX/bin/neve" "\$@"
 EOF
 
+
+cat > "$BIN_DIR/nsm" <<EOF
+#!/usr/bin/env bash
+export NEVE_LIBS="$PREFIX/lib"
+exec "$PREFIX/bin/nsm" "\$@"
+EOF
+
 chmod +x "$BIN_DIR/neve"
+chmod +x "$BIN_DIR/nsm"
 
 
 

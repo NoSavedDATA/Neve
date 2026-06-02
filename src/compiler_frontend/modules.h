@@ -82,7 +82,7 @@ inline Value *const_int16(int16_t val) {
 inline Value *const_uint16(uint16_t val) {
     return ConstantInt::get(Type::getInt16Ty(*TheContext), val);
 }
-inline Value *const_int64(int val) {
+inline Value *const_int64(int64_t val) {
     return ConstantInt::get(Type::getInt64Ty(*TheContext), val);
 }
 inline Value *const_float(float val) {

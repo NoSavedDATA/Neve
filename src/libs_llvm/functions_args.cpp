@@ -324,6 +324,30 @@ void set_functions_args_type() {
 		Function_Arg_Names["channel_Create"].push_back("1");
 		Function_Arg_Names["channel_Create"].push_back("2");
 		
+		Function_Arg_Types["void_channel_message"]["0"] = "Scope_Struct";
+		Function_Arg_Types["void_channel_message"]["1"] = "void";
+		Function_Arg_Types["void_channel_message"]["2"] = "Channel";
+		
+		Function_Arg_DataTypes["void_channel_message"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["void_channel_message"]["1"] = Data_Tree("void");
+		Function_Arg_DataTypes["void_channel_message"]["2"] = Data_Tree("Channel");
+		
+		Function_Arg_Names["void_channel_message"].push_back("0");
+		Function_Arg_Names["void_channel_message"].push_back("1");
+		Function_Arg_Names["void_channel_message"].push_back("2");
+		
+		Function_Arg_Types["channel_void_message"]["0"] = "Scope_Struct";
+		Function_Arg_Types["channel_void_message"]["1"] = "Channel";
+		Function_Arg_Types["channel_void_message"]["2"] = "void";
+		
+		Function_Arg_DataTypes["channel_void_message"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["channel_void_message"]["1"] = Data_Tree("Channel");
+		Function_Arg_DataTypes["channel_void_message"]["2"] = Data_Tree("void");
+		
+		Function_Arg_Names["channel_void_message"].push_back("0");
+		Function_Arg_Names["channel_void_message"].push_back("1");
+		Function_Arg_Names["channel_void_message"].push_back("2");
+		
 		Function_Arg_Types["str_channel_message"]["0"] = "Scope_Struct";
 		Function_Arg_Types["str_channel_message"]["1"] = "void";
 		Function_Arg_Types["str_channel_message"]["2"] = "Channel";
@@ -1389,15 +1413,6 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["read_int"].push_back("0");
 		
-		Function_Arg_Types["int_to_str"]["0"] = "Scope_Struct";
-		Function_Arg_Types["int_to_str"]["1"] = "int";
-		
-		Function_Arg_DataTypes["int_to_str"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["int_to_str"]["1"] = Data_Tree("int");
-		
-		Function_Arg_Names["int_to_str"].push_back("0");
-		Function_Arg_Names["int_to_str"].push_back("1");
-		
 		Function_Arg_Types["i64_to_str_buffer"]["0"] = "Scope_Struct";
 		Function_Arg_Types["i64_to_str_buffer"]["1"] = "i64";
 		Function_Arg_Types["i64_to_str_buffer"]["2"] = "str";
@@ -1409,6 +1424,30 @@ void set_functions_args_type() {
 		Function_Arg_Names["i64_to_str_buffer"].push_back("0");
 		Function_Arg_Names["i64_to_str_buffer"].push_back("1");
 		Function_Arg_Names["i64_to_str_buffer"].push_back("2");
+		
+		Function_Arg_Types["i16_to_str_buffer"]["0"] = "Scope_Struct";
+		Function_Arg_Types["i16_to_str_buffer"]["1"] = "i16";
+		Function_Arg_Types["i16_to_str_buffer"]["2"] = "str";
+		
+		Function_Arg_DataTypes["i16_to_str_buffer"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["i16_to_str_buffer"]["1"] = Data_Tree("i16");
+		Function_Arg_DataTypes["i16_to_str_buffer"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["i16_to_str_buffer"].push_back("0");
+		Function_Arg_Names["i16_to_str_buffer"].push_back("1");
+		Function_Arg_Names["i16_to_str_buffer"].push_back("2");
+		
+		Function_Arg_Types["i8_to_str_buffer"]["0"] = "Scope_Struct";
+		Function_Arg_Types["i8_to_str_buffer"]["1"] = "i8";
+		Function_Arg_Types["i8_to_str_buffer"]["2"] = "str";
+		
+		Function_Arg_DataTypes["i8_to_str_buffer"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["i8_to_str_buffer"]["1"] = Data_Tree("i8");
+		Function_Arg_DataTypes["i8_to_str_buffer"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["i8_to_str_buffer"].push_back("0");
+		Function_Arg_Names["i8_to_str_buffer"].push_back("1");
+		Function_Arg_Names["i8_to_str_buffer"].push_back("2");
 		
 		Function_Arg_Types["int_to_str_buffer"]["0"] = "Scope_Struct";
 		Function_Arg_Types["int_to_str_buffer"]["1"] = "int";
@@ -1430,6 +1469,33 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["int_print_bits"].push_back("0");
 		Function_Arg_Names["int_print_bits"].push_back("1");
+		
+		Function_Arg_Types["i8_print_bits"]["0"] = "Scope_Struct";
+		Function_Arg_Types["i8_print_bits"]["1"] = "i8";
+		
+		Function_Arg_DataTypes["i8_print_bits"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["i8_print_bits"]["1"] = Data_Tree("i8");
+		
+		Function_Arg_Names["i8_print_bits"].push_back("0");
+		Function_Arg_Names["i8_print_bits"].push_back("1");
+		
+		Function_Arg_Types["i16_print_bits"]["0"] = "Scope_Struct";
+		Function_Arg_Types["i16_print_bits"]["1"] = "i16";
+		
+		Function_Arg_DataTypes["i16_print_bits"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["i16_print_bits"]["1"] = Data_Tree("i16");
+		
+		Function_Arg_Names["i16_print_bits"].push_back("0");
+		Function_Arg_Names["i16_print_bits"].push_back("1");
+		
+		Function_Arg_Types["i64_print_bits"]["0"] = "Scope_Struct";
+		Function_Arg_Types["i64_print_bits"]["1"] = "i64";
+		
+		Function_Arg_DataTypes["i64_print_bits"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["i64_print_bits"]["1"] = Data_Tree("i64");
+		
+		Function_Arg_Names["i64_print_bits"].push_back("0");
+		Function_Arg_Names["i64_print_bits"].push_back("1");
 	
 		
 		Function_Arg_Types["list_New"]["0"] = "Scope_Struct";
@@ -1749,6 +1815,18 @@ void set_functions_args_type() {
 		Function_Arg_Names["str_eq"].push_back("2");
 		Function_Arg_Names["str_eq"].push_back("3");
 		Function_Arg_Names["str_eq"].push_back("4");
+		
+		Function_Arg_Types["str_str_add"]["0"] = "Scope_Struct";
+		Function_Arg_Types["str_str_add"]["1"] = "str";
+		Function_Arg_Types["str_str_add"]["2"] = "str";
+		
+		Function_Arg_DataTypes["str_str_add"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["str_str_add"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["str_str_add"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["str_str_add"].push_back("0");
+		Function_Arg_Names["str_str_add"].push_back("1");
+		Function_Arg_Names["str_str_add"].push_back("2");
 		
 		Function_Arg_Types["str_float"]["0"] = "Scope_Struct";
 		Function_Arg_Types["str_float"]["1"] = "str";

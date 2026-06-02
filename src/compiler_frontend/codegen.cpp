@@ -346,9 +346,11 @@ Value *NumberExprAST::codegen(Value *scope_struct) {
 }
 
 Value *IntExprAST::codegen(Value *scope_struct) {
+  // if (not ShallCodegen)
+  //   return const_int64(0);
+  // return const_int64(Val);
   if (not ShallCodegen)
     return const_int(0);
-
   return const_int(Val);
 }
 
@@ -2423,6 +2425,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 Value *R_size = Builder->CreateExtractValue(R, {1});
                 return callret("str_eq", {scope_struct, L_ptr, R_ptr, L_size, R_size});
                 }
+            case '+': {
+                // Value *L_ptr = Builder->CreateExtractValue(L, {0});
+                // Value *L_size = Builder->CreateExtractValue(L, {1});
+                // Value *R_ptr = Builder->CreateExtractValue(R, {0});
+                // Value *R_size = Builder->CreateExtractValue(R, {1});
+                return callret("str_str_add", {scope_struct, L, R});
+                }
             default:
                 break;
         }   
@@ -2777,6 +2786,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
         previous_scope_value_names.push_back(pair.first);
     }
 
+    int uniques_size = Global_Uniques_Idx.size(); 
 
     //Dive scope_struct
     call("scope_struct_Save_for_Async", {scope_struct, global_str(functionName)}); 
@@ -2786,7 +2796,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
     Builder->SetInsertPoint(BB);
 
     // Recover scope_struct Value * on the new function
-    Value *scope_struct_copy = callret("scope_struct_Load_for_Async", {global_str(functionName)}); 
+    Value *scope_struct_copy = callret("scope_struct_Load_for_Async", {const_int(uniques_size), global_str(functionName)}); 
 
     // define body of function
     Value *V = const_float(0.0);
@@ -2806,7 +2816,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
         llvm::Type *llvm_type = get_type_from_str(type);
         function_values[async_scope][var_name] = v;
     }
-    function_values[async_scope]["QQ_stack_top"] = const_int(0);
+    function_values[async_scope]["QQ_stack_top"] = const_int(uniques_size);
+
 
     block_values[BB] = function_values[parser_struct.function_name];
     for (auto &body : asyncBody)
@@ -2814,7 +2825,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
     Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 3);
-    Builder->CreateStore(const_int(0), stack_top_value_gep); // for gc reclaim
+    Builder->CreateStore(const_int(uniques_size), stack_top_value_gep); // for gc reclaim
     call("scope_struct_Delete", {scope_struct_typed});
 
 
@@ -4199,7 +4210,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
             ArgsV.push_back(obj_ptr);
             target_args_size++;
             
-            if(Inner->GetDataTree().Type!="vec"&&Inner->GetDataTree().Type!="str") {
+            std::string type = Inner->GetDataTree().Type;
+            if(!in_vec(type, {"vec", "str"})&&!in_vec(type, int_types)) {
                 BasicBlock *GotNullBB = BasicBlock::Create(*TheContext, "nested_call.bad.bb", TheFunction);
                 BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "nested_call.ok.bb", TheFunction);
 
@@ -4238,7 +4250,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
 
-    Value *ret;
+  Value *ret;
   if (llvm_callee.count(Callee)>0) {
     std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
     ret = llvm_callee[Callee](parser_struct, TheFunction, Callee, data_type, ArgTypes,

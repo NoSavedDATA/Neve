@@ -455,6 +455,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);
 
+	FunctionType *void_channel_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("void_channel_message", void_channel_messageTy);
+
+	FunctionType *channel_void_messageTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_void_message", channel_void_messageTy);
+
 	FunctionType *str_channel_messageTy= FunctionType::get(
 		struct_types["DT_str"],
 		{int8PtrTy, int8PtrTy, int8PtrTy},
@@ -616,19 +630,26 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("read_int", read_intTy);
 
-	FunctionType *int_to_strTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_to_str", int_to_strTy);
-
 	FunctionType *i64_to_str_bufferTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt64Ty(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("i64_to_str_buffer", i64_to_str_bufferTy);
+
+	FunctionType *i16_to_str_bufferTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt16Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("i16_to_str_buffer", i16_to_str_bufferTy);
+
+	FunctionType *i8_to_str_bufferTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt8Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("i8_to_str_buffer", i8_to_str_bufferTy);
 
 	FunctionType *int_to_str_bufferTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -643,6 +664,27 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("int_print_bits", int_print_bitsTy);
+
+	FunctionType *i8_print_bitsTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt8Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("i8_print_bits", i8_print_bitsTy);
+
+	FunctionType *i16_print_bitsTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt16Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("i16_print_bits", i16_print_bitsTy);
+
+	FunctionType *i64_print_bitsTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt64Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("i64_print_bits", i64_print_bitsTy);
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -993,6 +1035,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_eq", str_eqTy);
+
+	FunctionType *str_str_addTy= FunctionType::get(
+		struct_types["DT_str"],
+		{int8PtrTy, struct_types["DT_str"], struct_types["DT_str"]},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
 
 	FunctionType *str_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1612,7 +1661,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *scope_struct_Load_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy},
+		{Type::getInt32Ty(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);

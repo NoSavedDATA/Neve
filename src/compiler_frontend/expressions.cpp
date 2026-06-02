@@ -206,7 +206,7 @@ NumberExprAST::NumberExprAST(float Val) : Val(Val) {
   this->SetType("float");
 } 
 
-IntExprAST::IntExprAST(int Val) : Val(Val) {
+IntExprAST::IntExprAST(int64_t Val) : Val(Val) {
   this->SetType("int");
 } 
 LutLoExprAST::LutLoExprAST() {} 
@@ -501,8 +501,7 @@ DataExprAST::DataExprAST(
   std::string Type, Data_Tree data_type, bool HasNotes, bool IsStruct,
   std::vector<std::unique_ptr<ExprAST>> Notes)
   : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
-                Notes(std::move(Notes))
-{   
+                Notes(std::move(Notes)) {   
   dt_type = "DT_"+data_type.Type;  
 
   if(data_type.Type=="charv") {      
@@ -594,32 +593,36 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 
   std::string ai_path = LibName+".nv";
 
-  if (!(in_str(LibName, imported_libs))) {
-    // std::cout << "import " << LibName << ".\n";
+  if (!(in_vec(LibName, imported_libs))) {
     
     bool has_nv=false, has_so_lib=false;
     std::string lib_path = std::getenv("NEVE_LIBS");
 
     std::string lib_dir = lib_path + "/" + LibName;
     std::string so_lib_path = lib_dir + "/lib.so";
-
-    if(fs::exists(so_lib_path))
-    {
+    if (in_vec(so_lib_path, imported_libs))
+        return;
+    if(fs::exists(so_lib_path)) {
       has_so_lib=true;
       LibParser *lib_parser = new LibParser(lib_dir);
       
       lib_parser->ParseLibs();
       lib_parser->ImportLibs(so_lib_path, LibName, IsDefault);
+
+      imported_libs.push_back(LibName);
     }
 
 
 
 
     std::string include_path = lib_dir + "/include.nv";
+    if (in_vec(include_path, imported_libs))
+        return;
     if(fs::exists(include_path)) {
       has_nv=true;
       get_tok_until_space();
       import_NEVE_File(include_path);
+      imported_libs.push_back(include_path);
     } else 
       getNextToken(); // eat lib name
     

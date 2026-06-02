@@ -128,7 +128,7 @@ enum Token {
 
 struct Tokenizer : TokenizerIF {
     int LastToken, Line=1;
-    bool has_main = false, has_lib_file = false, can_see_space = true;
+    bool has_main = false, has_lib_file = false, can_see_space = true, seen_dot=false;
     std::ifstream lib_file;
     std::string token;
 
@@ -161,7 +161,8 @@ extern std::vector<char> terminal_tokens;
 
 extern std::string IdentifierStr; // Filled in if tok_identifier
 extern float NumVal;             // Filled in if tok_number
-extern int HexaVal;
+extern int64_t IntVal;
+extern size_t HexaVal;
 extern bool BoolVal;
 
 

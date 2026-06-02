@@ -177,8 +177,7 @@ bool CheckIsEquivalent(std::string LType, std::string RType) {
     return true;
 
   if (Equivalent_Types.count(RType)>0)
-  for(std::string equivalent : Equivalent_Types[RType])
-  {
+  for(std::string equivalent : Equivalent_Types[RType]) {
       if (LType==equivalent)
           return true;
   }

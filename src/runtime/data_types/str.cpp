@@ -41,6 +41,17 @@ extern "C" bool str_eq(Scope_Struct *scope_struct, char *a, char *b, int l_size,
 }
 
 
+extern "C" DT_str str_str_add(Scope_Struct *scope_struct, DT_str x, DT_str y) {
+    int cat_size = x.size + y.size;
+    char *ptr = (char*)allocate_pool(scope_struct, cat_size, 112);
+
+    memcpy(ptr, x.str, x.size);
+    memcpy(ptr + x.size, y.str, y.size);
+
+    return DT_str(ptr, cat_size);
+}
+
+
 extern "C" float str_float(Scope_Struct *scope_struct, DT_str str) {
     char* p = str.str;
     char* end = str.str + str.size;

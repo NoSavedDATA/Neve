@@ -45,31 +45,72 @@ extern "C" void *channel_Create(Scope_Struct *scope_struct, uint16_t type, int b
 
 
 
-// extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
-//     std::unique_lock<std::mutex> lock(ch->mtx);
 
-//     ch->cv.wait(lock, [&]{ return ch->terminated || ch->data_list->data->size() > 0; } );    
-//     if(ch->terminated)
-//         return ptr;
 
-//     void *ret = ch->data_list->unqueue<void*>();
-//     ch->cv.notify_all();
-
-//     return ret;
-// }
-
-// extern "C" float channel_void_message(Scope_Struct *scope_struct, Channel *ch, void *ptr) {
-//     std::unique_lock<std::mutex> lock(ch->mtx);
-
-//     ch->cv.wait(lock, [&]{ return ch->terminated || ch->data_list->data->size() < ch->buffer_size; } );    
-//     if(ch->terminated)
-//         return -1;
-
-//     ch->data_list->append(std::any(ptr), "any");
-//     ch->cv.notify_all();
+// any x <- ch
+extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+    void **data = (void**)ch->data;
     
-//     return 0;
-// }
+    int backoff_us = 1;
+    while(!ch->terminated) {
+        size_t pos = __atomic_load_n(&ch->head, __ATOMIC_RELAXED) ;
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(&ch->seq[ring_pos], __ATOMIC_ACQUIRE);
+
+        intptr_t diff = (intptr_t)seq - (intptr_t)(pos+1);
+        if (diff==0) {
+            if (__atomic_compare_exchange_n(
+                            &ch->head, &pos, pos+1,
+                            false,
+                            __ATOMIC_RELAXED,
+                            __ATOMIC_RELAXED
+                        )) {
+
+                void *x = __atomic_load_n(&data[ring_pos], __ATOMIC_RELAXED); 
+                __atomic_store_n(&ch->seq[ring_pos], pos + ch->buffer_size, __ATOMIC_RELEASE);
+                return x;
+            }
+        } 
+        cas_sleep(backoff_us);
+    }
+}
+
+
+// ch <- msg
+extern "C" int channel_void_message(Scope_Struct *scope_struct, Channel *ch, void *x) {
+
+    void **data = (void**)ch->data;
+    
+    int backoff_us = 1;
+    while(!ch->terminated) {
+        size_t pos = __atomic_load_n(&ch->tail, __ATOMIC_RELAXED) ;
+
+        int ring_pos = pos % ch->buffer_size;
+
+        size_t seq = __atomic_load_n(&ch->seq[ring_pos], __ATOMIC_ACQUIRE);
+
+        intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+        if (diff==0) {
+            if (__atomic_compare_exchange_n(
+                            &ch->tail, &pos, pos+1,
+                            false,
+                            __ATOMIC_RELAXED,
+                            __ATOMIC_RELAXED
+                        )) {
+
+                __atomic_store_n(&data[ring_pos], x, __ATOMIC_RELEASE);
+                __atomic_store_n(&ch->seq[ring_pos], pos+1, __ATOMIC_RELEASE);
+
+                return 0;
+            }
+        }
+        cas_sleep(backoff_us);
+    }
+    
+    return 0;
+}
+
 
 
 

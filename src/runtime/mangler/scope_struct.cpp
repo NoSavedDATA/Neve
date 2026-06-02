@@ -158,12 +158,17 @@ extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn
     NamedScopeStructs[fn_name] = scope_struct;
 }
 
-extern "C" void *scope_struct_Load_for_Async(char *fn_name) {
+extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
     Scope_Struct *scope_struct = NamedScopeStructs[fn_name];
 
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
     scope_struct_copy->inner_most = scope_struct_copy;
+
+    for(int i=0; i<uniques_count; ++i)
+        scope_struct_copy->pointers_stack[i] = scope_struct->pointers_stack[i];
+    scope_struct_copy->stack_top = uniques_count;
+
 
     return scope_struct_copy;
 }
