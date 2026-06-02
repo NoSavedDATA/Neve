@@ -402,9 +402,6 @@ Value *print(Parser_Struct parser_struct, Function *TheFunction,
             //     call("print_bool", {print_val});
             // }
             size = callret(callee, {scope_struct, print_val, print_gep});
-            if (arg_type=="bool")
-                return const_int(0);
-
         }
 
         offset = Builder->CreateAdd(offset, size);

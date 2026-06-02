@@ -873,8 +873,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::vector<Data_Tree> &ArgTypes,
                                                   Value *scope_struct, std::string fn_name,
-                                                  bool is_nsk_fn, int arg_offset=1)
-{
+                                                  bool is_nsk_fn, int arg_offset=1) {
   // -- Required Arguments -- //
   unsigned i, e;
   for (i = 0, e = Args.size(); i != e; ++i) {
@@ -902,8 +901,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
 
     std::string copy_fn = type+"_CopyArg";
     Function *F = TheModule->getFunction(copy_fn);
-    if (F&&!is_nsk_fn)
-    {
+    if (F&&!is_nsk_fn) {
         std::cout << "Copy of " << type << "\n";
         Value *copied_value = callret(copy_fn,
                         {scope_struct,
@@ -942,14 +940,16 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
       
       std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
-        std::cout << "try positional argument: " << i << ".\n";
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg) {
             LogErrorS(parser_struct.line, "Standard argument followed by positional argument.");
             return std::move(ArgsV);
           }
 
+
+
           std::string arg_name = PosArg->ArgName;
+
         
           auto it = std::find(fn_args_name.begin(), fn_args_name.end(), arg_name);
           int arg_idx = it-fn_args_name.begin();
@@ -1042,10 +1042,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
                     std::vector<Value *> ArgsV = {scope_struct};
 
-                    if (create_fn=="array_Create" || create_fn=="map_Create") {
-
+                    if (create_fn=="array_Create" || create_fn=="map_Create" || create_fn=="channel_Create") {
                         if (create_fn=="array_Create")
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
+                        else if (create_fn=="channel_Create") {
+                            ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
+                            ArgsV.push_back(const_int(std::stoi(data_type.Nested_Data[1].Type)));
+                        }
                         else {
                             Data_Tree *dt = new Data_Tree(data_type.Type);
                             dt->Nested_Data.push_back(data_type.Nested_Data[0]);
@@ -2664,6 +2667,8 @@ Value *ChannelExprAST::codegen(Value *scope_struct) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     int buffer_size = stoi(data_type.Nested_Data[1].Type);
 
+    p2t("create channel expr");
+    call("print_int", {const_int(buffer_size)});
     Value *initial_value = callret("channel_Create", {scope_struct,
                                 const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]),
                                 const_int(buffer_size)});
@@ -3997,8 +4002,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         Data_Tree elem_dt = Inner->GetDataTree().Nested_Data[0];
         llvm::Type *elemTy = get_type_from_data(elem_dt); 
 
-
-
         // v[i:j]
         if (indices[0].is_slice) {
             Value *start = CalcArrayIdx(scope_struct, loaded_var, indices[0].start);
@@ -4007,7 +4010,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
             return callret("array_slice", {scope_struct, loaded_var,\
                     const_int16(data_name_to_type()[elem_dt.Type]),\
                     start, end});
-
         }
 
         // v[i]

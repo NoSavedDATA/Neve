@@ -136,8 +136,7 @@ bool ExprAST::GetNeedGCSafePoint() {
 inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::string fn_name,
-                                                  bool is_nsk_fn, int sent_args, int arg_offset=1)
-{
+                                                  bool is_nsk_fn, int sent_args, int arg_offset=1) {
   if (Function_Required_Arg_Count.count(fn_name)>0) {
       if (sent_args<Function_Required_Arg_Count[fn_name])
           LogErrorS(parser_struct.line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
@@ -769,6 +768,13 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   return Data_Tree(type);
 }
 
+bool IsPositionalArg(Parser_Struct parser_struct, std::string name) {
+    if (ArgsInit.count(parser_struct.parse_fn)>0) {
+        if (ArgsInit[parser_struct.parse_fn].count(name)> 0)
+            return true;
+    }
+    return false;
+}
 
 bool BinaryExprAST::GetNeedGCSafePoint() {
     return (LHS->GetNeedGCSafePoint()||RHS->GetNeedGCSafePoint());
@@ -783,6 +789,10 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
   std::string LType = L_dt.Type;
   std::string Lname = this->LHS->GetName();
+
+  if (IsPositionalArg(parser_struct, Lname)) {
+    return;
+  }
 
   std::string RType = R_dt.Type;
   // std::cout << LType << "|" << RType << " -- " << Op << "\n";
@@ -856,7 +866,6 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
   if(L_dt.Type=="channel"||R_dt.Type=="channel")
     Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
-
 }
   
   
@@ -994,6 +1003,7 @@ ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type,
   this->data_type = data_type;
   this->Name = Name;
   this->isSelf = isSelf;
+  std::cout << "--ChannelExpr" << "\n";
 }
 
 SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {}
@@ -1070,8 +1080,11 @@ PrototypeAST::PrototypeAST(const std::string &Name, Data_Tree ReturnType, const 
         arg_names.push_back(arg_name);
         data_typeVars[Name][arg_name] = arg;
     }
+
+    int initialized_args = (ArgsInit.count(Name)>0) ? ArgsInit[Name].size() : 0;
+    
     Function_Arg_Names[Name] = std::move(arg_names);
-    Function_Required_Arg_Count[Name] = arg_count-1; // Desconsider scope_struct
+    Function_Required_Arg_Count[Name] = arg_count-1-initialized_args; // Desconsider scope_struct
     native_fn.push_back(Name);
 
     if (ends_with(Name, "_prebuild"))
@@ -1302,6 +1315,7 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 }
 
 
+
 Data_Tree Nameable::GetDataTree(bool from_assignment) {  
     // std::cout << "Get dt of " << Name << "\n";
     if (data_type.Type!="")
@@ -1323,7 +1337,12 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     }
     else if (Name=="tid")
         data_type = Data_Tree("int");
-    else {
+    else if (IsPositionalArg(parser_struct, Name)) {
+        data_type = Data_Tree("any");
+        return data_type;
+    } else {
+
+
         LogErrorS(parser_struct.line, "Could not find variable " + Name + " on scope " + parser_struct.function_name + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }

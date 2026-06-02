@@ -463,7 +463,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("str_channel_message", str_channel_messageTy);
 
 	FunctionType *channel_str_messageTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, struct_types["DT_str"]},
 		false
 	);

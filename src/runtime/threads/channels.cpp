@@ -15,6 +15,7 @@ Channel::Channel() {}
 void Channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
     // std::unique_lock<std::mutex> lock(scope_struct->gc->arena->sweep_mtx);
     this->buffer_size = buffer_size;
+    __atomic_store_n(&this->buffer_size, buffer_size, __ATOMIC_RELEASE);
     this->type = type;
     int tid = scope_struct->thread_id;
 
@@ -25,7 +26,6 @@ void Channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
       elem_size = 8;
 
     __atomic_store_n(&data, cache_pop(elem_size*buffer_size, scope_struct->thread_id), __ATOMIC_RELEASE);
-
 
     seq = (size_t*)malloc(buffer_size*sizeof(size_t));
     for (int i=0;i<buffer_size;i++)
@@ -106,12 +106,14 @@ extern "C" DT_str str_channel_message(Scope_Struct *scope_struct, void *ptr, Cha
 
 
 // ch <- msg
-extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT_str str) {
+extern "C" int channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT_str str) {
+
     DT_str *data = (DT_str*)ch->data;
     
     int backoff_us = 1;
     while(!ch->terminated) {
         size_t pos = __atomic_load_n(&ch->tail, __ATOMIC_RELAXED) ;
+
         int ring_pos = pos % ch->buffer_size;
 
         size_t seq = __atomic_load_n(&ch->seq[ring_pos], __ATOMIC_ACQUIRE);
@@ -127,6 +129,7 @@ extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT
                 DT_str tmp(str.str, str.size);
                 __atomic_store(&data[ring_pos], &tmp, __ATOMIC_RELEASE);
                 __atomic_store_n(&ch->seq[ring_pos], pos+1, __ATOMIC_RELEASE);
+
                 return 0;
             }
         }

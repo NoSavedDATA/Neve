@@ -40,7 +40,7 @@ void set_functions_return_type() {
 						{"memp_start", "int"}, {"memp_end", "int"}, 
 						{"psweep", "float"}, {"join_gc", "float"}, {"sweep", "float"}, {"GC_print", "float"}, 
 						{"str_Copy", "str"}, {"str_eq", "bool"}, {"str_float", "float"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"can_convert_to_float", "bool"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, {"_glob_b_", "array"}, 
-						{"str_channel_message", "str"}, {"channel_str_message", "float"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
+						{"str_channel_message", "str"}, {"channel_str_message", "int"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
 						{"dir_exists", "float"}, {"path_exists", "float"}, 
 						{"prebuild", "int"}, 
 						{"__slee_p_", "int"}, {"silent_sleep", "float"}, {"start_timer", "float"}, {"end_timer", "float"}, 
@@ -53,7 +53,7 @@ void set_functions_return_type() {
 	};
 
 	functions_return_data_type["str_channel_message"] = Data_Tree("str");
-	functions_return_data_type["channel_str_message"] = Data_Tree("float");
+	functions_return_data_type["channel_str_message"] = Data_Tree("int");
 	functions_return_data_type["str_channel_Idx"] = Data_Tree("str");
 	functions_return_data_type["str_channel_alive"] = Data_Tree("int");
 	functions_return_data_type["float_channel_terminate"] = Data_Tree("float");

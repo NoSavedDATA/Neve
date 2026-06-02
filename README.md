@@ -1,6 +1,6 @@
 # Neve Compiler
 
-Documentation: [https://nsk-lang.dev](https://nsk-lang.dev)
+Documentation: [https://neve-lang.dev](https://neve-lang.dev)
 
 Official repository of: [https://arxiv.org/abs/2409.11600](https://arxiv.org/abs/2409.11600)
 

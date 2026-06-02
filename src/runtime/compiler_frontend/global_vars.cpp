@@ -82,9 +82,9 @@ uint16_t data_type_count=113;
 
 std::vector<std::string> data_tokens = {"int", "bool", "str", "str_vec", "float_vec",
                                         "tuple", "any", "float_ptr",
-										"list", "map", "array",
+										"list", "map", "array", 
                                         "float", "int_vec", "char", "charv", "vec", "i16", "i64", "i8", "str_view"};
-std::vector<std::string> compound_tokens = {"tuple", "list", "array", "map", "vec", "Function"};
+std::vector<std::string> compound_tokens = {"tuple", "channel", "list", "array", "map", "vec", "Function"};
 std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "bool", "foreach_control_var", "i64", "i8", "i16", "char"};
 
 

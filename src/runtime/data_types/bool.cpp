@@ -19,10 +19,9 @@ extern "C" char *bool_to_str(bool x) {
 extern "C" int bool_to_str_buffer(Scope_Struct *scope_struct, bool x, char *buffer) {
     const char *word = x ? "true" : "false";
 
-    std::cout << "x: " << x << "\n";
+    // std::cout << "x: " << x << "\n";
     int len = x ? 4 : 5;
-    std::cout << "bool size: " << len << "\n";
-    // std::cout << "WORD: " << word << "\n";
+    // std::cout << "bool size: " << len << "\n";
     std::memcpy(buffer, word, len);
     return len;
 }

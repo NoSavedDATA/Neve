@@ -260,7 +260,6 @@ std::unique_ptr<ExprAST> ParseParenExpr(Parser_Struct parser_struct, std::string
 
 std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::string class_name) {
   Data_Tree data_tree = ParseDataTree("channel", true, parser_struct);
-
   
 
   if(CurTok!=tok_identifier)
@@ -315,12 +314,8 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
 
 
     if (!is_self)
-    {
       Object_toClass[parser_struct.function_name][IdentifierStr] = Data_Tree(_class);
-    } else {
 
-      // std::cout << "++++++++Object instatiation of " << IdentifierStr << "/" << _class << ".\n";
-    }
 
     getNextToken(); // eat identifier.
 
@@ -522,9 +517,12 @@ std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_p
 
 std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
 
+  std::string prev_call_fn = parser_struct.parse_fn;
+  parser_struct.parse_fn = IdentifierStr;
   auto Args = Parse_Arguments(parser_struct, class_name);
   if (!Args)
     return nullptr;
+  parser_struct.parse_fn = prev_call_fn;
 
   std::unique_ptr<NameableCall> call_expr = std::make_unique<NameableCall>(parser_struct, std::move(inner), std::move(*Args));
 
@@ -1363,8 +1361,7 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
     while (true) {
-      if (CurTok=='>')
-      {
+      if (CurTok=='>') {
         getNextToken(); // eat >
         std::unique_ptr<ExprAST> inner_vec;
         inner_vec = ParseExpression(parser_struct, class_name, false);
@@ -1372,8 +1369,7 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
         auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
         Args.push_back(std::move(Arg));
       }
-      else if (CurTok==':')
-      {
+      else if (CurTok==':') {
         getNextToken(); // eat :
         std::unique_ptr<ExprAST> inner_vec;
         inner_vec = ParseExpression(parser_struct, class_name, false);
@@ -1386,7 +1382,6 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
 
       else if (CurTok==tok_data) {
         getNextToken();
-  
         if (CurTok=='(') {
           std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct, IdentifierStr, 1);
           nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
@@ -1394,12 +1389,11 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
         } else
             Args.push_back(std::make_unique<IntExprAST>(data_name_to_type()[IdentifierStr]));
       }
-      
-      else if (auto Arg = ParseExpression(parser_struct, class_name, false))
-      {
+      else if (auto Arg = ParseExpression(parser_struct, class_name, false)) {
         if (auto BinExpr = dynamic_cast<BinaryExprAST*>(Arg.get())) {
-            if (BinExpr->Op=='=')
+            if (BinExpr->Op=='=') {
                 Arg = std::make_unique<PositionalArgExprAST>(parser_struct, BinExpr->LHS->GetName(), std::move(BinExpr->RHS));
+            }
             
         }
 
@@ -2200,7 +2194,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
   if (CurTok == tok_space)
     getNextToken();
 
-  int required_args=0;
+  int required_args=0, all_args=0;
   while (CurTok != ')') {
     if (IdentifierStr=="s"||IdentifierStr=="str")
       type="str";
@@ -2215,10 +2209,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     else
       type=IdentifierStr;
 
-    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)) && Classes.count(type)==0)
+    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)) && IdentifierStr!="channel" && Classes.count(type)==0)
       LogErrorProto_to_comma(parser_struct.line, "Prototype var type must be s, t, i, f or a data type. Got " + IdentifierStr);
-    else
-    {
+    else {
       std::string data_type = type;
 
       Data_Tree data_tree = ParseDataTree(type, in_str(type, compound_tokens), parser_struct);
@@ -2276,9 +2269,11 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
 
       if (CurTok=='=') {
           getNextToken();
-          ArgsInit[FnName].emplace(IdName, std::move(ParseExpression(parser_struct, parser_struct.class_name)));
+          ArgsInit[FnName].emplace(IdName,std::move(ParseExpression(parser_struct, parser_struct.class_name)));
       } else
         required_args++;
+
+      all_args++;
     }
     
     if (CurTok == tok_space)
@@ -2306,6 +2301,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
 
 
   Function_Required_Arg_Count[FnName] = required_args;
+  Function_Arg_Count[FnName] = all_args;
 
   functions_return_type[FnName] = return_type;
 
