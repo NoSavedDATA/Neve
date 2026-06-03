@@ -53,7 +53,7 @@ chmod +x llvm.sh
 
 apt-get install llvm clang zlib1g-dev libzstd-dev libeigen3-dev libopencv-dev
 ```
-- Add `neve` to `PATH`:
+- Add your local built `neve` to `PATH`, and set NEVE_LIBS env variable to the lib folder (not necessary for lib development, only if you want to Make Neve on your own).
 
 
 - Make:
