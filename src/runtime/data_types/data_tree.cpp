@@ -109,7 +109,7 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     if(Type=="Function"||other_tree.Type=="Function")
         return 0;
 
-    if(!in_vec(Type, primary_data_tokens) && other_tree.Type=="nullptr")
+    if((!in_vec(Type, primary_data_tokens)||is_array) && other_tree.Type=="nullptr")
         return 0;
 
     if(Type=="vec"&&other_tree.Type=="vec")

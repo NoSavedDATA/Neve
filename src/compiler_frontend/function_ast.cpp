@@ -23,7 +23,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "../../lsp/json.hpp"
+// #include "../../lsp/json.hpp"
 #include "../include.h"
 
 ExitOnError ExitOnErr;
@@ -660,24 +660,24 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
     report_fatal_error("failed to JIT.");
 }
 
-nlohmann::json FunctionAST::toJSON() {
-    std::cout << "FUNCTION AST JSON" << ".\n";
+// nlohmann::json FunctionAST::toJSON() {
+//     std::cout << "FUNCTION AST JSON" << ".\n";
     
-    nlohmann::json j;
-    j["type"] = "function";
-    j["name"] = Proto->getName();
-    j["return"] = Proto->ReturnType.Type;
+//     nlohmann::json j;
+//     j["type"] = "function";
+//     j["name"] = Proto->getName();
+//     j["return"] = Proto->ReturnType.Type;
 
-    j["args"] = nlohmann::json::array();
-    int len = Proto->Args.size();
-    for (int i=1; i<len; ++i) {
-        nlohmann::json arg_j;
-        arg_j["name"] = Proto->Args[i];
-        arg_j["type"] = Proto->Types[i-1].toString();
-        j["args"].push_back(arg_j);
-    }
-    return j;
-}
+//     j["args"] = nlohmann::json::array();
+//     int len = Proto->Args.size();
+//     for (int i=1; i<len; ++i) {
+//         nlohmann::json arg_j;
+//         arg_j["name"] = Proto->Args[i];
+//         arg_j["type"] = Proto->Types[i-1].toString();
+//         j["args"].push_back(arg_j);
+//     }
+//     return j;
+// }
 
 
 const PrototypeAST& FunctionAST::getProto() const {

@@ -116,11 +116,28 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
 
   Data_Tree data_type = Data_Tree(root_type);
 
-
+  if (CurTok=='[') {
+      getNextToken(); // eat [
+      while(true) {
+          if(CurTok!=tok_int) {
+            LogErrorBreakLine(parser_struct.line, root_type + "[]' a number. Got " + ReverseToken(CurTok));
+              return data_type;
+          }
+          getNextToken(); // eat num_val
+          data_type.Nested_Data.push_back(std::to_string((int)NumVal));
+          if (CurTok==']')
+            break;
+          if (CurTok!=',')
+            LogErrorBreakLine(parser_struct.line, root_type + "[] expected \",\" or \"]\". Got " + ReverseToken(CurTok));
+          getNextToken(); // eat ,
+      }
+      getNextToken(); // eat ]
+      data_type.is_array=true;
+      return data_type;
+  }
 
   getNextToken(); // eat <  
-  while(CurTok!='>')
-  {
+  while(CurTok!='>') {
     std::string dt = IdentifierStr;
     if(CurTok==tok_int) {
         CurTok = tok_data;
@@ -135,7 +152,7 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
     getNextToken();
 
     
-    if(CurTok=='<') 
+    if(CurTok=='<'||CurTok=='[') 
       data_type.Nested_Data.push_back(Parse_Data_Type(dt, parser_struct));
     else
       data_type.Nested_Data.push_back(Data_Tree(dt));
@@ -155,10 +172,8 @@ Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct par
   getNextToken(); // eat data token. 
   Data_Tree data_tree;
 
-  if(!is_struct&&CurTok=='<')
-    LogError(parser_struct.line, "Found \"<\", but expected a compound data type, got data: " + data_type);
   
-  if (is_struct&&CurTok=='<')
+  if (CurTok=='<'||CurTok=='[')
     data_tree = Parse_Data_Type(data_type, parser_struct);
   else
     data_tree = Data_Tree(data_type);
@@ -2474,17 +2489,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     
     Data_Tree data_tree = ParseDataTree(data_type, in_vec(data_type, compound_tokens)||data_type=="channel", parser_struct);
 
-    if (CurTok=='[') {
-        if(data_type!="charv") {
-            LogErrorNextBlock(parser_struct.line, data_type + " requires size information.");
-            return nullptr;
-        }
-        getNextToken(); // eat [
-        getNextToken(); // eat val
-        int size = NumVal;
-        getNextToken(); // eat ]
-        data_tree.Nested_Data.push_back(std::to_string(size));
-    }
     
     
     

@@ -542,7 +542,8 @@ DataExprAST::DataExprAST(
     create_fn = this->Type;
     create_fn = (create_fn=="tuple") ? "list" : create_fn;
     create_fn = create_fn + "_Create";
-    DtHasCreateFn = (struct_create_fn.count(dt_type)>0 || TheModule->getFunction(create_fn)!=nullptr);
+
+    DtHasCreateFn = (!data_type.is_array && (struct_create_fn.count(dt_type)>0 || TheModule->getFunction(create_fn)!=nullptr));
 
     if(DtHasCreateFn) {
       if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(this->VarNames[i].second.get())) {
@@ -564,21 +565,24 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
     if(data_type.Type!="")
         return data_type;
 
+    // High-level class
     if (functions_return_data_type.count(Callee)==0) {
         Callee = DataName + "___init__";
         if (Classes.count(DataName)==0)
-            LogErrorS(parser_struct.line, "Could not find data type " + DataName);
+            LogErrorS(parser_struct.line, "New not implemented for data type " + DataName);
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
         return data_type;
     }
+
+    // Other data types
     Data_Tree new_dt = functions_return_data_type[Callee];
     data_type = new_dt;
     return new_dt;
 }
 
 NewExprAST::NewExprAST(Parser_Struct parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
-                    : parser_struct(parser_struct), DataName(DataName), Args(std::move(Args)) {
+            : parser_struct(parser_struct), DataName(DataName), Args(std::move(Args)) {
     Callee = DataName + "_Create";
     GetDataTree();
 }
@@ -715,6 +719,11 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   if (RType=="char")
       RType = "i8";
 
+  if (L_dt.is_array)
+    LType = "buffer_"+LType;
+  if (R_dt.is_array)
+    RType = "buffer_"+RType;
+
   Elements = LType + "_" + RType;    
 
 
@@ -743,6 +752,11 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
   if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
     Operation = "channel_void_message";
+
+  // std::cout << "\n";
+  //   std::cout << "op" << "\n";
+  //   L_dt.Print();
+  //   std::cout << Operation << "\n";
 
   if (RType=="channel" && !in_str(LType, primary_data_tokens)&&LType!="str")
     Operation = "void_channel_message";

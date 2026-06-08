@@ -13,10 +13,9 @@ LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native)
 
 # Combine all flags
 CXXFLAGS := $(MAIN_CXXFLAGS) $(LLVM_CXXFLAGS) -mavx -w
-LDFLAGS := $(LLVM_LDFLAGS) #-static-libstdc++ -static-libgcc
+LDFLAGS := $(LLVM_LDFLAGS)
 LIBS := $(LLVM_LIBS) $(LLVM_SYSTEM_LIBS) $(SYSTEM_LIBS)
 
-# SYS_LIBS += -Wl,-rpath,'$$ORIGIN/../sys_lib'
 SYS_LIBS += -Wl,--disable-new-dtags \
            -Wl,-rpath,'$$ORIGIN/../sys_lib'
 LDFLAGS += $(SYS_LIBS)
@@ -45,7 +44,6 @@ OBJ_DIRS := $(sort $(CXX_DIR))
 
 # Runtime obj
 RUNTIME_CPP_OBJ = $(shell find $(RUNTIME_OBJ_DIR) -name "*.o")
-#RUNTIME_CPP_OBJ = $(wildcard $(RUNTIME_OBJ_DIR)/*.o)
 
 # Lib Parser Object Files
 LIB_PARSER_SRC = $(shell find $(LIB_PARSER_SRC_DIR) -name "*.cpp")
@@ -88,7 +86,6 @@ $(shell mkdir -p $(LIB_PARSER_OBJ_DIR);)
 
 
 
-#all: prebuild $(CXX_OBJ) $(OBJ) $(COMPILER_OBJ) runtime check_done
 all: prebuild $(CXX_OBJ) $(OBJ) runtime check_done
 
 
@@ -100,10 +97,6 @@ $(OBJ): $(SRC) $(CXX_OBJ)
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 	@touch $(BUILD_FLAG)
 
-# $(COMPILER_OBJ): $(COMPILER_SRC) $(CXX_OBJ)
-# 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(COMPILER_SRC) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -MMD -MP -o $(COMPILER_OBJ) 
-# 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
-# 	@touch $(BUILD_FLAG)
 
 prebuild: $(LIB_PARSER)
 	@echo ">>> PREBUILD STEP <<<"

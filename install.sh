@@ -47,6 +47,11 @@ chmod +x "$BIN_DIR/neve"
 chmod +x "$BIN_DIR/nsm"
 
 
+# Add src folder for making libs
+
+git clone https://github.com/NoSavedDATA/Neve
+mv Neve/src "$PREFIX"
+rm -rf Neve
 
 
 echo "✅ neve installed"

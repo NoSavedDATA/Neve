@@ -690,10 +690,8 @@ void LibParser::ParseExtern() {
             _getToken();
     }
 
-    if (is_var_arg)
-    {
-        for (int i=0; i<10; ++i)
-        {
+    if (is_var_arg) {
+        for (int i=0; i<10; ++i) {
             arg_types.push_back(last_type);
             arg_names.push_back(last_name);
             arg_is_pointer.push_back(last_is_pointer);
@@ -723,12 +721,14 @@ void LibParser::ParseExtern() {
     if (ends_with(fn_name, "_Create")) {
         if (has_ret_overwrite)
             functions_return_data_type[fn_name] = lib_dt;
-        else if (begins_with(return_type, "DT_"))
+        else
             functions_return_data_type[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
-        else{
-            LogError(-1, "Create function " + fn_name + " must return a DT_ data type");
-            std::exit(0);
-        }
+        // else if (begins_with(return_type, "DT_"))
+        //     functions_return_data_type[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
+        // else {
+        //     LogError(-1, "Create function " + fn_name + " must return a DT_ data type");
+        //     std::exit(0);
+        // }
 
     }
 
@@ -763,6 +763,8 @@ void LLVMFunction::HandleStandard(void *func) {
 }
 
 void LLVMFunction::HandleOp(void *func) {
+
+    Name = remove_substring(Name,"OP_");
 
     using OpFn = Value*(*)(Parser_Struct, Function*, Data_Tree, Data_Tree, std::unique_ptr<ExprAST>&, std::unique_ptr<ExprAST>&, Value*, Value*, Value*);
     OpFn fn = reinterpret_cast<OpFn>(func);
@@ -816,15 +818,14 @@ void LibParser::ParseLLVMFunction() {
     fn_name = running_string;
 
     int llvm_fn_type = 0;
-    if (ends_with(file_name, "ops.cpp"))
+    if (ends_with(file_name, "ops.cpp")||begins_with(fn_name, "OP_"))
         llvm_fn_type=1;
-    if (begins_with(fn_name, "DT_") && ends_with(fn_name, "_Create"))
+    else if (begins_with(fn_name, "DT_") && ends_with(fn_name, "_Create"))
         llvm_fn_type=2;
-    if (ends_with(file_name, "idx.cpp")) {
-        if (ends_with(fn_name,"Store_Idx"))
-            llvm_fn_type=3;
-        else
-            llvm_fn_type=4;
+    else if (ends_with(fn_name,"_Store_Idx"))
+        llvm_fn_type=3;
+    else  {
+
     }
 
     CurDefaultArgs=0;
@@ -867,8 +868,7 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
 
     if (!has_main) { // For LSP only
         for (auto pair : Functions) {  // std::map<std::string, std::vector<LibFunction*>>
-            for (auto fn : pair.second) // std::vector<LibFunction*>> 
-            {
+            for (auto fn : pair.second) { // std::vector<LibFunction*>>
                 // std::cout << "Importing function:" << "\n";
                 // fn->Print();
                 fn->Add_to_Nsk_Dicts(nullptr, lib_name, is_default);

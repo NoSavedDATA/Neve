@@ -63,7 +63,6 @@ Value *simd_load(Parser_Struct parser_struct, Function *TheFunction,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     llvm::Type *ty = get_type_from_data(data_type);
 
-
     auto *L = Builder->CreateLoad(ty, Builder->CreateExtractValue(ArgsV[0], {0}));
     L->setAlignment(llvm::Align(1));
     return L;
