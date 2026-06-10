@@ -1,0 +1,45 @@
+CXX := clang++-19
+
+LLVM_CONFIG := llvm-config-19
+
+CXXFLAGS := \
+    -std=c++17 \
+    -O3 \
+    -fPIC \
+    -mavx \
+    -finline-functions \
+    -funroll-loops \
+    -w
+
+# Keep only for headers
+LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG) --cxxflags)
+
+SYS_LIBS := -Wl,--disable-new-dtags \
+            -Wl,-rpath,'$$ORIGIN/../../sys_lib'
+
+SRC_DIR := src
+OBJ_DIR := obj
+
+CXX_SRC := $(shell find $(SRC_DIR) -name "*.cpp")
+CXX_OBJ := $(CXX_SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+
+SO_FILE := lib.so
+
+all: $(SO_FILE)
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(LLVM_CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(SO_FILE): $(CXX_OBJ)
+	$(CXX) \
+	    -shared \
+	    $(CXX_OBJ) \
+	    $(SYS_LIBS) \
+	    -ldl -lrt -pthread \
+	    -o $@
+
+clean:
+	rm -rf $(OBJ_DIR) $(SO_FILE)
+
+-include $(CXX_OBJ:.o=.d)

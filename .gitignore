@@ -5,11 +5,6 @@ bin/
 experiments/
 include/
 samples/
-lib/**
-!lib/std_lib/
-!lib/std_lib/**
-!lib/std_lib/**/*.nv
-!lib/std_lib/Makefile_*
 src_reference/
 sys_lib/
 Dockerfile
@@ -27,3 +22,10 @@ mall.sh
 *.nv
 *.py
 *.o
+
+
+lib/**
+!lib/std_lib/
+!lib/std_lib/**
+!lib/std_lib/**/*.nv
+!lib/std_lib/Makefile_*

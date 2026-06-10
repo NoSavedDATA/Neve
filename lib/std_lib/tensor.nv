@@ -1,0 +1,193 @@
+class tensor
+	any data
+	int type, dims_prod
+	array<int> shape, stride
+
+	ctor(int type, array<int> shape)
+		self.shape = shape
+
+		int cumprod = 1
+		self.stride.append(cumprod)
+		for i=1, i<shape.size()
+			cumprod = cumprod * shape[-i]
+			self.stride.append(cumprod)
+
+
+		self.dims_prod = shape.prod()
+		self.data = c_malloc(dsize(type)*self.dims_prod)
+		self.type=type
+
+	def int print()
+
+		if self.type==float_t
+			float[] d = self.data
+			
+			int ld = self.shape[-1]
+			
+			for i=0, i<self.stride.size()
+				printl("[")
+
+			for i=0, i<self.dims_prod
+				printl(d[i], ", ")
+
+				bool has_ld=false
+				for j=1, j<self.stride.size()
+					int stride = self.stride[j]
+					if (i+1)%stride==0
+						if stride==ld
+							print("],")
+							has_ld=i<self.dims_prod-1
+						else
+							print()
+
+				if has_ld
+					printl("[")
+					
+			for i=0, i<self.stride.size()-1
+				printl("]")
+
+
+def tensor zeros_tensor(int type, array<int> dims)
+	tensor x = new tensor(type, dims)
+	if type==float_t
+		float[] v = x.data
+		for i=0, i<x.dims_prod
+			v[i] = 0.0
+			
+	return x
+
+def tensor rand_tensor(int type, array<int> dims)
+	tensor x = new tensor(type, dims)
+	if type==float_t
+		float[] v = x.data
+		for i=0, i<x.dims_prod
+			v[i] = randn(0,1)
+			
+	return x
+
+def tensor tensor_int_mult(tensor x, int y)
+	tensor out = new tensor(x.type, x.shape)
+	if x.type == float_t
+		float[] v = x.data
+		float[] u = out.data
+		for i=0, i<x.dims_prod
+			u[i] = v[i]*y
+	return out
+
+def tensor tensor_tensor_mult(tensor x, tensor y)
+	tensor out = new tensor(x.type, x.shape)
+	if x.type == float_t
+		float[] v = x.data
+		float[] w = y.data
+		float[] u = out.data
+		for i=0, i<x.dims_prod
+			u[i] = v[i]*w[i]
+	return out
+
+def tensor tensor_tensor_mma(tensor x, tensor y)
+	
+	array<int> new_dims
+
+	for i=0, i<x.shape.size()-2
+		new_dims.append(x.shape[i])
+		
+	int m = x.shape[-2]
+	int n = y.shape[-1]
+	int p = x.shape[-1]
+	int m_main = (m//4)*4
+	int n_main = (n//8)*8
+
+
+	new_dims.append(m)
+	new_dims.append(n)
+
+	tensor out = new tensor(x.type, new_dims)
+
+	if x.type==float_t
+		float[] u = y.data
+		float[] w = out.data
+
+		# Simd
+		for i=0, i<m_main, 4
+			float[] v = x.data
+			float[] v1 = v offby i*p
+			float[] v2 = v offby (i+1)*p
+			float[] v3 = v offby (i+2)*p
+			float[] v4 = v offby (i+3)*p
+
+			for j=0, j<n_main, 8
+				vec<float,8> acc1 = vec_make(0.0, 8)
+				vec<float,8> acc2 = vec_make(0.0, 8)
+				vec<float,8> acc3 = vec_make(0.0, 8)
+				vec<float,8> acc4 = vec_make(0.0, 8)
+				
+				for k=0, k<p
+					vec<float,8> v_simd = simd_load(u offby k*n+ j, float, 8)
+					vec<float,8> r1 = vec_make(v1[k],8)
+					vec<float,8> r2 = vec_make(v2[k],8)
+					vec<float,8> r3 = vec_make(v3[k],8)
+					vec<float,8> r4 = vec_make(v4[k],8)
+
+					acc1 += v_simd*r1
+					acc2 += v_simd*r2
+					acc3 += v_simd*r3
+					acc4 += v_simd*r4
+				
+				simd_store(w offby i*n+j, acc1)
+				simd_store(w offby (i+1)*n+j, acc2)
+				simd_store(w offby (i+2)*n+j, acc3)
+				simd_store(w offby (i+3)*n+j, acc4)
+
+		# Column tail
+		for i=0, i<m_main, 4
+			float[] v = x.data
+			float[] v1 = v offby i*p
+			float[] v2 = v offby (i+1)*p
+			float[] v3 = v offby (i+2)*p
+			float[] v4 = v offby (i+3)*p
+			for j=n_main, j<n
+				float acc1_ = 0
+				float acc2_ = 0
+				float acc3_ = 0
+				float acc4_ = 0
+
+				for k=0, k<p
+					float yv = u[k*n + j]
+
+					acc1_ += v1[k]*yv
+					acc2_ += v2[k]*yv
+					acc3_ += v3[k]*yv
+					acc4_ += v4[k]*yv
+
+				w[i*n+j] = acc1_
+				w[(i+1)*n+j] = acc2_
+				w[(i+2)*n+j] = acc3_
+				w[(i+3)*n+j] = acc4_
+		# Row tail
+		for i=m_main, i<m
+			float[] v = x.data
+			float[] row = v offby i*p
+
+			for j=0, j<n_main, 8
+
+				vec<float,8> acc = vec_make(0.0,8)
+
+				for k=0, k<p
+					vec<float,8> yv = simd_load(u offby k*n+j, float, 8)
+					vec<float,8> xv = vec_make(row[k],8)
+
+					acc += xv*yv
+
+				simd_store(w offby i*n+j, acc)
+		# Bottom right
+		for i=m_main, i<m
+			float[] v = x.data
+			float[] row = v offby i*p
+			for j=n_main, j<n
+				float acc_ = 0
+				for k=0, k<p
+					acc_ += row[k] * u[k*n+j]
+				w[i*n+j] = acc_
+
+	return out
+

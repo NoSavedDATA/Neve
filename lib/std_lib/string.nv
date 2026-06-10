@@ -1,0 +1,19 @@
+def array<str> str_split(str s, char pattern)
+    array<str> ret
+    
+    i64 len = s.size()
+    i64 offset = 0
+    i64 pos = c_memchr(s, pattern, len)
+
+    while offset < len
+        if pos < 0
+            ret.append({s offby offset, len - offset})
+            break
+
+        ret.append({s offby offset, pos})
+        offset = offset + pos + 1
+
+        if offset < len
+            pos = c_memchr(s offby offset, pattern, len - offset)
+
+    return ret
