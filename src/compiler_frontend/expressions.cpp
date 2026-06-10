@@ -137,8 +137,11 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::string fn_name,
                                                   bool is_nsk_fn, int sent_args, int arg_offset=1) {
+
+  bool is_vararg = in_vec(fn_name, vararg_methods);
+
   if (Function_Required_Arg_Count.count(fn_name)>0) {
-      if (sent_args<Function_Required_Arg_Count[fn_name])
+      if (sent_args<Function_Required_Arg_Count[fn_name] && !is_vararg)
           LogErrorS(parser_struct.line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
   }
 
@@ -184,7 +187,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
   i = i + arg_offset-1;
   // -- Add Default Arguments -- //
-  if (Function_Arg_Count.count(fn_name)>0&&!in_str(fn_name, vararg_methods)) {    
+  if (Function_Arg_Count.count(fn_name)>0&&!is_vararg) {    
       for (; i<Args.size(); ++i) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg)

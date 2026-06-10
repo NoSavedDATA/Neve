@@ -5,7 +5,6 @@ set -e
 wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/neve
 wget https://github.com/NoSavedDATA/nsm/releases/download/latest/nsm
 wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/sys.tar.bz2
-wget https://github.com/NoSavedDATA/Neve/releases/download/neve-bin/std.tar.bz2
 
 PREFIX="$HOME/.local/neve"
 USER_HOME="$HOME"
@@ -14,7 +13,6 @@ BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
 
 mkdir -p "$PREFIX/bin"
-mkdir -p "$PREFIX/lib"
 mkdir -p "$PREFIX/sys_lib"
 
 mv ./neve "$PREFIX/bin"
@@ -24,9 +22,7 @@ chmod +x "$PREFIX/bin/neve"
 chmod +x "$PREFIX/bin/nsm"
 
 tar -xjf sys.tar.bz2 -C "$PREFIX"
-tar -xjf std.tar.bz2 -C "$PREFIX"
 rm sys.tar.bz2
-rm std.tar.bz2
 
 
 
@@ -51,6 +47,7 @@ chmod +x "$BIN_DIR/nsm"
 
 git clone https://github.com/NoSavedDATA/Neve
 mv Neve/src "$PREFIX"
+mv Neve/lib "$PREFIX"
 rm -rf Neve
 
 
