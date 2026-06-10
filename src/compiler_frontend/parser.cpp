@@ -1655,8 +1655,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     
     int arg_idx=0;
     while (true) {
-      if (CurTok==tok_number)
-      { 
+      if (CurTok==tok_number) { 
         notes.push_back(std::make_unique<NumberExprAST>(NumVal));
         getNextToken();
       } else if (CurTok==tok_data&&data_type=="vec"&&arg_idx==0) {
@@ -1734,7 +1733,9 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
       if (!Init)
         return nullptr;
     } else {
-      if (data_type=="float")
+      if (data_tree.is_array||data_tree.is_buffer)
+        Init = std::make_unique<NullPtrExprAST>();
+      else if (data_type=="float")
         Init = std::make_unique<NumberExprAST>(0.0f);
       else if (data_type=="int")
         Init = std::make_unique<IntExprAST>(0);

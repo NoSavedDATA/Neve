@@ -1063,6 +1063,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         }
 
 
+
         if (data_type.is_array && !(is_self||is_attr)) { 
             if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(VarNames[i].second.get())) {
                 AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, \
@@ -2318,8 +2319,9 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
         else if (L_dt.is_array) {// char[8]
             L_dt = LHS->GetDataTree(true);
             llvm::Type *Ty = get_type_from_data(L_dt);
-                
+
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, {const_int(0), idx});
+
             Builder->CreateStore(R, gep);
         } else if (L_dt.is_buffer) {// float[]
             L_dt = LHS->GetDataTree(true);
