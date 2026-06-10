@@ -163,10 +163,8 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
     }
 
 
-    if (!in_vec(fn_name, {"to_int", "to_bool",  "to_float", "print"}))
-    { 
-      if (Function_Arg_DataTypes.count(fn_name)>0)
-      {   
+    if (!in_vec(fn_name, {"to_int", "to_bool",  "to_float", "printl", "print"})) { 
+      if (Function_Arg_DataTypes.count(fn_name)>0) {   
         Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
 
 
@@ -209,6 +207,14 @@ NumberExprAST::NumberExprAST(float Val) : Val(Val) {
 IntExprAST::IntExprAST(int64_t Val) : Val(Val) {
   this->SetType("int");
 } 
+
+Data_Tree ConstExprAST::GetDataTree(bool from_assignment) {
+    return Data_Tree("int");
+}
+
+ConstExprAST::ConstExprAST(Parser_Struct parser_struct, std::string str) : parser_struct(parser_struct), str(str) {
+} 
+
 LutLoExprAST::LutLoExprAST() {} 
 LutHiExprAST::LutHiExprAST() {} 
 Data_Tree LutLoExprAST::GetDataTree(bool from_assignment) {
@@ -718,6 +724,18 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       LType = "i8";
   if (RType=="char")
       RType = "i8";
+
+
+  if(auto *LHSV = dynamic_cast<NameableIdx *>(this->LHS.get())) {}
+  else {
+      if (L_dt.is_buffer)
+        LType = "buffer_"+LType;
+  }
+  if(auto *RHSV = dynamic_cast<NameableIdx *>(this->RHS.get())) {}
+  else {
+      if (R_dt.is_buffer)
+        RType = "buffer_"+RType;
+  }
 
   if (L_dt.is_array)
     LType = "buffer_"+LType;
@@ -1413,6 +1431,11 @@ void Nameable::AddNested(std::unique_ptr<Nameable> Inner) {
 NameableRoot::NameableRoot(Parser_Struct parser_struct) : Nameable(parser_struct) {
   Depth = 0;
   Name = "";
+}
+
+
+std::unique_ptr<ExprAST> Nameable::Copy() {
+    return nullptr;
 }
 
 

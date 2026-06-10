@@ -17,6 +17,7 @@
 #include "nullptr.h"
 #include "str.h"
 #include "str_view.h"
+#include "tensor.h"
 #include "type_info.h"
 
 

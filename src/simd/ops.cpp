@@ -1,6 +1,22 @@
 #include "../nsk_cpp_llvm.h"
 
 
+
+
+Value *simd_add(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+    Data_Tree dt = LHS->GetDataTree();
+    if (dt.Nested_Data[0].Type=="float")
+        return Builder->CreateFAdd(L, R);
+    return Builder->CreateAdd(L, R);
+}
+Value *simd_mult(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+    Data_Tree dt = LHS->GetDataTree();
+    if (dt.Nested_Data[0].Type=="float")
+        return Builder->CreateFMul(L, R);
+    
+    return Builder->CreateMul(L, R);
+}
+
 Value *simd_equal(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpEQ(L, R);
     auto *vecTy = get_type_from_data(LHS->GetDataTree());

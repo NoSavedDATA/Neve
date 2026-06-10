@@ -18,6 +18,10 @@ extern "C" int prebuild() {
   BinopPrecedence['$'] = 1;
   BinopPrecedence['='] = 4;
   BinopPrecedence[tok_arrow] = 4;
+  BinopPrecedence[tok_plus_eq] = 4;
+  BinopPrecedence[tok_minus_eq] = 4;
+  BinopPrecedence[tok_mult_eq] = 4;
+  BinopPrecedence[tok_div_eq] = 4;
   BinopPrecedence['!'] = 9;
   BinopPrecedence[tok_and] = 9;
   BinopPrecedence[tok_not] = 9;
@@ -101,6 +105,7 @@ extern "C" int prebuild() {
     name_to_type["Funtcion"] = 110;
     name_to_type["any"] = 111;
     name_to_type["charp"] = 112;
+    name_to_type["tensor"] = 113;
 
         
     for (const auto& [name, type] : name_to_type) {
@@ -185,6 +190,8 @@ extern "C" int prebuild() {
                      {"buffer_i8_i64_add", "str"}, 
                      {"buffer_i8_int_offby", "str"}, 
                      {"buffer_i8_i64_offby", "str"}, 
+                     {"buffer_float_int_offby", "any"},
+                     {"buffer_float_i64_offby", "any"},
                      {"i8_i8_equal", "bool"},  {"i8_i8_different", "bool"},
                      {"i8_i8_higher_eq", "bool"}, {"i8_i8_minor_eq", "bool"},
                      {"i16_higher", "bool"}, {"i16_minor", "bool"},
@@ -202,7 +209,7 @@ extern "C" int prebuild() {
                      
 
     op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"},
-            {'>', "higher"}, {tok_equal, "equal"}, {'|', "bitor"},
+            {'>', "higher"}, {tok_plus_eq, "plus_eq"}, {tok_equal, "equal"}, {'|', "bitor"},
             {tok_lshift, "lshift"}, {tok_rshift, "rshift"},
             {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
             {77, "error"}, {tok_arrow, "message"}, {tok_and, "and"}, {tok_not, "not"}, {tok_or, "or"},

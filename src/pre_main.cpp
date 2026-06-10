@@ -485,9 +485,22 @@ void build_dicts() {
 
 
 
+  // printl
+  functions_return_data_type["printl"] = Data_Tree("void");
+  Function_Arg_DataTypes["printl"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["printl"]["1"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["2"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["3"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["4"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["5"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["6"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["7"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["8"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["9"] = Data_Tree("str");
+  Function_Arg_DataTypes["printl"]["10"] = Data_Tree("str");
+  Function_Arg_Names["printl"] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
   // print
   functions_return_data_type["print"] = Data_Tree("void");
-
   Function_Arg_DataTypes["print"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["print"]["1"] = Data_Tree("str");
   Function_Arg_DataTypes["print"]["2"] = Data_Tree("str");

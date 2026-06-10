@@ -162,7 +162,10 @@ int Data_Tree::Compare(Data_Tree other_tree) {
 
 void Data_Tree::Print() {
     std::string str = toString();
-    std::cout << str << "\n";
+    std::cout << str;
+    if (is_buffer)
+        std::cout << "[]";
+    std::cout << "\n";
 }
 
 

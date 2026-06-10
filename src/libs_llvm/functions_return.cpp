@@ -23,11 +23,11 @@ void set_functions_return_type() {
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"ShuffleStrVec", "str_vec"},
 						{"map_Create", "map"}, {"map_node_reclaim", "int"}, {"map_size", "int"}, {"map_has_str", "bool"}, {"map_has_int", "bool"}, {"map_has_i64", "bool"}, {"map_get_str_int", ""}, {"map_get_i64_any", ""}, {"map_get_i64_int", ""}, {"map_has_float", "bool"}, {"map_has_char", "bool"}, {"map_print", "int"}, {"map_node_set_bucket", "int"}, {"map_node_set_next", "int"}, {"map_node_overwrite_bucket", "int"}, {"map_node_overwrite", "int"}, {"map_keys_str", "array"}, {"map_keys_array", "array"}, {"map_keys_i64", "array"}, {"map_keys", "array"}, {"map_values", "array"}, {"map_values_int", "array"}, {"map_clear", "int"}, 
-						{"read_float", "float"}, {"float_ptr_print", "float"}, {"float_to_str", "str"}, {"float_to_str_buffer", "int64_t"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
+						{"read_float", "float"}, {"float_ptr_print", "float"}, {"float_to_str", "str"}, {"float_to_str_buffer", "int"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
 						{"charv_print", "int"}, 
 						{"is_null", "bool"}, 
 						{"array_Create", "array"}, {"array_clone", "array"}, {"array_slice", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"array_clear", "float"}, {"array_int_NewVec", "array"}, {"array_void_NewVec", "array"}, {"array_print_int", "float"}, {"array_print_char", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"array_print_float", "int"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "array"}, {"array_sum_int", "int"}, {"array_prod_int", "int"}, {"array_Split_Parallel", "array"}, {"array_print_str", "int"}, {"array_shuffle_str", "int"}, {"hash_array_int", "int"}, {"array_eq_int", "bool"}, 
-						{"print_randoms", "float"}, {"randint", "int"}, 
+						{"print_randoms", "float"}, {"randint", "int"}, {"randu", "float"}, {"randn", "float"}, 
 						{"putchard", "float"}, {"printd", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
 						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
@@ -35,7 +35,7 @@ void set_functions_return_type() {
 						{"_quit_", "float"}, {"fexists_C", "bool"}, 
 						{"print", "float"}, {"print_void_ptrC", "float"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
-						{"read_int", "int"}, {"i64_to_str_buffer", "int"}, {"i16_to_str_buffer", "int"}, {"i8_to_str_buffer", "int"}, {"int_to_str_buffer", "int"}, {"int_print_bits", "int"}, {"i8_print_bits", "int"}, {"i16_print_bits", "int"}, {"i64_print_bits", "int"}, 
+						{"read_int", "int"}, {"i64_to_str_buffer", "int"}, {"i16_to_str_buffer", "int"}, {"i8_to_str_buffer", "int"}, {"int_to_str_buffer", "int"}, {"int_print_bits", "int"}, {"i8_print_bits", "int"}, {"i16_print_bits", "int"}, {"i64_print_bits", "int"}, {"get_size", "int"}, 
 						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, {"ctx_print_buffer", "float"}, {"scope_struct_print", "float"}, 
 						{"memp_start", "int"}, {"memp_end", "int"}, 
 						{"psweep", "float"}, {"join_gc", "float"}, {"sweep", "float"}, {"GC_print", "float"}, 
@@ -115,6 +115,7 @@ void set_functions_return_type() {
 	functions_return_data_type["i8_print_bits"] = Data_Tree("int");
 	functions_return_data_type["i16_print_bits"] = Data_Tree("int");
 	functions_return_data_type["i64_print_bits"] = Data_Tree("int");
+	functions_return_data_type["get_size"] = Data_Tree("int");
 	functions_return_data_type["min"] = Data_Tree("float");
 	functions_return_data_type["max"] = Data_Tree("float");
 	functions_return_data_type["logE2f"] = Data_Tree("float");
@@ -215,11 +216,13 @@ void set_functions_return_type() {
 	functions_return_data_type["read_float"] = Data_Tree("float");
 	functions_return_data_type["float_ptr_print"] = Data_Tree("float");
 	functions_return_data_type["float_to_str"] = Data_Tree("str");
-	functions_return_data_type["float_to_str_buffer"] = Data_Tree("int64_t");
+	functions_return_data_type["float_to_str_buffer"] = Data_Tree("int");
 	functions_return_data_type["nsk_pow"] = Data_Tree("float");
 	functions_return_data_type["nsk_sqrt"] = Data_Tree("float");
 	functions_return_data_type["print_randoms"] = Data_Tree("float");
 	functions_return_data_type["randint"] = Data_Tree("int");
+	functions_return_data_type["randu"] = Data_Tree("float");
+	functions_return_data_type["randn"] = Data_Tree("float");
 	functions_return_data_type["__slee_p_"] = Data_Tree("int");
 	functions_return_data_type["silent_sleep"] = Data_Tree("float");
 	functions_return_data_type["start_timer"] = Data_Tree("float");

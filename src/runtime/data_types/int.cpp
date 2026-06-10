@@ -136,3 +136,10 @@ extern "C" int i16_print_bits(Scope_Struct *scope_struct, int16_t value) {
 extern "C" int i64_print_bits(Scope_Struct *scope_struct, int64_t value) {
     return print_bits_impl(value);
 }
+
+
+extern "C" int get_size(Scope_Struct *scope_struct, int elem_type_id) {
+    if (data_type_to_size.count(elem_type_id)>0)
+        return data_type_to_size[elem_type_id];
+    return 8; 
+}

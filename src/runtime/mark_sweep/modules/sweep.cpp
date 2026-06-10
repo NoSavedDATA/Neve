@@ -50,6 +50,9 @@ int GC_Span::Sweep(int tid, uint64_t mark_bit) {
                 set_1(alloc_bits, idx, 0ULL); 
                 // std::cout << "set0 to " << data_type_to_name()[u_type] << "|" << u_type << ", size: " << elem_size << ", addr: " << obj_addr << "\n";
 
+                if (u_type==113)
+                    std::cout << "IS TENSOR" << "\n";
+
                 if(u_type==0||u_type==100||u_type==112||type_info[u_type]!=nullptr)
                     continue;
 

@@ -143,9 +143,7 @@ unsigned long long time_seed() {
 
 
 
-extern "C" int randint(Scope_Struct *scope_struct, int b, int f)
-{
-
+extern "C" int randint(Scope_Struct *scope_struct, int b, int f) {
   std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
   float rand_float = dist(MAIN_PRNG);
@@ -153,4 +151,15 @@ extern "C" int randint(Scope_Struct *scope_struct, int b, int f)
   int rand_int = static_cast<int>(rand_float * (f - b + 1)) + b;
 
   return rand_int;
+}
+
+
+extern "C" float randu(Scope_Struct *scope_struct, float a, float b) {
+  std::uniform_real_distribution<float> dist(a,b);
+  return dist(MAIN_PRNG);
+}
+
+extern "C" float randn(Scope_Struct *scope_struct, float mean, float stddev) {
+  std::normal_distribution<float> dist(mean, stddev);
+  return dist(MAIN_PRNG);
 }

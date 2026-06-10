@@ -413,6 +413,7 @@ class BinaryExprAST : public ExprAST {
   Data_Tree L_dt, R_dt;
 
 public:
+  bool is_store_sugar=false;
   std::unique_ptr<ExprAST> LHS, RHS;
   char Op;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
@@ -425,6 +426,17 @@ public:
 };
 
 
+class ConstExprAST : public ExprAST {
+public:
+  Parser_Struct parser_struct;
+  std::string str;
+  Data_Tree data_type;
+  
+  ConstExprAST(Parser_Struct, std::string);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
 
 
 
@@ -466,7 +478,9 @@ class Nameable : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   Nameable *InnerMost();
   Nameable *Obj();
+
   std::string GetLibCallee();
+  std::unique_ptr<ExprAST> Copy();
 };
 
 

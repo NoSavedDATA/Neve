@@ -195,6 +195,10 @@ std::map<int, std::string> token_to_string = {
 };
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal,
                          tok_diff, tok_higher_eq, tok_minor_eq, tok_offby};
+
+std::unordered_map<int, int> sugar_ops = {{tok_plus_eq, '+'}, {tok_minus_eq, '-'},
+                                          {tok_mult_eq, '*'}, {tok_div_eq, '/'}};
+
 std::vector<char> terminal_tokens = {';', tok_constructor, tok_def, tok_extern, tok_class, tok_eof};
 
 extern std::vector<std::string> LLVM_IR_Functions = {"pow", "sqrt"};
@@ -369,6 +373,8 @@ static int get_token(bool block) {
       return tok_struct;
     if (in_vec(IdentifierStr, data_tokens))
       return tok_data;
+    if (in_vec(IdentifierStr, constants))
+      return tok_const;
     if(string_tokens.count(IdentifierStr)>0)
       return string_tokens[IdentifierStr];
     if (IdentifierStr=="true"||IdentifierStr=="false") {
@@ -493,6 +499,27 @@ static int get_token(bool block) {
   if(ThisChar=='<' && LastChar=='-') {
     LastChar = tokenizer->get();
     return tok_arrow;
+  }
+
+  if(ThisChar=='*' && LastChar=='=') {
+    LastChar = tokenizer->get();
+    return tok_mult_eq;
+  }
+  if(ThisChar=='+' && LastChar=='=') {
+    LastChar = tokenizer->get();
+    return tok_plus_eq;
+  }
+  if(ThisChar=='-' && LastChar=='=') {
+    LastChar = tokenizer->get();
+    return tok_minus_eq;
+  }
+  if(ThisChar=='/' && LastChar=='=') {
+    LastChar = tokenizer->get();
+    return tok_div_eq;
+  }
+  if(ThisChar=='+' && LastChar=='+') {
+    LastChar = tokenizer->get();
+    return tok_plus_plus;
   }
 
   if(ThisChar=='<' && LastChar=='|') {

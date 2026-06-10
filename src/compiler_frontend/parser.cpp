@@ -118,12 +118,14 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
 
   if (CurTok=='[') {
       getNextToken(); // eat [
-      while(true) {
+      int dims=0;
+      while(CurTok!=']') {
           if(CurTok!=tok_int) {
             LogErrorBreakLine(parser_struct.line, root_type + "[]' a number. Got " + ReverseToken(CurTok));
               return data_type;
           }
           getNextToken(); // eat num_val
+          dims++;
           data_type.Nested_Data.push_back(std::to_string((int)NumVal));
           if (CurTok==']')
             break;
@@ -132,7 +134,10 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
           getNextToken(); // eat ,
       }
       getNextToken(); // eat ]
-      data_type.is_array=true;
+      if (dims>0)
+          data_type.is_array=true;
+      else
+          data_type.is_buffer=true;
       return data_type;
   }
 
@@ -191,6 +196,13 @@ std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct parser_struct) {
 std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct parser_struct) {
   auto Result = std::make_unique<IntExprAST>(IntVal);
   getNextToken(); // consume the number
+  return std::move(Result);
+}
+
+
+std::unique_ptr<ExprAST> ParseConstExpr(Parser_Struct parser_struct, std::string class_name) { 
+  auto Result = std::make_unique<ConstExprAST>(parser_struct, IdentifierStr);
+  getNextToken(); // consume the const
   return std::move(Result);
 }
 
@@ -791,7 +803,6 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   
   typeVars[parser_struct.function_name][IdName] = Start->GetType();
   data_typeVars[parser_struct.function_name][IdName] = Start->GetDataTree();
-  
 
 
   auto End = ParseExpression(parser_struct, class_name);
@@ -1401,7 +1412,7 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
           std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct, IdentifierStr, 1);
           nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
           Args.push_back(ParseCallExpr(parser_struct, std::move(nameable), class_name, 2));
-        } else
+        } else 
             Args.push_back(std::make_unique<IntExprAST>(data_name_to_type()[IdentifierStr]));
       }
       else if (auto Arg = ParseExpression(parser_struct, class_name, false)) {
@@ -1959,6 +1970,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseDataExpr(parser_struct, class_name);
   case tok_var:
     return ParseVarExpr(parser_struct, "", class_name);
+  case tok_const:
+    return ParseConstExpr(parser_struct, class_name);
   case '[':
     return ParseNewList(parser_struct, class_name);
   case '{':
@@ -2023,8 +2036,7 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct parser_struct, int ExprPrec
   
 
 
-  while (true)
-  {
+  while (true) {
     
 
     // If this is a binop, find its precedence.
@@ -2075,14 +2087,23 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct parser_struct, int ExprPrec
     int NextPrec = get_tokenPrecedence();
     
 
-    if (TokPrec < NextPrec)
-    {        
+    if (TokPrec < NextPrec) {        
       RHS = ParseBinOpRHS(parser_struct, TokPrec + 1, std::move(RHS));
       if (!RHS)
         return nullptr;  
     }
      
-    LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
+    if (BinOp<=-85 && BinOp>=-89) {
+        if (BinOp == tok_plus_plus) {
+            std::cout << "uninimplemented ++ syntax sugar" << "\n";
+        }
+        else
+            BinOp = sugar_ops[BinOp];
+        std::unique_ptr<BinaryExprAST> LHS_ = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
+        LHS_->is_store_sugar = true;
+        LHS = std::move(LHS_);
+    } else
+        LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
     
     LhsTok = RhsTok;
   }

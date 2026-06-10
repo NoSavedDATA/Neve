@@ -51,7 +51,7 @@ extern "C" char *float_to_str(Scope_Struct *scope_struct, float x) {
     return result;
 }
 
-extern "C" int64_t float_to_str_buffer(Scope_Struct *scope_struct, float x, char *print_buffer) {
+extern "C" int float_to_str_buffer(Scope_Struct *scope_struct, float x, char *print_buffer) {
     // Enough for 32-bit int including sign and null terminator
     char buffer[32];  
     int len = std::snprintf(buffer, sizeof(buffer), "%f", x);

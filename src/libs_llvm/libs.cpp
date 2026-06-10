@@ -31,6 +31,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("randint", randintTy);
 
+	FunctionType *randuTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("randu", randuTy);
+
+	FunctionType *randnTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("randn", randnTy);
+
 	FunctionType *printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -165,7 +179,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("float_to_str", float_to_strTy);
 
 	FunctionType *float_to_str_bufferTy= FunctionType::get(
-		Type::getInt64Ty(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
@@ -685,6 +699,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("i64_print_bits", i64_print_bitsTy);
+
+	FunctionType *get_sizeTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("get_size", get_sizeTy);
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,

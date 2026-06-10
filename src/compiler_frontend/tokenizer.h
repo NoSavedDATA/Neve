@@ -51,6 +51,7 @@ enum Token {
     tok_bool = -58,
     tok_any = -72,
     tok_nil = -73,
+    tok_const = -84,
 
 
     // consts
@@ -99,6 +100,11 @@ enum Token {
     tok_offby = -70,
     tok_lshift = -75,
     tok_rshift = -76,
+    tok_plus_eq = -85,
+    tok_minus_eq = -86,
+    tok_mult_eq = -87,
+    tok_div_eq = -88,
+    tok_plus_plus = -89,
 
 
     tok_space = -14,
@@ -154,6 +160,7 @@ extern std::string cur_line;
 
 extern std::vector<std::string> LLVM_IR_Functions;
 extern std::map<int, std::string> token_to_string;
+extern std::unordered_map<int, int> sugar_ops;
 
 extern std::vector<char> ops;
 extern std::vector<char> terminal_tokens; 

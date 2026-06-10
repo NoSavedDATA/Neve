@@ -63,10 +63,30 @@ Value *simd_load(Parser_Struct parser_struct, Function *TheFunction,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     llvm::Type *ty = get_type_from_data(data_type);
 
-    auto *L = Builder->CreateLoad(ty, Builder->CreateExtractValue(ArgsV[0], {0}));
+    Value *ptr = ArgsV[0];
+    if (args_type[0].Type=="str")
+        ptr = Builder->CreateExtractValue(ArgsV[0], {0}); 
+
+    auto *L = Builder->CreateLoad(ty, ptr);
     L->setAlignment(llvm::Align(1));
     return L;
 }
+
+Value *simd_store(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    llvm::Type *ty = get_type_from_data(data_type);
+
+    Value *ptr = ArgsV[0];
+    if (args_type[0].Type=="str")
+        ptr = Builder->CreateExtractValue(ArgsV[0], {0}); 
+
+    auto *L = Builder->CreateStore(ArgsV[1], ptr);
+    L->setAlignment(llvm::Align(1));
+
+    return const_int(0);
+}
+
 
 
 Value *vec_make(Parser_Struct parser_struct, Function *TheFunction,
@@ -192,9 +212,9 @@ extern "C" int print_vec_i64(int64_t *v, int size) {
 }
 extern "C" int print_vec_float(float *v, int size) {
     printf("vec<float,%d>\n", size);
-    printf("[%d", v[0]);
+    printf("[%f", v[0]);
     for (int i = 1; i < size; i++)
-        printf(", %d ", v[i]);
+        printf(", %f ", v[i]);
     printf("]\n");
     return 0;
 }

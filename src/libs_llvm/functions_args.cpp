@@ -1496,6 +1496,15 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["i64_print_bits"].push_back("0");
 		Function_Arg_Names["i64_print_bits"].push_back("1");
+		
+		Function_Arg_Types["get_size"]["0"] = "Scope_Struct";
+		Function_Arg_Types["get_size"]["1"] = "int";
+		
+		Function_Arg_DataTypes["get_size"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["get_size"]["1"] = Data_Tree("int");
+		
+		Function_Arg_Names["get_size"].push_back("0");
+		Function_Arg_Names["get_size"].push_back("1");
 	
 		
 		Function_Arg_Types["list_New"]["0"] = "Scope_Struct";
@@ -1787,6 +1796,30 @@ void set_functions_args_type() {
 		Function_Arg_Names["randint"].push_back("0");
 		Function_Arg_Names["randint"].push_back("1");
 		Function_Arg_Names["randint"].push_back("2");
+		
+		Function_Arg_Types["randu"]["0"] = "Scope_Struct";
+		Function_Arg_Types["randu"]["1"] = "float";
+		Function_Arg_Types["randu"]["2"] = "float";
+		
+		Function_Arg_DataTypes["randu"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["randu"]["1"] = Data_Tree("float");
+		Function_Arg_DataTypes["randu"]["2"] = Data_Tree("float");
+		
+		Function_Arg_Names["randu"].push_back("0");
+		Function_Arg_Names["randu"].push_back("1");
+		Function_Arg_Names["randu"].push_back("2");
+		
+		Function_Arg_Types["randn"]["0"] = "Scope_Struct";
+		Function_Arg_Types["randn"]["1"] = "float";
+		Function_Arg_Types["randn"]["2"] = "float";
+		
+		Function_Arg_DataTypes["randn"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["randn"]["1"] = Data_Tree("float");
+		Function_Arg_DataTypes["randn"]["2"] = Data_Tree("float");
+		
+		Function_Arg_Names["randn"].push_back("0");
+		Function_Arg_Names["randn"].push_back("1");
+		Function_Arg_Names["randn"].push_back("2");
 	
 		
 		Function_Arg_Types["str_Copy"]["0"] = "Scope_Struct";

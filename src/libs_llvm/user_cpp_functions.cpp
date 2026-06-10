@@ -22,8 +22,8 @@ void set_user_functions() {
 		"min", "max", "logE2f", "roundE", "floorE", "logical_not", 
 		"LockMutex", "UnlockMutex", 
 		"print_vec_i8", "print_vec_i16", "print_vec_int", "print_vec_i64", "print_vec_float", 
-		"print_randoms", "randint", 
-		"read_int", "i64_to_str_buffer", "i16_to_str_buffer", "i8_to_str_buffer", "int_to_str_buffer", "int_print_bits", "i8_print_bits", "i16_print_bits", "i64_print_bits", 
+		"print_randoms", "randint", "randu", "randn", 
+		"read_int", "i64_to_str_buffer", "i16_to_str_buffer", "i8_to_str_buffer", "int_to_str_buffer", "int_print_bits", "i8_print_bits", "i16_print_bits", "i64_print_bits", "get_size", 
 		"nullptr_get", "is_null", 
 		"array_Create", "array_clone", "array_slice", "array_pop", "array_size", "array_bad_idx", "array_double_size", "array_clear", "array_int_NewVec", "array_void_NewVec", "array_print_int", "array_print_char", "arange_int", "zeros_int", "randint_array", "ones_int", "array_int_add", "randfloat_array", "array_print_float", "arange_float", "zeros_float", "ones_float", "array_sum_int", "array_prod_int", "array_Split_Parallel", "array_print_str", "array_shuffle_str", "hash_array_int", "array_eq_int", 
 		"print_stack1", "print_stack", "scope_struct_spec", "set_scope_line", "scope_struct_CreateFirst", "scope_struct_Create", "set_scope_thread_id", "get_scope_thread_id", "scope_struct_Reset_Threads", "scope_struct_Increment_Thread", "scope_struct_Print", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Store_Asyncs_Count", "scope_struct_Get_Async_Scope", "ctx_print_buffer", "scope_struct_print", "scope_struct_Sweep", "scope_struct_Delete", 
@@ -56,6 +56,8 @@ void set_user_functions() {
 	struct_create_fn["DT_charv_Create"] = DT_charv_Create;
 	struct_create_fn["DT_vec_Create"] = DT_vec_Create;
 	llvm_callee["fexists"] = fexists;
+	llvm_callee["dsize"] = dsize;
+	llvm_callee["printl"] = printl;
 	llvm_callee["print"] = print;
 	llvm_callee["print_bb"] = print_bb;
 	llvm_callee["print_Value"] = print_Value;
@@ -81,6 +83,7 @@ void set_user_functions() {
 	llvm_callee["swap_bit"] = swap_bit;
 	llvm_callee["ctz"] = ctz;
 	llvm_callee["simd_load"] = simd_load;
+	llvm_callee["simd_store"] = simd_store;
 	llvm_callee["vec_make"] = vec_make;
 	llvm_callee["vec_shuffle"] = vec_shuffle;
 	llvm_callee["vec_movemask"] = vec_movemask;
@@ -88,6 +91,8 @@ void set_user_functions() {
 	clean_up_functions["map"] = map_Clean_Up;
 
 	clean_up_functions["channel"] = channel_Clean_Up;
+
+	clean_up_functions["tensor"] = tensor_Clean_Up;
 
 	clean_up_functions["array"] = array_Clean_Up;
 

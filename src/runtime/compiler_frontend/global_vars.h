@@ -57,6 +57,6 @@ extern std::vector<std::string> Global_Uniques;
 
 extern std::map<std::string, std::vector<std::string>> Equivalent_Types;
 
-extern std::vector<std::string> data_tokens, compound_tokens, primary_data_tokens;
+extern std::vector<std::string> data_tokens, constants, compound_tokens, primary_data_tokens;
 extern std::vector<uint16_t> primary_data_types;
 extern std::vector<uint16_t> compound_types;

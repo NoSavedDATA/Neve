@@ -176,6 +176,11 @@ Value *i64(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
+Value *dsize(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    return callret("get_size", {scope_struct, ArgsV[0]});
+}
 Value *fexists(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
@@ -373,6 +378,60 @@ Value *err(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
+
+
+Value *printl(Parser_Struct parser_struct, Function *TheFunction,
+        std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+        Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+
+    Value *offset = const_int(0);
+
+    Value *print_buffer = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 6);
+
+    llvm::Type *bufferTy = ArrayType::get(int8Ty, PrintBufferSize);
+
+    for (int i=0; i<ArgsV.size(); ++i) {
+        Value *print_val = ArgsV[i];
+        Value *size;
+        std::string arg_type = args_type[i].Type;
+
+        Value *print_gep = Builder->CreateInBoundsGEP(bufferTy,
+                print_buffer, {const_int(0), offset});
+        
+        if(arg_type=="str") {
+            StructType *st = struct_types["DT_str"];
+            Value *str_v = Builder->CreateExtractValue(print_val, {0});
+            size = Builder->CreateExtractValue(print_val, {1});
+            call("memcpy", {print_gep, str_v, size});
+        } else if (arg_type=="char") {
+            size = const_int(1);
+            Builder->CreateStore(print_val, print_gep);
+        } else {
+            std::string callee = arg_type + "_to_str_buffer";
+            // if (arg_type=="bool") {
+            //     printTy(print_val);
+            //     call("print_bool", {print_val});
+            // }
+            size = callret(callee, {scope_struct, print_val, print_gep});
+        }
+
+        offset = Builder->CreateAdd(offset, size);
+    }
+
+    Value *buf_ptr = Builder->CreateInBoundsGEP( // &print_buffer[0]
+            int8Ty,
+            print_buffer,
+            { const_int(0) }
+            );
+    call("write", {const_int(1), buf_ptr, offset});
+
+    return const_float(0);
+}
+
+
+
+
+
 Value *print(Parser_Struct parser_struct, Function *TheFunction,
         std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
         Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
@@ -421,7 +480,6 @@ Value *print(Parser_Struct parser_struct, Function *TheFunction,
             { const_int(0) }
             );
     call("write", {const_int(1), buf_ptr, offset});
-    // call("ctx_print_buffer", {scope_struct, offset});
 
     return const_float(0);
 }
