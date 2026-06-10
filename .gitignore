@@ -8,6 +8,8 @@ samples/
 lib/**
 !lib/std_lib/
 !lib/std_lib/**
+!lib/std_lib/**/*.nv
+!lib/std_lib/Makefile_*
 src_reference/
 sys_lib/
 Dockerfile
