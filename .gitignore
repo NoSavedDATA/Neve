@@ -5,7 +5,7 @@ bin/
 experiments/
 include/
 samples/
-lib/
+lib/**
 !lib/std_lib/
 !lib/std_lib/**
 src_reference/
