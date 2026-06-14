@@ -221,6 +221,20 @@ Value *c_malloc(Parser_Struct parser_struct, Function *TheFunction,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     return callret("malloc", {ArgsV[0]});
 }
+Value *c_malloc32(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Value *size = ArgsV[0];
+    return callret("aligned_alloc", {const_int64(32), size});
+}
+Value *c_malloc64(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Value *size = ArgsV[0];
+    return callret("aligned_alloc", {const_int64(64), size});
+}
+
+
 Value *c_malloc_str(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {

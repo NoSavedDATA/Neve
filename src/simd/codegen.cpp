@@ -100,10 +100,7 @@ Value *vec_make(Parser_Struct parser_struct, Function *TheFunction,
         LogError(parser_struct.line, "Vec expected size");
     
     Value *ret = Builder->CreateVectorSplat(size, ArgsV[0]);
-    // ret->print(llvm::errs());
-    // llvm::errs() << "\n";
     return ret;
-
 }
 
 Value *vec_shuffle(Parser_Struct parser_struct,

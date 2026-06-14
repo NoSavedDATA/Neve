@@ -914,7 +914,8 @@ void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::stri
 }
 
 
-inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV,
+inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
+                                                  std::vector<Value *> ArgsV,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::vector<Data_Tree> &ArgTypes,
                                                   Value *scope_struct, std::string fn_name,
@@ -943,6 +944,11 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
     if (type!=expected_type&&in_vec(type, int_types)&&in_vec(expected_type, int_types))
         arg = Builder->CreateIntCast(arg, get_type_from_data(expected_data_type), /*isSigned=*/true);
 
+    if (!is_nsk_fn&&data_type.is_array) {
+        llvm::Type *Ty = get_type_from_data(data_type);
+        arg = Builder->CreateGEP(Ty, arg, \
+                                 {const_int(0), const_int(0)});
+    }
 
     std::string copy_fn = type+"_CopyArg";
     Function *F = TheModule->getFunction(copy_fn);
@@ -956,19 +962,22 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
     }
     ArgsV.push_back(arg);
 
-    if (!is_nsk_fn && !in_vec(type, primary_data_tokens) && \
-        (F||dynamic_cast<BinaryExprAST*>(Args[i].get())\
-          ||dynamic_cast<UnaryExprAST*>(Args[i].get())\
-          ||dynamic_cast<NameableCall*>(Args[i].get()))) {
+    if (!is_nsk_fn && !in_vec(type, primary_data_tokens)) {
         // If it creates a new memory address for a high-level fn, store address on the stack.
-        
-        Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct.function_name, arg);
-        Set_Stack_Top(scope_struct, parser_struct.function_name);
+        bool does_op_create_memory = \
+            (F||dynamic_cast<UnaryExprAST*>(Args[i].get())\
+              ||dynamic_cast<NameableCall*>(Args[i].get()));
+        if (auto *stmt = dynamic_cast<BinaryExprAST*>(Args[i].get()))
+            does_op_create_memory = (does_op_create_memory||stmt->Op!=tok_offby);
+
+        if (does_op_create_memory) {
+            Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct.function_name, arg);
+            Set_Stack_Top(scope_struct, parser_struct.function_name);
+        }
     }
 
 
-    if (!ArgsV.back())
-    {
+    if (!ArgsV.back()) {
       LogErrorS(parser_struct.line, "Failed to codegen argument of function " + fn_name);
       return {};
     }
@@ -2327,7 +2336,7 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             L_dt = LHS->GetDataTree(true);
             llvm::Type *Ty = get_type_from_data(L_dt);
             
-            Value *gep = Builder->CreateGEP(floatTy, vec_ptr, idx);
+            Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
         } else 
             call(type+"_Store_Idx", {vec_ptr, idx, Val, scope_struct});
@@ -2505,9 +2514,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     else if (Elements=="buffer_float_i64"||Elements=="buffer_float_int") {
         if(Op==tok_offby) {
             if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
-                llvm::Type *lTy = get_type_from_data(L_dt);
-                Value *ptr = Builder->CreateGEP(lTy, L, R);
-                ret = ptr;
+                if (L_dt.is_buffer) {
+                    llvm::Type *lTy = get_type_from_data(L_dt);
+                    Value *ptr = Builder->CreateGEP(lTy, L, R);
+                    ret = ptr;
+                } else {
+                    llvm::Type *lTy = get_type_from_data(L_dt);
+                    Value *ptr = Builder->CreateGEP(lTy, L, {const_int(0), R});
+                    ret = ptr;
+                }
             }
         } else
             LogErrorC(parser_struct.line, "unkown buffer op " + Operation);
@@ -2893,8 +2908,11 @@ Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, Value *scope_struct, \
-        Parser_Struct parser_struct, std::string async_suffix) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, \
+        Value *scope_struct, \
+        Parser_Struct parser_struct, std::string async_suffix,\
+        int AsyncsCount) {
+
 
     // find existing unique function name (_async_1, _async_2, _async_3 etc)
     int fnIndex = 1;
@@ -2972,6 +2990,12 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
     }
     function_values[async_scope]["QQ_stack_top"] = const_int(uniques_size);
 
+    if (AsyncsCount>0) {
+        std::cout << "is asyncs" << "\n";
+        Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 7);
+        Builder->CreateStore(const_int(AsyncsCount), tN_gep);
+    }
+
 
     block_values[BB] = function_values[parser_struct.function_name];
     for (auto &body : asyncBody)
@@ -3011,7 +3035,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 Value *SpawnExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn");
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", 0);
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
@@ -3051,7 +3075,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     // Value *barrier = callret("get_barrier", {const_int(1)});
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async");
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", 0);
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
@@ -3094,15 +3118,15 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs");
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", AsyncsCount);
 
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
 
 
-    for(int i=0; i<AsyncsCount; i++) 
-    {
+
+    for(int i=0; i<AsyncsCount; i++) {
         PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
         Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
 
@@ -3667,8 +3691,12 @@ Function *PrototypeAST::codegen() {
 
 
     std::vector<llvm::Type *> types;
-    for (auto &type : Types)
-        types.push_back(get_type_from_data(type));
+    for (auto &type : Types) {
+        llvm::Type *Ty = get_type_from_data(type);
+        if (type.is_buffer)
+            Ty = Ty->getPointerTo();
+        types.push_back(Ty);
+    }
 
     
     llvm::Type *retTy = get_type_from_data(ReturnType);
@@ -3951,8 +3979,9 @@ Value *Nameable::codegen(Value *scope_struct) {
             return RecoverUniqueGlobal(scope_struct, Name);
         if(Name=="self")
             return get_scope_obj(scope_struct);
-        if (function_allocas[parser_struct.function_name].count(Name)>0) // buffers
-            return function_allocas[parser_struct.function_name][Name];
+        // buffers
+        if (function_allocas[parser_struct.function_name].count(Name)>0)
+            return function_allocas[parser_struct.function_name][Name]; 
         if (function_values[parser_struct.function_name].count(Name)>0)
             return function_values[parser_struct.function_name][Name];
         if (Name=="tid") {
@@ -3960,6 +3989,12 @@ Value *Nameable::codegen(Value *scope_struct) {
             Value *tid = Builder->CreateSub(Builder->CreateLoad(intTy, tid_gep), const_int(1));
             function_values[parser_struct.function_name]["tid"] = tid;
             return tid;
+        }
+        if (Name=="tN") {
+            Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 7);
+            Value *tN = Builder->CreateLoad(intTy, tN_gep);
+            function_values[parser_struct.function_name]["tN"] = tN;
+            return tN;
         }
         return getFunctionCheck(Name);
     }

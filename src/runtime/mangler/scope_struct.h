@@ -22,6 +22,7 @@ struct Scope_Struct {
     GC *gc=nullptr;
 
     char print_buffer[PrintBufferSize];
+    int tN=0;
 
     std::vector<GC_Node> root_nodes;
 

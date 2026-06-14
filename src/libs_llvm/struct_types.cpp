@@ -101,7 +101,8 @@ void Generate_Struct_Types() {
         *TheContext,
         {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize),
          intTy, int8PtrTy, GC_Struct_Type,
-         ArrayType::get(int8Ty, PrintBufferSize)},
+         ArrayType::get(int8Ty, PrintBufferSize),
+         intTy},
         "st.scope_struct"
     );
     struct_types["GC"] = GC_Struct_Type;

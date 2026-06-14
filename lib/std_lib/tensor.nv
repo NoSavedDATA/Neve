@@ -1,3 +1,4 @@
+
 class tensor
 	any data
 	int type, dims_prod
@@ -14,7 +15,7 @@ class tensor
 
 
 		self.dims_prod = shape.prod()
-		self.data = c_malloc(dsize(type)*self.dims_prod)
+		self.data = c_malloc64(dsize(type)*self.dims_prod)
 		self.type=type
 
 	def int print()
@@ -46,6 +47,20 @@ class tensor
 			for i=0, i<self.stride.size()-1
 				printl("]")
 
+	def int pack_float_256(float[] pack, int m_offset, int n_offset)
+		int m=self.shape[-2], n=self.shape[-1]
+		float[] v = self.data
+		for i=0, i<256
+			int row = m_offset+i
+			for j=0, j<256
+				int col = (n_offset+j)
+				float val
+				if row<m and col<n
+					val = v[row*n+col]
+				else
+					val = 0
+				pack[i*256+j] = val
+		return 0
 
 def tensor zeros_tensor(int type, array<int> dims)
 	tensor x = new tensor(type, dims)
@@ -56,7 +71,7 @@ def tensor zeros_tensor(int type, array<int> dims)
 			
 	return x
 
-def tensor rand_tensor(int type, array<int> dims)
+def tensor randn_tensor(int type, array<int> dims)
 	tensor x = new tensor(type, dims)
 	if type==float_t
 		float[] v = x.data
@@ -84,6 +99,80 @@ def tensor tensor_tensor_mult(tensor x, tensor y)
 			u[i] = v[i]*w[i]
 	return out
 
+
+def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
+								   int m, int n, int p,
+								   int m_main, int n_main)
+	int t_rows = m_main//tN
+	int row_offset = tid * t_rows
+
+	float[] u = y.data
+	float[] w = out.data
+
+
+
+	float[65536] pack
+	for j=0, j<n_main, 256
+		for k=0, k<p, 256
+			y.pack_float_256(pack, k, j)
+
+			for i=0, i<t_rows, 8
+				float[] v = x.data
+				int t_i = row_offset+i
+
+				float[] v1 = v offby t_i*p + k
+				float[] v2 = v offby (t_i+1)*p + k
+				float[] v3 = v offby (t_i+2)*p + k
+				float[] v4 = v offby (t_i+3)*p + k
+				float[] v5 = v offby (t_i+4)*p + k
+				float[] v6 = v offby (t_i+5)*p + k
+				float[] v7 = v offby (t_i+6)*p + k
+				float[] v8 = v offby (t_i+7)*p + k
+
+				for jj=0, jj<256, 16
+					vec<float,16> acc1 = simd_load(w offby t_i*n+j+jj, float, 16)
+					vec<float,16> acc2 = simd_load(w offby (t_i+1)*n+j+jj, float, 16)
+					vec<float,16> acc3 = simd_load(w offby (t_i+2)*n+j+jj, float, 16)
+					vec<float,16> acc4 = simd_load(w offby (t_i+3)*n+j+jj, float, 16)
+					vec<float,16> acc5 = simd_load(w offby (t_i+4)*n+j+jj, float, 16)
+					vec<float,16> acc6 = simd_load(w offby (t_i+5)*n+j+jj, float, 16)
+					vec<float,16> acc7 = simd_load(w offby (t_i+6)*n+j+jj, float, 16)
+					vec<float,16> acc8 = simd_load(w offby (t_i+7)*n+j+jj, float, 16)
+
+					for kk=0, kk<256
+						vec<float,16> v_simd = simd_load(pack offby kk*256+jj, float, 16)
+						vec<float,16> r1 = vec_make(v1[kk],16)
+						vec<float,16> r2 = vec_make(v2[kk],16)
+						vec<float,16> r3 = vec_make(v3[kk],16)
+						vec<float,16> r4 = vec_make(v4[kk],16)
+						vec<float,16> r5 = vec_make(v5[kk],16)
+						vec<float,16> r6 = vec_make(v6[kk],16)
+						vec<float,16> r7 = vec_make(v7[kk],16)
+						vec<float,16> r8 = vec_make(v8[kk],16)
+
+						acc1 += v_simd*r1
+						acc2 += v_simd*r2
+						acc3 += v_simd*r3
+						acc4 += v_simd*r4
+						acc5 += v_simd*r5
+						acc6 += v_simd*r6
+						acc7 += v_simd*r7
+						acc8 += v_simd*r8
+
+					simd_store(w offby t_i*n+jj+j, acc1)
+					simd_store(w offby (t_i+1)*n+jj+j, acc2)
+					simd_store(w offby (t_i+2)*n+jj+j, acc3)
+					simd_store(w offby (t_i+3)*n+jj+j, acc4)
+					simd_store(w offby (t_i+4)*n+jj+j, acc5)
+					simd_store(w offby (t_i+5)*n+jj+j, acc6)
+					simd_store(w offby (t_i+6)*n+jj+j, acc7)
+					simd_store(w offby (t_i+7)*n+jj+j, acc8)
+		
+	
+
+
+
+
 def tensor tensor_tensor_mma(tensor x, tensor y)
 	
 	array<int> new_dims
@@ -97,97 +186,20 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 	int m_main = (m//4)*4
 	int n_main = (n//8)*8
 
-
 	new_dims.append(m)
 	new_dims.append(n)
 
-	tensor out = new tensor(x.type, new_dims)
+	tensor out = zeros_tensor(x.type, new_dims)
+
 
 	if x.type==float_t
+
 		float[] u = y.data
 		float[] w = out.data
 
-		# Simd
-		for i=0, i<m_main, 4
-			float[] v = x.data
-			float[] v1 = v offby i*p
-			float[] v2 = v offby (i+1)*p
-			float[] v3 = v offby (i+2)*p
-			float[] v4 = v offby (i+3)*p
+		finish
+			asyncs 16 float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
 
-			for j=0, j<n_main, 8
-				vec<float,8> acc1 = vec_make(0.0, 8)
-				vec<float,8> acc2 = vec_make(0.0, 8)
-				vec<float,8> acc3 = vec_make(0.0, 8)
-				vec<float,8> acc4 = vec_make(0.0, 8)
-				
-				for k=0, k<p
-					vec<float,8> v_simd = simd_load(u offby k*n+ j, float, 8)
-					vec<float,8> r1 = vec_make(v1[k],8)
-					vec<float,8> r2 = vec_make(v2[k],8)
-					vec<float,8> r3 = vec_make(v3[k],8)
-					vec<float,8> r4 = vec_make(v4[k],8)
-
-					acc1 += v_simd*r1
-					acc2 += v_simd*r2
-					acc3 += v_simd*r3
-					acc4 += v_simd*r4
-				
-				simd_store(w offby i*n+j, acc1)
-				simd_store(w offby (i+1)*n+j, acc2)
-				simd_store(w offby (i+2)*n+j, acc3)
-				simd_store(w offby (i+3)*n+j, acc4)
-
-		# Column tail
-		for i=0, i<m_main, 4
-			float[] v = x.data
-			float[] v1 = v offby i*p
-			float[] v2 = v offby (i+1)*p
-			float[] v3 = v offby (i+2)*p
-			float[] v4 = v offby (i+3)*p
-			for j=n_main, j<n
-				float acc1_ = 0
-				float acc2_ = 0
-				float acc3_ = 0
-				float acc4_ = 0
-
-				for k=0, k<p
-					float yv = u[k*n + j]
-
-					acc1_ += v1[k]*yv
-					acc2_ += v2[k]*yv
-					acc3_ += v3[k]*yv
-					acc4_ += v4[k]*yv
-
-				w[i*n+j] = acc1_
-				w[(i+1)*n+j] = acc2_
-				w[(i+2)*n+j] = acc3_
-				w[(i+3)*n+j] = acc4_
-		# Row tail
-		for i=m_main, i<m
-			float[] v = x.data
-			float[] row = v offby i*p
-
-			for j=0, j<n_main, 8
-
-				vec<float,8> acc = vec_make(0.0,8)
-
-				for k=0, k<p
-					vec<float,8> yv = simd_load(u offby k*n+j, float, 8)
-					vec<float,8> xv = vec_make(row[k],8)
-
-					acc += xv*yv
-
-				simd_store(w offby i*n+j, acc)
-		# Bottom right
-		for i=m_main, i<m
-			float[] v = x.data
-			float[] row = v offby i*p
-			for j=n_main, j<n
-				float acc_ = 0
-				for k=0, k<p
-					acc_ += row[k] * u[k*n+j]
-				w[i*n+j] = acc_
 
 	return out
 

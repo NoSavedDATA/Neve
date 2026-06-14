@@ -1373,7 +1373,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = Data_Tree("function");
         return data_type;
     }
-    else if (Name=="tid")
+    else if (Name=="tid"||Name=="tN")
         data_type = Data_Tree("int");
     else if (IsPositionalArg(parser_struct, Name)) {
         data_type = Data_Tree("any");
@@ -1391,7 +1391,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
 
   if(data_typeVars[scope].find(Name)!=data_typeVars[scope].end())
     data_type = data_typeVars[scope][Name];
-  else if (Name=="tid")
+  else if (Name=="tid"||Name=="tN")
       data_type = Data_Tree("int");
   else {
     LogErrorS(parser_struct.line, "Could not find variable " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));

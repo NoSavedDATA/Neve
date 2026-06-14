@@ -5,14 +5,25 @@
 
 Value *simd_add(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     Data_Tree dt = LHS->GetDataTree();
-    if (dt.Nested_Data[0].Type=="float")
-        return Builder->CreateFAdd(L, R);
+    if (dt.Nested_Data[0].Type == "float") {
+        auto *mul = Builder->CreateFAdd(L, R);
+        FastMathFlags FMF;
+        FMF.setFast();
+        cast<Instruction>(mul)->setFastMathFlags(FMF);
+        return mul;
+    }
     return Builder->CreateAdd(L, R);
 }
 Value *simd_mult(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     Data_Tree dt = LHS->GetDataTree();
-    if (dt.Nested_Data[0].Type=="float")
-        return Builder->CreateFMul(L, R);
+    
+    if (dt.Nested_Data[0].Type == "float") {
+        auto *mul = Builder->CreateFMul(L, R);
+        FastMathFlags FMF;
+        FMF.setFast();
+        cast<Instruction>(mul)->setFastMathFlags(FMF);
+        return mul;
+    }
     
     return Builder->CreateMul(L, R);
 }

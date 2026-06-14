@@ -407,12 +407,12 @@ public:
   
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
-  std::string Elements, Operation;
   Parser_Struct parser_struct;
   std::string cast_L_to="", cast_R_to="";
   Data_Tree L_dt, R_dt;
 
 public:
+  std::string Elements, Operation;
   bool is_store_sugar=false;
   std::unique_ptr<ExprAST> LHS, RHS;
   char Op;
