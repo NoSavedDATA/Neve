@@ -27,7 +27,7 @@ void set_functions_return_type() {
 						{"charv_print", "int"}, 
 						{"is_null", "bool"}, 
 						{"array_Create", "array"}, {"array_clone", "array"}, {"array_slice", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"array_clear", "float"}, {"array_int_NewVec", "array"}, {"array_void_NewVec", "array"}, {"array_print_int", "float"}, {"array_print_char", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"array_print_float", "int"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "array"}, {"array_sum_int", "int"}, {"array_prod_int", "int"}, {"array_Split_Parallel", "array"}, {"array_print_str", "int"}, {"array_shuffle_str", "int"}, {"hash_array_int", "int"}, {"array_eq_int", "bool"}, 
-						{"print_randoms", "float"}, {"randint", "int"}, {"randu", "float"}, {"randn", "float"}, 
+						{"randint", "int"}, {"randu", "float"}, {"randn", "float"}, 
 						{"putchard", "float"}, {"printd", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
 						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
@@ -219,7 +219,6 @@ void set_functions_return_type() {
 	functions_return_data_type["float_to_str_buffer"] = Data_Tree("int");
 	functions_return_data_type["nsk_pow"] = Data_Tree("float");
 	functions_return_data_type["nsk_sqrt"] = Data_Tree("float");
-	functions_return_data_type["print_randoms"] = Data_Tree("float");
 	functions_return_data_type["randint"] = Data_Tree("int");
 	functions_return_data_type["randu"] = Data_Tree("float");
 	functions_return_data_type["randn"] = Data_Tree("float");

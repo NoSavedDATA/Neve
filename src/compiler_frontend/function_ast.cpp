@@ -212,7 +212,7 @@ void InitializeModule() {
 
 	FunctionType *pthread_join_auxTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy},
+		{int64Ty},
 		false
 	);
 	TheModule->getOrInsertFunction("pthread_join_aux", pthread_join_auxTy);

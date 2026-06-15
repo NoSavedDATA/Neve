@@ -88,6 +88,14 @@ void Generate_Struct_Types() {
         {intTy, intTy, intTy, intTy, intTy, struct_types["map_node"]->getPointerTo()->getPointerTo()},
         "st.DT_map"
     );
+
+
+    // DT_thread_pointers
+    struct_types["DT_thread_pointers"] = StructType::create(
+        *TheContext,
+        {int8PtrTy, intTy},
+        "st.DT_thread_pointers"
+    ); 
     
     // --- Scope_Struct --- 
     // GC

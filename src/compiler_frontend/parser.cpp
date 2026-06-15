@@ -583,8 +583,8 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   
 
  
-  if (CurTok==tok_identifier)
-      return LogErrorBreakLine(parser_struct.line, "Could not associate expression to word: " + IdName);
+  // if (CurTok==tok_identifier)
+  //     return LogErrorBreakLine(parser_struct.line, "Could not associate expression to word: " + IdName);
 
   if (CurTok==',' && can_be_list && depth==1) {
     std::vector<std::unique_ptr<Nameable>> IdentifierList;
@@ -611,8 +611,7 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   if(in_str(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
     return ParseLLVM_IR_CallExpr(parser_struct, std::move(nameable), class_name);
 
-  if (CurTok=='.')
-  {
+  if (CurTok=='.') {
     getNextToken();
     return ParseNameableExpr(parser_struct, std::move(nameable), class_name, can_be_list, depth);
   }
@@ -989,15 +988,11 @@ std::unique_ptr<ExprAST> ParseSpawnExpr(Parser_Struct parser_struct, std::string
 std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::string class_name) {
   int cur_level_tabs = SeenTabs;
 
-  getNextToken(); // eat the async.
+  getNextToken(); // eat the asyncs.
 
-
-  if (CurTok!=tok_int)
-    LogError(parser_struct.line, "asyncs expression expects the number of asynchrnonous functions.");
-
-  int async_count = NumVal;
-  getNextToken();
+  auto asyncs_count = ParsePrimary(parser_struct, class_name, false);
   
+
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
   std::string async_scope = parser_struct.function_name + "_asyncs";
@@ -1005,7 +1000,6 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
     typeVars[async_scope][pair.first] = pair.second;
   for (auto pair : data_typeVars[parser_struct.function_name])
     data_typeVars[async_scope][pair.first] = pair.second;
-
 
   Parser_Struct body_parser_struct = parser_struct;
   body_parser_struct.function_name = async_scope;
@@ -1020,7 +1014,7 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   if(parser_struct.function_name!="__anon_expr")
     has_previous_async++;
 
-  return std::make_unique<AsyncsExprAST>(std::move(Bodies), async_count, parser_struct);
+  return std::make_unique<AsyncsExprAST>(std::move(Bodies), std::move(asyncs_count), parser_struct);
 }
 
 

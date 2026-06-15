@@ -2911,7 +2911,7 @@ Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
 Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, \
         Value *scope_struct, \
         Parser_Struct parser_struct, std::string async_suffix,\
-        int AsyncsCount) {
+        Value *AsyncsCount) {
 
 
     // find existing unique function name (_async_1, _async_2, _async_3 etc)
@@ -2957,6 +2957,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
         previous_scope_value_types.push_back(type);
         previous_scope_value_names.push_back(pair.first);
     }
+    call("dive_int", {global_str(functionName), AsyncsCount, global_str("tN")});
 
     int uniques_size = Global_Uniques_Idx.size(); 
 
@@ -2985,16 +2986,19 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
         Value *v = callret("emerge_"+type, {global_str(functionName), global_str(var_name)});
 
+
+
         llvm::Type *llvm_type = get_type_from_str(type);
         function_values[async_scope][var_name] = v;
     }
     function_values[async_scope]["QQ_stack_top"] = const_int(uniques_size);
 
-    if (AsyncsCount>0) {
-        std::cout << "is asyncs" << "\n";
-        Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 7);
-        Builder->CreateStore(const_int(AsyncsCount), tN_gep);
-    }
+
+    // set tN
+    Value *tN = callret("emerge_int", {global_str(functionName), global_str("tN")});
+    Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 7);
+    Builder->CreateStore(tN, tN_gep);
+
 
 
     block_values[BB] = function_values[parser_struct.function_name];
@@ -3035,7 +3039,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 Value *SpawnExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", 0);
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
@@ -3075,7 +3079,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     // Value *barrier = callret("get_barrier", {const_int(1)});
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", 0);
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
@@ -3089,7 +3093,6 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
 
     Value *voidPtrNull = Constant::getNullValue(
             Type::getInt8Ty(*TheContext)->getPointerTo());
-
 
 
     Builder->CreateCall(pthread_create,
@@ -3113,42 +3116,64 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
     // Create/Spawn Threads
 
-    call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
-    // Value *barrier = callret("get_barrier", {const_int(AsyncsCount)});
+    Value *count = Count->codegen(scope_struct);
+    call("scope_struct_Store_Asyncs_Count", {scope_struct, count});
+    // Value *barrier = callret("get_barrier", {Count});
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", AsyncsCount);
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", count);
 
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct.function_name];
 
 
 
-
-    for(int i=0; i<AsyncsCount; i++) {
-        PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-        Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
-
-        Value *voidPtrNull = Constant::getNullValue(
-                Type::getInt8Ty(*TheContext)->getPointerTo());
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
 
-        call("pthread_create_aux",
-                {pthreadPtr,
-                voidPtrNull,
-                asyncFun,
-                voidPtrNull}
-            );
+    Value *st_thread_ptrs = UndefValue::get(struct_types["DT_thread_pointers"]);
+    Value *thread_ptrs = callret("malloc",
+                            {Builder->CreateMul(const_int(8), count)});
+    thread_ptrs =
+        Builder->CreateBitCast(
+            thread_ptrs,
+            int64Ty->getPointerTo());
+    st_thread_ptrs = Builder->CreateInsertValue(st_thread_ptrs, thread_ptrs, {0});
+    st_thread_ptrs = Builder->CreateInsertValue(st_thread_ptrs, count, {1});
 
-        p2t("AsyncExpr Created join call");
+    BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "asyncs.spawn_loop", TheFunction);
+    BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "asyncs.after", TheFunction);
+
+    Builder->CreateBr(LoopBB);
+
+    Builder->SetInsertPoint(LoopBB);
+
+    PHINode *idx = Builder->CreatePHI(intTy, 2);
+    idx->addIncoming(const_int(0), CurrentBB);
+
+    Value *pthreadPtr = Builder->CreateAlloca(int8PtrTy, nullptr);
+    Value *voidPtrNull = Constant::getNullValue(int8PtrTy);
+    call("pthread_create_aux",
+            {pthreadPtr,
+            voidPtrNull,
+            asyncFun,
+            voidPtrNull}
+        );
+    
+    Value *handle = Builder->CreateLoad(int64Ty, pthreadPtr);
+    Value *thread_ptr_gep = Builder->CreateGEP(int64Ty, thread_ptrs, idx);
+    Builder->CreateStore(handle, thread_ptr_gep);
+
+    Value *next_idx = Builder->CreateAdd(idx, const_int(1));
+    idx->addIncoming(next_idx, LoopBB);
+
+    Value *cond = Builder->CreateICmpSLT(next_idx, count);
+    Builder->CreateCondBr(cond, LoopBB, AfterBB);
 
 
-        thread_pointers.push_back(pthreadPtr);
-    }
-
-    // return pthreadPtr;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    Builder->SetInsertPoint(AfterBB);
+    return st_thread_ptrs;
 }
 
 
@@ -3188,23 +3213,55 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0.0f);
 
-    // Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    // std::string functionName = TheFunction->getName().str();
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
-    for (int i=0; i < Bodies.size(); i++)
-        Bodies[i]->codegen(scope_struct);
-
-
-    for (Value *pthreadPtr : thread_pointers)
-    {
-        Value *pthread = Builder->CreateLoad(int8PtrTy, pthreadPtr);
-        call("pthread_join_aux", {pthread});
+    std::vector<Value *> thread_ids; 
+    for (const auto &body : Bodies) {
+        if (auto *stmt = dynamic_cast<AsyncsExprAST*>(body.get()))
+            thread_ids.push_back(body->codegen(scope_struct));
+        else
+            body->codegen(scope_struct);
     }
-    thread_pointers.clear();
+
+    int i=0;
+    for (Value *st_thread_ptrs : thread_ids) {
+        Value *ptrs = Builder->CreateExtractValue(st_thread_ptrs, {0});
+        Value *count = Builder->CreateExtractValue(st_thread_ptrs, {1});
+        
+        BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "finish.spawn_loop"+std::to_string(i), TheFunction);
+        BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "finish.after"+std::to_string(i++), TheFunction);
+
+        BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
+        Builder->CreateBr(LoopBB);
+        Builder->SetInsertPoint(LoopBB);
+
+        PHINode *idx = Builder->CreatePHI(intTy, 2);
+        idx->addIncoming(const_int(0), CurBB);
+
+        Value *ptr_gep = Builder->CreateGEP(int64Ty, ptrs, idx);
+        Value *pthread_ptr = Builder->CreateLoad(int64Ty, ptr_gep);
+        
+        call("pthread_join_aux", {pthread_ptr});
+
+        Value *next_idx = Builder->CreateAdd(idx, const_int(1));
+        idx->addIncoming(next_idx, LoopBB);
+
+        Value *cond = Builder->CreateICmpSLT(next_idx, count);
+        Builder->CreateCondBr(cond, LoopBB, AfterBB);
+
+        Builder->SetInsertPoint(AfterBB);
+        // call("free", {ptrs});
+    }
+
+
+    // for (Value *pthreadPtr : thread_pointers) {
+    //     Value *pthread = Builder->CreateLoad(int8PtrTy, pthreadPtr);
+    //     call("pthread_join_aux", {pthread});
+    // }
+    // thread_pointers.clear();
 
 
     call("scope_struct_Reset_Threads", {scope_struct});
-
     return const_float(0);
 }
 

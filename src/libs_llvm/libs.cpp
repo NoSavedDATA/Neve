@@ -17,13 +17,6 @@ void Generate_LLVM_Functions() {
     int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     
 
-	FunctionType *print_randomsTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
-
 	FunctionType *randintTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},

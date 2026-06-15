@@ -1053,8 +1053,14 @@ AsyncFnPriorExprAST::AsyncFnPriorExprAST() {}
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
   : Body(std::move(Body)), parser_struct(parser_struct) {}
   
-AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount, Parser_Struct parser_struct)
-  : Body(std::move(Body)), AsyncsCount(AsyncsCount), parser_struct(parser_struct) {}
+AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct parser_struct)
+  : Body(std::move(Body)), Count(std::move(Count)), parser_struct(parser_struct) {
+
+    std::string type = this->Count->GetDataTree().Type;
+
+    if (!in_vec(type , int_types))
+        LogErrorC(parser_struct.line, "asyncs count must be int. Got " + type);
+}
 
 IncThreadIdExprAST::IncThreadIdExprAST()
 {}

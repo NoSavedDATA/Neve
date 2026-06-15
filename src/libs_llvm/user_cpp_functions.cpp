@@ -22,7 +22,7 @@ void set_user_functions() {
 		"min", "max", "logE2f", "roundE", "floorE", "logical_not", 
 		"LockMutex", "UnlockMutex", 
 		"print_vec_i8", "print_vec_i16", "print_vec_int", "print_vec_i64", "print_vec_float", 
-		"print_randoms", "randint", "randu", "randn", 
+		"randint", "randu", "randn", 
 		"read_int", "i64_to_str_buffer", "i16_to_str_buffer", "i8_to_str_buffer", "int_to_str_buffer", "int_print_bits", "i8_print_bits", "i16_print_bits", "i64_print_bits", "get_size", 
 		"nullptr_get", "is_null", 
 		"array_Create", "array_clone", "array_slice", "array_pop", "array_size", "array_bad_idx", "array_double_size", "array_clear", "array_int_NewVec", "array_void_NewVec", "array_print_int", "array_print_char", "arange_int", "zeros_int", "randint_array", "ones_int", "array_int_add", "randfloat_array", "array_print_float", "arange_float", "zeros_float", "ones_float", "array_sum_int", "array_prod_int", "array_Split_Parallel", "array_print_str", "array_shuffle_str", "hash_array_int", "array_eq_int", 

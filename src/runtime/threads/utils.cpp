@@ -98,21 +98,15 @@ extern "C" void pthread_join_aux(pthread_t thread)
 
 
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
-                   void *(*function_ptr) (void *arg), void *arg)
-{
+                   void *(*function_ptr) (void *arg), void *arg) {
   pthread_create(thread, attr, function_ptr, arg);
-  // std::cout << "Created" << "\n";
+  uint64_t thread_id = *(uint64_t*)thread;
 }
 
 
-extern "C" void pthread_join_aux(pthread_t thread)
-{
-  // std::cout << "Joining " << thread <<  "\n";
-  void **value_ptr;
-  value_ptr = nullptr;
-
-  pthread_join(thread, value_ptr);
-  // std::cout << "Joined: " << thread << "\n";
+extern "C" void pthread_join_aux(pthread_t thread) {
+  void **value_ptr = nullptr;
+  int rc = pthread_join(thread, value_ptr);
 }
 
 #endif

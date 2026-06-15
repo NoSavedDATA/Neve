@@ -57,25 +57,7 @@ private:
 };
 
 
-class PhiloxRNG {
-public:
-    using uint32 = uint32_t;
-    using uint64 = uint64_t;
 
-    PhiloxRNG(uint64 seed1, uint64 seed2);
-
-    std::array<uint32, 4> operator()(); 
-
-private:
-    uint32 counter = 0;
-    uint32 key[4];
-    static constexpr int rounds = 10;
-
-    std::array<uint32, 4> singleRound(const std::array<uint32, 4>& ctr) const; 
-};
-
-
-extern "C" float print_randoms(float N, float std); 
 
 extern LCG rng;
 
@@ -84,4 +66,3 @@ extern std::mt19937 MAIN_PRNG;
 
 
 
-unsigned long long time_seed(); 

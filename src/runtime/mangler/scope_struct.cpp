@@ -169,6 +169,7 @@ extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
         scope_struct_copy->pointers_stack[i] = scope_struct->pointers_stack[i];
     scope_struct_copy->stack_top = uniques_count;
 
+    scope_struct_copy->tN = scope_struct->asyncs_count;
 
     return scope_struct_copy;
 }

@@ -53,8 +53,7 @@ std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
   // ShallCodegen = false;
 
   
-  if(line!=-1)
-  {
+  if(line!=-1) {
     if (tokenizer->file_name!="main file") {
       std::cout << "\n\n" << tokenizer->file_name << "\n";
 

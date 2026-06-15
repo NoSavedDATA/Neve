@@ -870,10 +870,10 @@ class FinishExprAST : public ExprAST {
 class AsyncsExprAST : public ExprAST {
   Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
-  int AsyncsCount;
+  std::unique_ptr<ExprAST> Count;
 
   public:
-    AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount, Parser_Struct parser_struct);
+    AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
 };

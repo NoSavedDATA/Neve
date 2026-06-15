@@ -5,16 +5,17 @@
 #include <stdint.h>
 #include <thread>
 #include "../common/extension_functions.h"
+#include "philox.h"
 #include "include.h"
 
 
 std::random_device rd2; // it is already defined at cu_common.h
 std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
-// std::mutex MAIN_PRNG_MUTEX;
+Philox rng_philox(get_millisecond_time());
 
 
-unsigned long long get_int_seed()
-{
+
+unsigned long long get_int_seed() {
   std::uniform_int_distribution<unsigned long long> dist(0, ULLONG_MAX);
   return dist(MAIN_PRNG);
 }
@@ -84,61 +85,7 @@ void LCG::setSeed(uint32_t seed) {
 
 
 
-PhiloxRNG::PhiloxRNG(uint64 seed1, uint64 seed2) : key{ static_cast<uint32>(seed1), static_cast<uint32>(seed1 >> 32),
-                                                static_cast<uint32>(seed2), static_cast<uint32>(seed2 >> 32) } {}
 
-std::array<uint32, 4> PhiloxRNG::operator()() {
-    std::array<uint32, 4> ctr = { counter++, 0, 0, 0 };
-    for (int i = 0; i < rounds; i++) {
-        ctr = singleRound(ctr);
-    }
-    return ctr;
-}
-
-
-std::array<uint32, 4> PhiloxRNG::singleRound(const std::array<uint32, 4>& ctr) const {
-    std::array<uint32, 4> output;
-    const uint64 mult = 0xD2511F53;
-    const uint64 add = 0xCD9E8D57;
-
-    uint64 x = static_cast<uint64>(ctr[0]) * mult;
-    uint64 y = static_cast<uint64>(ctr[2]) * add;
-
-    output[0] = static_cast<uint32>(y >> 32) ^ ctr[1] ^ key[0];
-    output[1] = static_cast<uint32>(x >> 32) ^ ctr[3] ^ key[1];
-    output[2] = static_cast<uint32>(y) ^ ctr[2];
-    output[3] = static_cast<uint32>(x) ^ ctr[0];
-
-    return output;
-}
-
-
-
-extern "C" float print_randoms(float N, float std) {
-    //float std = sqrt(2/fan_in);
-    
-    int n = (int) N;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<> dist(0.0, std);
-
-    float* arr = (float*)malloc(n * sizeof(float));
-    std::cout << "[";
-    for (size_t i = 0; i < n; i++)
-      std::cout << dist(gen) << " ";
-    std::cout << "]";
-
-    return 0;
-}
-
-
-unsigned long long time_seed() {
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    return seed;
-}
 
 
 
@@ -154,12 +101,23 @@ extern "C" int randint(Scope_Struct *scope_struct, int b, int f) {
 }
 
 
+inline float uniform01() {
+    constexpr float scale = 1.0f / 4294967296.0f;
+    return rng_philox.next_u32() * scale;
+}
+
 extern "C" float randu(Scope_Struct *scope_struct, float a, float b) {
-  std::uniform_real_distribution<float> dist(a,b);
-  return dist(MAIN_PRNG);
+    return a + (b - a) * uniform01();
 }
 
 extern "C" float randn(Scope_Struct *scope_struct, float mean, float stddev) {
-  std::normal_distribution<float> dist(mean, stddev);
-  return dist(MAIN_PRNG);
+    float u1 = uniform01();
+    float u2 = uniform01();
+
+    float r = std::sqrt(-2.0f * std::log(u1 + 1e-20f));
+
+    float theta = 6.283185307179586f * u2;
+
+    float sample = r * std::cos(theta);
+    return sample*stddev + mean;
 }
