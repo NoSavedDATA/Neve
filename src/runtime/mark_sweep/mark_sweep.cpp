@@ -84,6 +84,8 @@ GC::GC(int tid) {
     arena->gc = this;
 }
 
+Thread_State::Thread_State(Scope_Struct *ctx) : ctx(ctx) {};
+
 WorkList::WorkList(GC_Node node) : node(node) {};
 
 void GC_Observer(Scope_Struct *scope_struct) {
@@ -166,6 +168,7 @@ extern "C" void scope_struct_Join_GC(Scope_Struct *scope_struct) {
 extern "C" void scope_struct_Alloc_GC(Scope_Struct *scope_struct) {
     GC *gc = new GC(scope_struct->thread_id);
     scope_struct->gc = gc;
+    scope_struct->spans = new Thread_State(scope_struct);
     if(concurrent)
         scope_struct->gc_thread = std::thread(GC_Observer, scope_struct);
 }
@@ -177,7 +180,7 @@ extern "C" float GC_print(Scope_Struct *scope_struct) {
     GC *gc = scope_struct->gc;
     std::cout << scope_struct;
     std::cout << " has gc " << gc << "\n";
-    gc->Print();
+    gc->Print(scope_struct->spans);
     return 0;
 }
 

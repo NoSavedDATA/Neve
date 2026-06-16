@@ -2957,7 +2957,6 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
         previous_scope_value_types.push_back(type);
         previous_scope_value_names.push_back(pair.first);
     }
-    call("dive_int", {global_str(functionName), AsyncsCount, global_str("tN")});
 
     int uniques_size = Global_Uniques_Idx.size(); 
 
@@ -2971,6 +2970,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
     // Recover scope_struct Value * on the new function
     Value *scope_struct_copy = callret("scope_struct_Load_for_Async", {const_int(uniques_size), global_str(functionName)}); 
 
+
+
+
     // define body of function
     Value *V = const_float(0.0);
 
@@ -2979,6 +2981,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
             scope_struct->getType()  // the original struct type
             );
 
+
+
     std::string async_scope = parser_struct.function_name + async_suffix;
     for(int i=0; i<previous_scope_value_names.size(); ++i) {
         std::string type = previous_scope_value_types[i];
@@ -2986,18 +2990,11 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
         Value *v = callret("emerge_"+type, {global_str(functionName), global_str(var_name)});
 
-
-
         llvm::Type *llvm_type = get_type_from_str(type);
         function_values[async_scope][var_name] = v;
     }
     function_values[async_scope]["QQ_stack_top"] = const_int(uniques_size);
 
-
-    // set tN
-    Value *tN = callret("emerge_int", {global_str(functionName), global_str("tN")});
-    Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct_typed, 7);
-    Builder->CreateStore(tN, tN_gep);
 
 
 
@@ -3250,7 +3247,7 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
         Builder->CreateCondBr(cond, LoopBB, AfterBB);
 
         Builder->SetInsertPoint(AfterBB);
-        // call("free", {ptrs});
+        call("free", {ptrs});
     }
 
 
@@ -4052,6 +4049,11 @@ Value *Nameable::codegen(Value *scope_struct) {
             Value *tN = Builder->CreateLoad(intTy, tN_gep);
             function_values[parser_struct.function_name]["tN"] = tN;
             return tN;
+        }
+        if (Name=="tHW") {
+            Value *tHW = callret("tHW_fn", {scope_struct});
+            function_values[parser_struct.function_name]["tHW"] = tHW;
+            return tHW;
         }
         return getFunctionCheck(Name);
     }

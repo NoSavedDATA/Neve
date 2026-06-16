@@ -1379,7 +1379,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = Data_Tree("function");
         return data_type;
     }
-    else if (Name=="tid"||Name=="tN")
+    else if (in_vec(Name, {"tid", "tN", "tHW"}))
         data_type = Data_Tree("int");
     else if (IsPositionalArg(parser_struct, Name)) {
         data_type = Data_Tree("any");

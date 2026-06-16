@@ -990,7 +990,7 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
 
   getNextToken(); // eat the asyncs.
 
-  auto asyncs_count = ParsePrimary(parser_struct, class_name, false);
+  auto asyncs_count = ParseExpression(parser_struct, class_name);
   
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;

@@ -9,6 +9,7 @@
 #include "../mark_sweep/include.h" 
 
 struct GC;
+struct GC_span;
 
 constexpr int ContextStackSize = 4096;
 constexpr int PrintBufferSize = 16384;
@@ -32,8 +33,9 @@ struct Scope_Struct {
     char *scope = nullptr;
     char *function_name = nullptr;
 
-    Scope_Struct *inner_most = nullptr;
-    
+
+    Thread_State *spans;
+
     int has_grad=1;
 
     int asyncs_count = 0;
@@ -64,7 +66,7 @@ struct Scope_Struct {
     void Print_Stack();
 
     inline void *Allocate(int size, int type_id) {
-        void *ret = gc->Allocate(this, size, type_id, thread_id); 
+        void *ret = gc->Allocate(this, spans, size, type_id, thread_id); 
         return ret;
     }
 };

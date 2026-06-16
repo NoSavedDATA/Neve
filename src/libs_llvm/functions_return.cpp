@@ -31,7 +31,7 @@ void set_functions_return_type() {
 						{"putchard", "float"}, {"printd", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
 						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
-						{"emerge_int", "int"}, {"emerge_float", "float"}, {"get_tid", "int"}, 
+						{"emerge_int", "int"}, {"emerge_float", "float"}, {"tHW_fn", "int"}, {"get_tid", "int"}, 
 						{"_quit_", "float"}, {"fexists_C", "bool"}, 
 						{"print", "float"}, {"print_void_ptrC", "float"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
@@ -186,6 +186,7 @@ void set_functions_return_type() {
 	functions_return_data_type["ConcatNumToStrFree"] = Data_Tree("str");
 	functions_return_data_type["emerge_int"] = Data_Tree("int");
 	functions_return_data_type["emerge_float"] = Data_Tree("float");
+	functions_return_data_type["tHW_fn"] = Data_Tree("int");
 	functions_return_data_type["get_tid"] = Data_Tree("int");
 	functions_return_data_type["print_vec_i8"] = Data_Tree("int");
 	functions_return_data_type["print_vec_i16"] = Data_Tree("int");

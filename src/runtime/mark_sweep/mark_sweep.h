@@ -24,7 +24,9 @@ const int word_bits=64;
 const int GC_page_size=8192;
 
 constexpr size_t sweep_after_alloc = 32 << 20;
-constexpr size_t GC_arena_size = 1024 << 20;
+//constexpr size_t GC_arena_size = 1024 << 20;
+constexpr size_t GC_arena_size = 256 << 20;
+// constexpr size_t GC_arena_size = 64 << 20;
 
 constexpr size_t pages_per_arena = GC_arena_size / GC_page_size;
 
@@ -46,9 +48,17 @@ struct Scope_Struct;
 struct GC_span_traits;
 struct GC_Arena;
 struct GC_Node;
+struct GC_Span;
 struct GC;
 
 
+
+struct Thread_State {
+    std::array<GC_Span*, GC_obj_sizes> current_span{};
+    bool stw=false; //atomic
+    Scope_Struct *ctx;
+    Thread_State(Scope_Struct*);
+};
 
 extern std::array<GC_span_traits*, GC_obj_sizes> GC_span_traits_vec;
 
@@ -129,13 +139,11 @@ struct GC_Arena {
     void *arena, *metadata;
     GC *gc;
 
-    std::mutex sweep_mtx, worklist_mtx;
+    std::mutex sweep_mtx, span_mtx;
 
     std::array<std::vector<GC_Span*>, GC_obj_sizes> Spans;
-    std::array<GC_Span*, GC_obj_sizes> current_span{};
+    std::array<GC_Span*, GC_obj_sizes> cur_span{};
     std::array<GC_Span*, pages_per_arena> page_to_span;
-    std::vector<GC_Node> worklist, mutator_list;
-    bool owns_mutator=false;
     WorkList *topw=nullptr;
     std::atomic<WorkList*> mutatorw{nullptr};
 
@@ -164,12 +172,11 @@ struct GC_Arena {
         topw = node;
     }
 
-    inline void* Allocate(int size_class, uint16_t type_id, int tid, uint64_t gc_mark_bit) {
-        // gc_mark_bit = gc_mark_bit ? 0ULL : 1ULL; // lazy sweep only
+    inline void* Allocate(Thread_State *spans, int size_class, uint16_t type_id, int tid, uint64_t gc_mark_bit) {
         std::unique_lock<std::mutex> lock(sweep_mtx);
 
         GC_span_traits* traits = GC_span_traits_vec[size_class];
-        GC_Span* span = current_span[size_class];
+        GC_Span* span = spans->current_span[size_class];
         GC_Span *prev_span = span;
 
         // FAST PATH
@@ -177,14 +184,20 @@ struct GC_Arena {
             void* ptr = span->Allocate(type_id, gc_mark_bit, tid);
             if (ptr != nullptr)
                 return ptr;
-            while(span->next_span!=nullptr) { // only happens after resets
-                span = span->next_span; 
-                ptr = span->Allocate(type_id, gc_mark_bit, tid);
-                if (ptr!=nullptr) {
-                    current_span[size_class] = span;
-                    return ptr;
+
+            // {
+            //     std::unique_lock<std::mutex> lock(span_mtx);
+                span = cur_span[size_class];
+                while(span!=nullptr) { // only happens after resets
+                    ptr = span->Allocate(type_id, gc_mark_bit, tid);
+                    if (ptr!=nullptr) {
+                        spans->current_span[size_class] = span;
+                        cur_span[size_class] = span->next_span;
+                        return ptr;
+                    }
+                    span = span->next_span; 
                 }
-            }
+            // }
         }
 
 
@@ -193,11 +206,13 @@ struct GC_Arena {
             return nullptr;
 
         span = new GC_Span(this, traits, gc_mark_bit);
-        // if (prev_span!=nullptr)
-        //     prev_span->next_span = span;
 
-        current_span[size_class] = span;
-        Spans[size_class].push_back(span);
+        spans->current_span[size_class] = span;
+
+        // {
+        //     std::unique_lock<std::mutex> lock(span_mtx);
+            Spans[size_class].push_back(span);
+        // }
 
         return span->Allocate(type_id, gc_mark_bit, tid);
     }
@@ -221,22 +236,24 @@ struct GC {
     GC_Arena *arena;
     DT_array_retire *retired_arr=nullptr;
     DT_node_retire *retired_nodes=nullptr;
+
+    std::array<Thread_State*, 64> thread_states{};
     
     GC(int);
     void DoubleSize(Scope_Struct*);
-    inline void Print() {
+    inline void Print(Thread_State *spans) {
         std::cout << "Arena addr: " << arena->arena << "\n";
         std::cout << "allocated: " << arena->size_allocated << "\n";
         for (int i=0; i<GC_obj_sizes; ++i) {
             std::cout << gc_sizes[i] << ": " << arena->Spans[i].size() << "\n";
             if (arena->Spans[i].size()>0) {
-                if (arena->current_span[i])
-                std::cout << "\t" << arena->current_span[i]->free_idx << " / " << arena->current_span[i]->N << "\n";
+                if (spans->current_span[i])
+                std::cout << "\t" << spans->current_span[i]->free_idx << " / " << spans->current_span[i]->N << "\n";
             }
         }
         std::cout << "\n";
     }
-    inline void *Allocate(Scope_Struct *scope_struct, int size, uint16_t type_id, int tid) {
+    inline void *Allocate(Scope_Struct *scope_struct, Thread_State *spans, int size, uint16_t type_id, int tid) {
         int obj_class = GC_size_to_c[(size+7)/8];
 
         if(size>GC_max_object_size) {
@@ -244,16 +261,16 @@ struct GC {
             return nullptr;
          }
         
-        void *ptr = arena->Allocate(obj_class, type_id, tid, mark_bit);
+        void *ptr = arena->Allocate(spans, obj_class, type_id, tid, mark_bit);
         if(ptr==nullptr) {
             Sweep(scope_struct);
-            ptr = arena->Allocate(obj_class, type_id, tid, mark_bit);
+            ptr = arena->Allocate(spans, obj_class, type_id, tid, mark_bit);
             if (ptr==nullptr) {
                 LogErrorC(-1, "ARENA FULL.");
-                Print();
+                Print(spans);
                 std::exit(0);
                 DoubleSize(scope_struct);
-                return arena->Allocate(obj_class, type_id, tid, mark_bit);
+                return arena->Allocate(spans, obj_class, type_id, tid, mark_bit);
             }
         }
         return ptr;

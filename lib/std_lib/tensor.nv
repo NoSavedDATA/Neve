@@ -13,7 +13,6 @@ class tensor
 			cumprod = cumprod * shape[-i]
 			self.stride.append(cumprod)
 
-
 		self.dims_prod = shape.prod()
 		self.data = c_malloc64(dsize(type)*self.dims_prod)
 		self.type=type
@@ -61,6 +60,20 @@ class tensor
 					val = 0
 				pack[i*256+j] = val
 		return 0
+	def int pack_float_128(float[] pack, int m_offset, int n_offset)
+		int m=self.shape[-2], n=self.shape[-1]
+		float[] v = self.data
+		for i=0, i<128
+			int row = m_offset+i
+			for j=0, j<128
+				int col = (n_offset+j)
+				float val
+				if row<m and col<n
+					val = v[row*n+col]
+				else
+					val = 0
+				pack[i*128+j] = val
+		return 0
 
 def tensor zeros_tensor(int type, array<int> dims)
 	tensor x = new tensor(type, dims)
@@ -71,13 +84,25 @@ def tensor zeros_tensor(int type, array<int> dims)
 			
 	return x
 
-def tensor randn_tensor(int type, array<int> dims)
+
+def tensor randu_tensor(int type, array<int> dims, float a=0.0, float b=1.0)
 	tensor x = new tensor(type, dims)
 	if type==float_t
 		float[] v = x.data
 		for i=0, i<x.dims_prod
-			v[i] = randn(0,1)
-			
+			v[i] = randu(a,b)
+	return x
+
+def tensor rand_tensor(int type, array<int> dims, float a=0.0, float b=1.0)
+	return randu_tensor(type, dims, a, b)
+
+
+def tensor randn_tensor(int type, array<int> dims, float mean=0.0, float std=1.0)
+	tensor x = new tensor(type, dims)
+	if type==float_t
+		float[] v = x.data
+		for i=0, i<x.dims_prod
+			v[i] = randn(mean,std)
 	return x
 
 def tensor tensor_int_mult(tensor x, int y)
@@ -103,6 +128,7 @@ def tensor tensor_tensor_mult(tensor x, tensor y)
 def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 								   int m, int n, int p,
 								   int m_main, int n_main)
+
 	int t_rows = m_main//tN
 	int row_offset = tid * t_rows
 
@@ -111,7 +137,7 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 
 
 
-	float[65536] pack
+	float[65536] pack # 256x256
 	for j=0, j<n_main, 256
 		for k=0, k<p, 256
 			y.pack_float_256(pack, k, j)
@@ -170,11 +196,10 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 		
 	
 
-
-
-
 def tensor tensor_tensor_mma(tensor x, tensor y)
 	
+	int MC = 128
+
 	array<int> new_dims
 
 	for i=0, i<x.shape.size()-2
@@ -197,9 +222,10 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 		float[] u = y.data
 		float[] w = out.data
 
-		finish
-			asyncs 16 float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
+		int threads = min(tHW, max(1, m//MC))
+		print("Ideal threads: ", threads)
 
+		finish
+			asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
 
 	return out
-

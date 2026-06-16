@@ -108,7 +108,8 @@ void Generate_Struct_Types() {
     StructType *Scope_Struct_Type = StructType::create(
         *TheContext,
         {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize),
-         intTy, int8PtrTy, GC_Struct_Type,
+         intTy, int8PtrTy, 
+         PointerType::getUnqual(GC_Struct_Type),
          ArrayType::get(int8Ty, PrintBufferSize),
          intTy},
         "st.scope_struct"

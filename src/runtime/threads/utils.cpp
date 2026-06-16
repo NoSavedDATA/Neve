@@ -44,6 +44,11 @@ extern "C" float emerge_float(char *fn_name, char *var_name) {
 
 
 
+extern "C" int tHW_fn(Scope_Struct *scope_struct) {
+    return std::thread::hardware_concurrency();
+}
+
+
 
 int last_thread_id=1;
 

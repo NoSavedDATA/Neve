@@ -1191,6 +1191,12 @@ void set_functions_args_type() {
 		Function_Arg_Names["array_eq_int"].push_back("2");
 	
 		
+		Function_Arg_Types["tHW_fn"]["0"] = "Scope_Struct";
+		
+		Function_Arg_DataTypes["tHW_fn"]["0"] = Data_Tree("Scope_Struct");
+		
+		Function_Arg_Names["tHW_fn"].push_back("0");
+		
 		Function_Arg_Types["get_tid"]["0"] = "Scope_Struct";
 		
 		Function_Arg_DataTypes["get_tid"]["0"] = Data_Tree("Scope_Struct");

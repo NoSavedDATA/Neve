@@ -280,7 +280,6 @@ extern "C" void GC_array_append_barrier(uint16_t type, Scope_Struct *ctx, DT_arr
 extern "C" void GC_write_barrier_str(uint16_t type, GC *gc, void *src, void **slot, char *ptr, int size) {
     marks++;
     GC_Arena *arena = gc->arena;
-
     // bool marking = __atomic_load_n(&gc->marking, __ATOMIC_ACQUIRE);
     // if (marking) {
         // void* old = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
@@ -434,7 +433,6 @@ void GC::CleanUp_Unused(int tid) {
         // if (cur)
         //     cur->next_span = span_ST;
 
-        
         GC_Span *span_ST = nullptr, *free_span_ST = nullptr, *last_free = nullptr;
         int span_id=-1;
         for (const auto &span : arena->Spans[span_group]) {
@@ -466,7 +464,8 @@ void GC::CleanUp_Unused(int tid) {
             last_free->next_span = span_ST;
             first_span = free_span_ST;
         }
-        arena->current_span[span_group] = first_span;
+
+        arena->cur_span[span_group] = first_span;
     }
     mark_bit ^= 1;
 }

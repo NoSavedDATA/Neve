@@ -55,8 +55,9 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy) {
     asyncs_count = scope_to_copy->asyncs_count;
     
     previous_scope = scope_to_copy;
-    inner_most = scope_to_copy->inner_most;
-    // gc = inner_most->gc;
+
+    gc = scope_to_copy->gc;
+    tN = scope_to_copy->asyncs_count;
 }
 
 
@@ -86,7 +87,6 @@ extern "C" void set_scope_line(Scope_Struct *scope_struct, int line) {
 
 extern "C" Scope_Struct *scope_struct_CreateFirst() {
     Scope_Struct *scope_struct = new Scope_Struct();
-    scope_struct->inner_most = scope_struct;
     return scope_struct;
 }
 extern "C" Scope_Struct *scope_struct_Create() {
@@ -142,7 +142,7 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     }
     
     scope_struct->thread_id = thread_id;
-    scope_struct->gc = new GC(thread_id);
+    scope_struct->spans = new Thread_State(scope_struct);
     return 0;
 }
 
@@ -163,13 +163,10 @@ extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
 
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
-    scope_struct_copy->inner_most = scope_struct_copy;
 
     for(int i=0; i<uniques_count; ++i)
         scope_struct_copy->pointers_stack[i] = scope_struct->pointers_stack[i];
     scope_struct_copy->stack_top = uniques_count;
-
-    scope_struct_copy->tN = scope_struct->asyncs_count;
 
     return scope_struct_copy;
 }
@@ -221,24 +218,6 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
 
 extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
     // Called by threads exiting
-    GC *gc = scope_struct->gc;
-
-    // std::cout << "***sweep " << "\n";
-
-    gc->Sweep(scope_struct);
-
-    for (int span_group=0; span_group<gc->arena->Spans.size(); span_group++) {
-        for (const auto &span : gc->arena->Spans[span_group]) {
-            // free(span->mark_bits);
-            // free(span->type_metadata);
-            // free(span);
-        }
-    } 
-    // free(arena->arena); // todo: channels may receive data only after the arena was cleaned
-    free(gc->arena->metadata);
-
-
     free(scope_struct);
-    free(gc);
 }
 
