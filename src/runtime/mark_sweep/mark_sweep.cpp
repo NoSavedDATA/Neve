@@ -88,6 +88,24 @@ Thread_State::Thread_State(Scope_Struct *ctx) : ctx(ctx) {};
 
 WorkList::WorkList(GC_Node node) : node(node) {};
 
+
+void GC::stw() {
+    for (int i=0; i<MAX_THREADS; ++i) {
+        auto state = states[i];
+        if (state)
+            __atomic_store_n(&state->stw, true, __ATOMIC_RELEASE);
+    }
+}
+
+void GC::un_stw() {
+    for (int i=0; i<MAX_THREADS; ++i) {
+        auto state = states[i];
+        if (state)
+            __atomic_store_n(&state->stw, false, __ATOMIC_RELEASE);
+    }
+}
+
+
 void GC_Observer(Scope_Struct *scope_struct) {
 
     GC *gc = scope_struct->gc;
@@ -166,11 +184,14 @@ extern "C" void scope_struct_Join_GC(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Alloc_GC(Scope_Struct *scope_struct) {
+    // Only in main thread main expr
     GC *gc = new GC(scope_struct->thread_id);
     scope_struct->gc = gc;
     scope_struct->spans = new Thread_State(scope_struct);
     if(concurrent)
         scope_struct->gc_thread = std::thread(GC_Observer, scope_struct);
+
+    scope_struct->gc->states[0] = scope_struct->spans;
 }
 
 
@@ -198,7 +219,7 @@ GC_Node::GC_Node() {}
 
 void GC::DoubleSize(Scope_Struct *ctx) {
     // Not working
-    std::unique_lock<std::mutex> lock(arena->sweep_mtx);
+    ctx->stw_wait();
     std::cout << "DOUBLE ARENA SIZE" << "\n";
 
     int prev_size = arena->arena_size;

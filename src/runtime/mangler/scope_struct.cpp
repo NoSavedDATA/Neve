@@ -142,7 +142,9 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     }
     
     scope_struct->thread_id = thread_id;
-    scope_struct->spans = new Thread_State(scope_struct);
+    auto state = new Thread_State(scope_struct);
+    scope_struct->spans = state;
+    scope_struct->gc->states[thread_id] = state;
     return 0;
 }
 
@@ -218,6 +220,10 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
 
 extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
     // Called by threads exiting
-    free(scope_struct);
+    
+    // int tid = scope_struct->thread_id;
+    // scope_struct->gc->states[tid] = nullptr;
+    // free(scope_struct->spans);
+    // free(scope_struct);
 }
 

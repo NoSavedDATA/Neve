@@ -13,7 +13,6 @@
 Channel::Channel() {}
 
 void Channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
-    // std::unique_lock<std::mutex> lock(scope_struct->gc->arena->sweep_mtx);
     this->buffer_size = buffer_size;
     __atomic_store_n(&this->buffer_size, buffer_size, __ATOMIC_RELEASE);
     this->type = type;

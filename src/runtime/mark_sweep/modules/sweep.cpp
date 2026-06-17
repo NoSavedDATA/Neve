@@ -36,6 +36,7 @@ int GC_Span::Sweep(int tid, uint64_t mark_bit) {
             uint64_t set_mask = 1ULL << (idx&63);
             bits = bits & ~set_mask;
             if (get_1(alloc_bits, idx)) {
+
                 uint16_t u_type = get_16_r12(type_metadata, idx);
                 void *obj_addr = static_cast<char*>(span_address) + idx*elem_size;
 
@@ -50,8 +51,6 @@ int GC_Span::Sweep(int tid, uint64_t mark_bit) {
                 set_1(alloc_bits, idx, 0ULL); 
                 // std::cout << "set0 to " << data_type_to_name()[u_type] << "|" << u_type << ", size: " << elem_size << ", addr: " << obj_addr << "\n";
 
-                if (u_type==113)
-                    std::cout << "IS TENSOR" << "\n";
 
                 if(u_type==0||u_type==100||u_type==112||type_info[u_type]!=nullptr)
                     continue;
@@ -314,15 +313,15 @@ extern "C" void GC_write_barrier_obj(uint16_t type, GC *gc, void *src, void **sl
 }
 
 bool GC_Arena::mark_worklist_pointers(Scope_Struct *scope_struct, uint64_t mark_bit) {
+
     uint16_t type16;
     GC_Node node;
 
-    std::unique_lock<std::mutex> lock(sweep_mtx, std::defer_lock);
     bool locked=false;
     while (scope_struct->alive) {
         if (!topw) {
             if (!locked) {
-                lock.lock();
+                gc->stw();
                 locked = true;
             }
             topw = mutatorw.exchange(nullptr, std::memory_order_acquire);
@@ -355,13 +354,13 @@ bool GC_Arena::mark_worklist_pointers(Scope_Struct *scope_struct, uint64_t mark_
         gc_list(node.ptr, type16, mark_bit);
     }
     if (!locked)
-        lock.lock();
+        gc->stw();
 
     __atomic_store_n(&gc->marking, false, __ATOMIC_RELEASE);
     topw=nullptr;
     if(scope_struct->alive)
         gc->CleanUp_Unused(scope_struct->thread_id);
-    lock.unlock();
+    gc->un_stw();
     return true;
 }
 
@@ -402,21 +401,24 @@ void GC_Arena::check_roots_worklist(Scope_Struct *scope_struct, uint64_t mark_bi
 
 // sweep
 void GC::Sweep(Scope_Struct *scope_struct) {
+
     int tid = scope_struct->thread_id;
     __atomic_store_n(&marking, true, __ATOMIC_RELEASE);
-    std::unique_lock<std::mutex> lock(arena->sweep_mtx, std::defer_lock);
 
     // std::cout << "sweep" << "\n";
     arena->gen += 2;
 
-    lock.lock();
-    arena->check_roots_worklist(scope_struct, mark_bit);
-    lock.unlock();
-    arena->mark_worklist_pointers(scope_struct, mark_bit);
-    // std::cout << "sweep" << "\n";
-    __atomic_store_n(&marking, false, __ATOMIC_RELEASE);
+    stw();
+    for (int i=0; i<MAX_THREADS; ++i) {
+        auto state = states[i];
+        if (state)
+            arena->check_roots_worklist(state->ctx, mark_bit);
+    }
+    un_stw();
+    arena->mark_worklist_pointers(states[0]->ctx, mark_bit);
     allocations=0;
     size_occupied=0;
+    // std::cout << "sweep" << "\n";
 }
 
 
@@ -434,16 +436,19 @@ void GC::CleanUp_Unused(int tid) {
         //     cur->next_span = span_ST;
 
         GC_Span *span_ST = nullptr, *free_span_ST = nullptr, *last_free = nullptr;
-        int span_id=-1;
+        int span_id=0;
         for (const auto &span : arena->Spans[span_group]) {
-            span_id++;
+            span->next_span=nullptr;
 
             int obj_size = span->elem_size;
             int free_slots = 0; 
             
             span->Sweep(tid, mark_bit);
 
-            // std::cout << free_slots << " | " << span->N << " -- " << obj_size << "|" << span_id << "\n";
+            // std::cout << free_slots << " | " << span->N << " -- " << obj_size << "|" << span_id++ << "\n";
+            if (span->in_use) // do not let routes to any thread's span
+                continue;
+
             bool is_free = (span->free_idx<span->N||free_slots==span->N);
             if (is_free) {
                 if(!last_free)
@@ -459,14 +464,17 @@ void GC::CleanUp_Unused(int tid) {
                 span->free_idx=0;
             }
         }
+
         GC_Span *first_span = span_ST;
         if (last_free) {
             last_free->next_span = span_ST;
             first_span = free_span_ST;
         }
 
-        arena->cur_span[span_group] = first_span;
+        __atomic_store_n(&arena->cur_span[span_group], first_span, __ATOMIC_RELEASE);
     }
+
+
     mark_bit ^= 1;
 }
 

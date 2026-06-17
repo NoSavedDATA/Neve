@@ -17,6 +17,7 @@
 #include "../data_types/list.h"
 #include "../mangler/scope_struct.h"
 #include "../pool/pool.h"
+#include "../threads/cas.h"
 #include "include.h"
 
 const int word_bits=64;
@@ -52,22 +53,35 @@ struct GC_Span;
 struct GC;
 
 
-
-struct Thread_State {
-    std::array<GC_Span*, GC_obj_sizes> current_span{};
-    bool stw=false; //atomic
-    Scope_Struct *ctx;
-    Thread_State(Scope_Struct*);
-};
-
-extern std::array<GC_span_traits*, GC_obj_sizes> GC_span_traits_vec;
-
 struct GC_Node{
     void *ptr;
     uint16_t type;
     GC_Node(void *, uint16_t);
     GC_Node();
 };
+
+struct WorkList {
+    GC_Node node;
+    WorkList *next=nullptr;
+    WorkList(GC_Node);
+};
+
+struct Thread_State {
+    std::array<GC_Span*, GC_obj_sizes> current_span{};
+    bool stw=false; //atomic
+    Scope_Struct *ctx;
+    Thread_State(Scope_Struct*);
+    WorkList *work_stack=nullptr;
+    inline void stw_wait() {
+        while(__atomic_load_n(&stw, __ATOMIC_ACQUIRE)) {
+            int s=2;
+            cas_sleep(s);
+        }
+    }
+};
+
+extern std::array<GC_span_traits*, GC_obj_sizes> GC_span_traits_vec;
+
 
 
 struct GC_span_traits {
@@ -82,6 +96,7 @@ struct GC_Span {
     // char *cur_free, *end;
     GC_Span *next_span=nullptr;
     bool sweeped=true;
+    bool in_use=true;
 
     int words, type_words, free_idx=0, elem_size, N, gen=0, arena_offset;
 
@@ -125,11 +140,6 @@ inline bool Check_Arena_Size_Ok(const int arena_size, const int size_allocated) 
     return true;
 }
 
-struct WorkList {
-    GC_Node node;
-    WorkList *next=nullptr;
-    WorkList(GC_Node);
-};
 
 struct GC_Arena {
     // Get an arena of 64MB, and set pages size to 8 KB
@@ -139,7 +149,7 @@ struct GC_Arena {
     void *arena, *metadata;
     GC *gc;
 
-    std::mutex sweep_mtx, span_mtx;
+    std::mutex span_mtx;
 
     std::array<std::vector<GC_Span*>, GC_obj_sizes> Spans;
     std::array<GC_Span*, GC_obj_sizes> cur_span{};
@@ -173,7 +183,7 @@ struct GC_Arena {
     }
 
     inline void* Allocate(Thread_State *spans, int size_class, uint16_t type_id, int tid, uint64_t gc_mark_bit) {
-        std::unique_lock<std::mutex> lock(sweep_mtx);
+        spans->stw_wait();
 
         GC_span_traits* traits = GC_span_traits_vec[size_class];
         GC_Span* span = spans->current_span[size_class];
@@ -185,34 +195,38 @@ struct GC_Arena {
             if (ptr != nullptr)
                 return ptr;
 
-            // {
-            //     std::unique_lock<std::mutex> lock(span_mtx);
-                span = cur_span[size_class];
-                while(span!=nullptr) { // only happens after resets
+            span->in_use=false;
+            {
+                std::unique_lock<std::mutex> lock(span_mtx);
+                
+                span = __atomic_load_n(&cur_span[size_class], __ATOMIC_ACQUIRE);
+                while(span!=nullptr&&tid==0) { // only happens after resets
                     ptr = span->Allocate(type_id, gc_mark_bit, tid);
                     if (ptr!=nullptr) {
+                        span->in_use=true;
                         spans->current_span[size_class] = span;
                         cur_span[size_class] = span->next_span;
+                        // std::cout << "thread " << tid << " got " << size_class << " | " << span << "\n";
                         return ptr;
                     }
                     span = span->next_span; 
                 }
-            // }
+            }
         }
 
 
-        // Need new span
-        if (!Check_Arena_Size_Ok(arena_size, size_allocated + traits->size))
-            return nullptr;
+        {
+            std::unique_lock<std::mutex> lock(span_mtx);
+            // Need new span
+            if (!Check_Arena_Size_Ok(arena_size, size_allocated + traits->size))
+                return nullptr;
 
-        span = new GC_Span(this, traits, gc_mark_bit);
+            span = new GC_Span(this, traits, gc_mark_bit);
 
-        spans->current_span[size_class] = span;
+            spans->current_span[size_class] = span;
 
-        // {
-        //     std::unique_lock<std::mutex> lock(span_mtx);
             Spans[size_class].push_back(span);
-        // }
+        }
 
         return span->Allocate(type_id, gc_mark_bit, tid);
     }
@@ -237,7 +251,7 @@ struct GC {
     DT_array_retire *retired_arr=nullptr;
     DT_node_retire *retired_nodes=nullptr;
 
-    std::array<Thread_State*, 64> thread_states{};
+    std::array<Thread_State*, MAX_THREADS> states{};
     
     GC(int);
     void DoubleSize(Scope_Struct*);
@@ -281,6 +295,8 @@ struct GC {
     void retire_node(DT_map_node *data, int tid);
     void retire_arr(void *, int, int);
     void retire_clean();
+    void stw();
+    void un_stw();
     void Sweep(Scope_Struct *);
     void Worker(Scope_Struct *);
     void CleanUp_Unused(int);

@@ -69,6 +69,9 @@ struct Scope_Struct {
         void *ret = gc->Allocate(this, spans, size, type_id, thread_id); 
         return ret;
     }
+    inline void stw_wait() {
+        spans->stw_wait();
+    }
 };
 
 

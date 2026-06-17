@@ -18,7 +18,7 @@ DT_array::DT_array() {}
 
 void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type) {
     // std::cout << "New of size " << size << "\n";
-    std::unique_lock<std::mutex> lock(ctx->gc->arena->sweep_mtx);
+    ctx->stw_wait();
     __atomic_store_n(&this->virtual_size, size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->elem_size, elem_size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->type, type, __ATOMIC_RELEASE);
@@ -32,7 +32,7 @@ void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t
 }
 
 void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
-    std::unique_lock<std::mutex> lock(ctx->gc->arena->sweep_mtx);
+    ctx->stw_wait();
     __atomic_store_n(&this->virtual_size, size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->elem_size, 8, __ATOMIC_RELEASE);
     __atomic_store_n(&this->type, type, __ATOMIC_RELEASE);
@@ -143,7 +143,7 @@ extern "C" void array_double_size(Scope_Struct *scope_struct, DT_array *vec) {
     memcpy(new_data, data, old_size);
 
     {
-        std::unique_lock<std::mutex> lock(scope_struct->gc->arena->sweep_mtx);
+        scope_struct->stw_wait();
         scope_struct->gc->retire_arr(data, old_size, tid);
     }
 
@@ -168,7 +168,7 @@ extern "C" void array_double_size(Scope_Struct *scope_struct, DT_array *vec) {
 }
 
 extern "C" float array_clear(Scope_Struct *scope_struct, DT_array *vec) {
-    std::unique_lock<std::mutex> lock(scope_struct->gc->arena->sweep_mtx);
+    scope_struct->stw_wait();
     __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
     return 0;
 }

@@ -23,7 +23,6 @@ DT_map_node::DT_map_node(int key_size, int value_size) {
 DT_map::DT_map() {}
 
 void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std::string key_type, std::string value_type) {
-    // std::unique_lock<std::mutex> lock(ctx->gc->arena->sweep_mtx);
     this->size = size;
     this->key_size = key_size;
     this->val_size = value_size;

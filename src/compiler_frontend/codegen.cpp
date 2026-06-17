@@ -678,6 +678,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
   //     "cmp_alloc"
   // );
   // Compare GC_size_alloc > 10000
+
   Value *cmp_size = Builder->CreateICmpUGT(  // unsigned since uint64_t
       GC_size_alloc,
       ConstantInt::get(Type::getInt64Ty(*TheContext), sweep_after_alloc),

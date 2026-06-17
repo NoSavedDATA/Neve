@@ -28,6 +28,9 @@ extern std::vector<std::string> op_map_names;
 constexpr int32_t TERMINATE_VARARG = -2147483647;
 constexpr int32_t COPY_TO_END_INST = 0x7FADBEEF;
 
+constexpr int32_t MAX_THREADS = 48;
+
+
 extern bool Shall_Exit;
 extern int Array_Size;
 
