@@ -1,15 +1,15 @@
 CXX := clang++-19 -std=c++17
 LLVM_CONFIG := llvm-config-19 --link-static --libs core orcjit native
 
-MAIN_CXXFLAGS := -rdynamic -fno-exceptions #-march=native -mavx -mavx2 -O3 -ffast-math
-OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH #-finline-functions -funroll-loops -w -flto
+MAIN_CXXFLAGS := -rdynamic -fno-exceptions -march=native -mavx -mavx2 -O3 -ffast-math
+OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -finline-functions -funroll-loops -w -flto
 SYSTEM_LIBS := -latomic -ldl -lrt -pthread #-fsanitize=thread -g -O1 -fno-omit-frame-pointer
 
 # Get LLVM flags (must be from static LLVM build)
 LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG) --cxxflags)
 LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
 LLVM_SYSTEM_LIBS := $(shell $(LLVM_CONFIG) --system-libs)
-LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native)
+LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native nvptx)
 
 
 # Combine all flags

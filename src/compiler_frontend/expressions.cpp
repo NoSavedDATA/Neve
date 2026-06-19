@@ -186,6 +186,8 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
 
   i = i + arg_offset-1;
+  if (gpu_fn.count(fn_name)>0)
+      i++;
   // -- Add Default Arguments -- //
   if (Function_Arg_Count.count(fn_name)>0&&!is_vararg) {    
       for (; i<Args.size(); ++i) { // Positional Arguments
@@ -1104,12 +1106,12 @@ MainExprAST::MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
   
   
   
-PrototypeAST::PrototypeAST(const std::string &Name, Data_Tree ReturnType, const std::string &Class,
+PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name, Data_Tree ReturnType, const std::string &Class,
               const std::string &Method,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
               bool IsOperator, unsigned Prec)
-      : Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
+      : parser_struct(parser_struct), Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
         IsOperator(IsOperator), Precedence(Prec) {
 
     functions_return_data_type[Name] = ReturnType;
@@ -1581,7 +1583,8 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   if(Depth>1&&!FromLib&&is_nsk_fn)
       arg_type_check_offset++;
-
+  if (gpu_fn.count(Callee)>0)
+      arg_type_check_offset--;
 
   if(!is_first_citizen)
       Semantic_Arguments_Check(parser_struct, this->Args, Callee, is_nsk_fn, sent_args, arg_type_check_offset);

@@ -5,6 +5,7 @@
 #include "codegen/include.h"
 #include "common/extension_functions.h"
 #include "compiler_frontend/include.h"
+#include "cuda/include.h"
 #include "data_types/include.h"
 #include "math/include.h"
 #include "mangler/include.h"

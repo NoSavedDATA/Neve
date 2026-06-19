@@ -37,9 +37,9 @@ class PrototypeAST;
 class ExprAST;
 
 /// FunctionAST - This class represents a function definition itself.
-FunctionAST::FunctionAST(std::unique_ptr<PrototypeAST> Proto,
+FunctionAST::FunctionAST(Parser_Struct parser_struct, std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body)
-        : Proto(std::move(Proto)), Body(std::move(Body)) {}
+        : parser_struct(parser_struct), Proto(std::move(Proto)), Body(std::move(Body)) {}
   
 
 

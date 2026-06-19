@@ -70,6 +70,11 @@ void early_init() {
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
   InitializeNativeTargetAsmParser();
+
+  LLVMInitializeNVPTXTarget();
+  LLVMInitializeNVPTXTargetInfo();
+  LLVMInitializeNVPTXTargetMC();
+  LLVMInitializeNVPTXAsmPrinter();
 }
 
 int main(int argc, char* argv[]) {

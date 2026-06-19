@@ -40,12 +40,38 @@ inline void RegisterData() {
     }
 }
 
+std::string EmitPtx() {
+    llvm::SmallString<0> Buffer;
+    llvm::raw_svector_ostream OS(Buffer);
+
+    llvm::legacy::PassManager PM;
+
+    if (PtxTM->addPassesToEmitFile(
+            PM,
+            OS,
+            nullptr,
+            llvm::CodeGenFileType::AssemblyFile))
+    {
+        std::cout << "CANNOT EMIT PTX" << "\n";
+        std::exit(0);
+    }
+
+    PM.run(*PtxModule);
+
+    // OS.flush();
+    std::string PTX(Buffer.str());
+
+    return PTX;
+}
+
 void InitializeModule() {
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
-  if (IsJIT)  // As jit
+  PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
+  if (IsJIT) { // As jit
       TheModule->setDataLayout(TheJIT->getDataLayout());
+  }
   else { // As compiler
       char *triple_c = LLVMGetDefaultTargetTriple();
       std::string TargetTriple(triple_c);
@@ -60,6 +86,26 @@ void InitializeModule() {
       CTM = std::unique_ptr<TargetMachine>(
         Target->createTargetMachine(TargetTriple, "x86-64-v3", "+sse2", opt, RM)
     );
+  }
+
+  {
+    std::string Error;
+    auto Target = llvm::TargetRegistry::lookupTarget("nvptx64", Error);
+
+    llvm::TargetOptions Opt;
+    auto RM = std::optional<llvm::Reloc::Model>();
+
+    PtxTM = std::unique_ptr<llvm::TargetMachine>(
+        Target->createTargetMachine(
+            "nvptx64-nvidia-cuda",
+            "sm_80",          // or sm_70, sm_86, etc
+            "",
+            Opt,
+            RM
+        )
+    );
+    PtxModule->setDataLayout(PtxTM->createDataLayout());
+    PtxModule->setTargetTriple("nvptx64-nvidia-cuda");
   }
   //std::cout << "Initialize Module\n";
 
@@ -81,7 +127,7 @@ void InitializeModule() {
 
   Generate_Struct_Types();
   str_toTy = {{"char", int8Ty}, {"i8", int8Ty}, {"int", intTy}, {"i64", int64Ty}, {"i16", int16Ty},
-              {"bool", boolTy}, {"float_ptr", floatPtrTy},
+              {"bool", boolTy}, {"float_ptr", floatPtrTy}, {"void", voidTy},
               {"float", floatTy}, {"void", voidTy}, {"str", struct_types["DT_str"]}};
 
   for (auto &pair : PriorityProtos) {
@@ -688,9 +734,107 @@ const std::string& FunctionAST::getName() const {
   return Proto->getName();
 }
 
+
+void SetKernelVars(std::string function_name) {
+    FunctionCallee tid_x =
+    PtxModule->getOrInsertFunction(
+        "llvm.nvvm.read.ptx.sreg.tid.x",
+        Builder->getInt32Ty());
+
+    FunctionCallee ctaid_x =
+        PtxModule->getOrInsertFunction(
+            "llvm.nvvm.read.ptx.sreg.ctaid.x",
+            Builder->getInt32Ty());
+
+    FunctionCallee ntid_x =
+        PtxModule->getOrInsertFunction(
+            "llvm.nvvm.read.ptx.sreg.ntid.x",
+            Builder->getInt32Ty());
+
+    FunctionCallee nctaid_x =
+        PtxModule->getOrInsertFunction(
+            "llvm.nvvm.read.ptx.sreg.nctaid.x",
+            Builder->getInt32Ty());
+
+    Value *tid  = Builder->CreateCall(tid_x);
+    Value *bid  = Builder->CreateCall(ctaid_x);
+    Value *bdim = Builder->CreateCall(ntid_x);
+
+    
+    function_values[function_name]["tid"] = tid;
+    function_values[function_name]["bid"] = bid;
+}
+
+Function *FunctionAST::codegen_gpu() {
+
+  auto &P = *Proto;
+
+  FunctionProtos[Proto->getName()] = std::move(Proto);
+  std::string function_name = P.getName();
+
+
+  Function *TheFunction = PtxModule->getFunction(function_name); 
+  if(!TheFunction)
+    std::cout << "PTX function " << function_name << " not found.\n";
+
+
+
+  auto oldBuilder = std::move(Builder);
+  Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
+
+  BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
+  Builder->SetInsertPoint(BB);
+
+
+  Value *scope_struct = ConstantPointerNull::get(
+            cast<PointerType>(int8PtrTy)
+        );
+
+  int args_count = P.Args.size();
+  auto it = TheFunction->arg_begin();
+  for (int i=0; i<args_count; ++i, ++it) {
+        llvm::Argument &Arg = *it;
+
+        std::string arg_name = Arg.getName().str();
+        function_values[function_name][arg_name] = &Arg;
+  }
+
+  SetKernelVars(function_name);
+
+  for (auto &body : Body)
+    body->codegen(scope_struct);
+  
+  Builder->CreateRetVoid(); 
+
+
+  Builder = std::move(oldBuilder);
+
+  if (verifyFunction(*TheFunction, &errs())) {
+    errs() << "Invalid function!\n";
+  }
+  // PtxModule->print(llvm::errs(), nullptr);
+
+  return TheFunction;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 Function *FunctionAST::codegen() {
   if (not ShallCodegen)
     return nullptr;
+
+
+  if (parser_struct.gpu)
+      return codegen_gpu();
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
@@ -700,6 +844,7 @@ Function *FunctionAST::codegen() {
 
   FunctionProtos[Proto->getName()] = std::move(Proto);
   std::string function_name = P.getName();
+
 
   Function *TheFunction = getFunction(function_name);
   if (!TheFunction)
@@ -742,9 +887,7 @@ Function *FunctionAST::codegen() {
     llvm::Argument &Arg = *it;
 
     std::string arg_name = Arg.getName().str();
-    // std::cout << "FUNCTION " << current_codegen_function << " ARG IS: " << arg_name  << "\n";
 
-    // Default args
     if (arg_name == "scope_struct") {
         StructType *st = struct_types["scope_struct"];
         scope_struct = &Arg;

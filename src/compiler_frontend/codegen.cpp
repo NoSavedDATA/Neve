@@ -388,7 +388,7 @@ Value *LoadVal(std::string fn_name, std::string name, Data_Tree dt) {
 }
 
 Value *NumberExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
+  if (!ShallCodegen)
     return const_float(0.0f);
 
 
@@ -396,10 +396,10 @@ Value *NumberExprAST::codegen(Value *scope_struct) {
 }
 
 Value *IntExprAST::codegen(Value *scope_struct) {
-  // if (not ShallCodegen)
+  // if (!ShallCodegen)
   //   return const_int64(0);
   // return const_int64(Val);
-  if (not ShallCodegen)
+  if (!ShallCodegen)
     return const_int(0);
   return const_int(Val);
 }
@@ -433,7 +433,7 @@ Value *ConstExprAST::codegen(Value *scope_struct) {
 
 
 Value *BoolExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
+  if (!ShallCodegen)
     return const_bool(false); 
   return const_bool(Val);
 }
@@ -929,6 +929,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
      
     Value *arg = Args[i]->codegen(scope_struct);
  
+
     Data_Tree data_type = Args[i]->GetDataTree();
     std::string type = data_type.Type;
 
@@ -938,6 +939,8 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
     int tgt_arg = i + arg_offset;
     Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
     std::string expected_type = expected_data_type.Type;
+
+
 
     // casts   
     if(type=="int"&&expected_type=="float")
@@ -951,6 +954,8 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
                                  {const_int(0), const_int(0)});
     }
 
+
+
     std::string copy_fn = type+"_CopyArg";
     Function *F = TheModule->getFunction(copy_fn);
     if (F&&!is_nsk_fn) {
@@ -961,6 +966,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
                         global_str("-")});   
       arg = copied_value;
     }
+
     ArgsV.push_back(arg);
 
     if (!is_nsk_fn && !in_vec(type, primary_data_tokens)) {
@@ -986,6 +992,8 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
   }
 
   i = i + arg_offset-1;
+  if (gpu_fn.count(fn_name)>0)
+      i++;
 
   // -- Add Default Arguments -- //
   if (Function_Arg_Count.count(fn_name)>0&&!in_vec(fn_name, vararg_methods)) {
@@ -3430,16 +3438,13 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
 
     seen_var_attr = true;
     bool is_type=true;
-    for (int i=0; i<Values.size(); i++)
-    {
+    for (int i=0; i<Values.size(); i++) {
         Value *value = Values[i]->codegen(scope_struct);
         std::string type = Values[i]->GetType();
 
 
-        if (!is_type)
-        {
-            if(!in_str(type, primary_data_tokens))
-            {
+        if (!is_type) {
+            if(!in_str(type, primary_data_tokens)) {
                 std::string copy_fn = type + "_Copy";
 
                 Function *F = TheModule->getFunction(copy_fn);
@@ -3740,10 +3745,9 @@ Value *NewExprAST::codegen(Value *scope_struct) {
 
 
 Function *PrototypeAST::codegen() {
-    if (not ShallCodegen)
+    if (!ShallCodegen)
         return nullptr;
     // Make the function type:  float(float,float) etc.
-
 
     std::vector<llvm::Type *> types;
     for (auto &type : Types) {
@@ -3753,14 +3757,11 @@ Function *PrototypeAST::codegen() {
         types.push_back(Ty);
     }
 
-    
     llvm::Type *retTy = get_type_from_data(ReturnType);
-
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
-
-    Function *F =
-        Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
+    auto llvm_module = (parser_struct.gpu) ? PtxModule.get() : TheModule.get();
+    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, llvm_module);
 
     // Set names for all arguments.
     unsigned Idx = 0;
@@ -3784,6 +3785,23 @@ Function *PrototypeAST::codegen() {
         // Arg.addAttr(Attribute::NoAlias);
         // Arg.addAttr(Attribute::NonNull);
     }
+
+    if (parser_struct.gpu) {
+        llvm::Metadata *MDVals[] = {
+            llvm::ValueAsMetadata::get(F),
+            llvm::MDString::get(*TheContext, "kernel"),
+            llvm::ValueAsMetadata::get(
+                llvm::ConstantInt::get(
+                    llvm::Type::getInt32Ty(*TheContext),
+                    1))
+        };
+
+        PtxModule->getOrInsertNamedMetadata("nvvm.annotations")
+            ->addOperand(llvm::MDNode::get(*TheContext, MDVals));
+
+        F->setCallingConv(llvm::CallingConv::PTX_Kernel);
+    }
+    
     return F;
 }
 
@@ -4448,8 +4466,11 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     Value *previous_obj, *previous_stack_top;
 
-    if (!is_nsk_fn||Callee=="scope_struct_Sweep") {
-        // Prevents the case in which it allocates a slot for an argument
+    bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&llvm_callee.count(Callee)==0);
+
+    if (may_allocate) {
+        // Recovers the stack top value for the shadow stack (similar to assembly)
+        // Also, prevents the case in which it allocates a slot for an argument
 
         previous_stack_top = Load_Stack_Top(parser_struct.function_name);
         // if (!in_vec(parser_struct.function_name, {"BPE_train", "BPE_get_buff", "BPE_get_masks"})) {
@@ -4545,14 +4566,19 @@ Value *NameableCall::codegen(Value *scope_struct) {
             false
         );
     ret = Builder->CreateCall(fnTy, fn, ArgsV);
-  } else
+  } else if(gpu_fn.count(Callee)>0) {
+    std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
+    ret = callgpu(Callee, ArgsV_slice);
+    return const_float(0);
+  }
+  else
     ret = callret(Callee, ArgsV);
   
   cur_self = nullptr;
 
   if (has_obj_overwrite) // Retrieve previous object
     set_scope_obj(scope_struct, previous_obj);
-  if (!is_nsk_fn)
+  if (may_allocate)
       Set_Stack_Top(scope_struct, parser_struct.function_name);
   
 
@@ -4564,6 +4590,9 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
   if(begins_with(Callee, "map_get_")) {
+
+    std::cout << "CALL A MAP GET" << "\n";
+
     Value *packed_val = Builder->CreateExtractValue(ret, {0});
     Value *packed_bool = Builder->CreateExtractValue(ret, {1});
     packed_bool = Builder->CreateIntCast(packed_bool, boolTy, true);

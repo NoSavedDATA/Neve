@@ -132,19 +132,26 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 	int t_rows = m_main//tN
 	int row_offset = tid * t_rows
 
+	int row_end
+	if tid == tN-1
+		row_end = m
+	else
+		row_end = row_offset + t_rows
+	int row_main_end = row_end - ((row_end - row_offset) % 6)
+
 	float[] u = y.data
 	float[] w = out.data
 
 
 
-	float[65536] pack # 256x256
+	float[65536] y_pack # 256x256
 	for j=0, j<n_main, 256
 		for k=0, k<p, 256
-			y.pack_float_256(pack, k, j)
+			y.pack_float_256(y_pack, k, j)
 
-			for i=0, i<t_rows, 8
+			for t_i=row_offset, t_i+5<row_main_end, 6
+
 				float[] v = x.data
-				int t_i = row_offset+i
 
 				float[] v1 = v offby t_i*p + k
 				float[] v2 = v offby (t_i+1)*p + k
@@ -152,8 +159,6 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 				float[] v4 = v offby (t_i+3)*p + k
 				float[] v5 = v offby (t_i+4)*p + k
 				float[] v6 = v offby (t_i+5)*p + k
-				float[] v7 = v offby (t_i+6)*p + k
-				float[] v8 = v offby (t_i+7)*p + k
 
 				for jj=0, jj<256, 16
 					vec<float,16> acc1 = simd_load(w offby t_i*n+j+jj, float, 16)
@@ -162,28 +167,41 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 					vec<float,16> acc4 = simd_load(w offby (t_i+3)*n+j+jj, float, 16)
 					vec<float,16> acc5 = simd_load(w offby (t_i+4)*n+j+jj, float, 16)
 					vec<float,16> acc6 = simd_load(w offby (t_i+5)*n+j+jj, float, 16)
-					vec<float,16> acc7 = simd_load(w offby (t_i+6)*n+j+jj, float, 16)
-					vec<float,16> acc8 = simd_load(w offby (t_i+7)*n+j+jj, float, 16)
 
-					for kk=0, kk<256
-						vec<float,16> v_simd = simd_load(pack offby kk*256+jj, float, 16)
-						vec<float,16> r1 = vec_make(v1[kk],16)
-						vec<float,16> r2 = vec_make(v2[kk],16)
-						vec<float,16> r3 = vec_make(v3[kk],16)
-						vec<float,16> r4 = vec_make(v4[kk],16)
-						vec<float,16> r5 = vec_make(v5[kk],16)
-						vec<float,16> r6 = vec_make(v6[kk],16)
-						vec<float,16> r7 = vec_make(v7[kk],16)
-						vec<float,16> r8 = vec_make(v8[kk],16)
+					for kk=0, kk<256, 4
+						vec<float,16> b1 = simd_load(y_pack offby kk*256+jj, float, 16)
+						vec<float,16> b2 = simd_load(y_pack offby (kk+1)*256+jj, float, 16)
+						vec<float,16> b3 = simd_load(y_pack offby (kk+2)*256+jj, float, 16)
+						vec<float,16> b4 = simd_load(y_pack offby (kk+3)*256+jj, float, 16)
 
-						acc1 += v_simd*r1
-						acc2 += v_simd*r2
-						acc3 += v_simd*r3
-						acc4 += v_simd*r4
-						acc5 += v_simd*r5
-						acc6 += v_simd*r6
-						acc7 += v_simd*r7
-						acc8 += v_simd*r8
+						acc1 += b1*vec_make(v1[kk],16)
+						acc2 += b1*vec_make(v2[kk],16)
+						acc3 += b1*vec_make(v3[kk],16)
+						acc4 += b1*vec_make(v4[kk],16)
+						acc5 += b1*vec_make(v5[kk],16)
+						acc6 += b1*vec_make(v6[kk],16)
+
+						acc1 += b2*vec_make(v1[kk+1],16)
+						acc2 += b2*vec_make(v2[kk+1],16)
+						acc3 += b2*vec_make(v3[kk+1],16)
+						acc4 += b2*vec_make(v4[kk+1],16)
+						acc5 += b2*vec_make(v5[kk+1],16)
+						acc6 += b2*vec_make(v6[kk+1],16)
+
+						acc1 += b3*vec_make(v1[kk+2],16)
+						acc2 += b3*vec_make(v2[kk+2],16)
+						acc3 += b3*vec_make(v3[kk+2],16)
+						acc4 += b3*vec_make(v4[kk+2],16)
+						acc5 += b3*vec_make(v5[kk+2],16)
+						acc6 += b3*vec_make(v6[kk+2],16)
+
+						acc1 += b4*vec_make(v1[kk+3],16)
+						acc2 += b4*vec_make(v2[kk+3],16)
+						acc3 += b4*vec_make(v3[kk+3],16)
+						acc4 += b4*vec_make(v4[kk+3],16)
+						acc5 += b4*vec_make(v5[kk+3],16)
+						acc6 += b4*vec_make(v6[kk+3],16)
+
 
 					simd_store(w offby t_i*n+jj+j, acc1)
 					simd_store(w offby (t_i+1)*n+jj+j, acc2)
@@ -191,14 +209,12 @@ def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 					simd_store(w offby (t_i+3)*n+jj+j, acc4)
 					simd_store(w offby (t_i+4)*n+jj+j, acc5)
 					simd_store(w offby (t_i+5)*n+jj+j, acc6)
-					simd_store(w offby (t_i+6)*n+jj+j, acc7)
-					simd_store(w offby (t_i+7)*n+jj+j, acc8)
 		
 	
 
 def tensor tensor_tensor_mma(tensor x, tensor y)
 	
-	int MC = 128
+	int MC = 64
 
 	array<int> new_dims
 
@@ -208,8 +224,9 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 	int m = x.shape[-2]
 	int n = y.shape[-1]
 	int p = x.shape[-1]
-	int m_main = (m//4)*4
-	int n_main = (n//8)*8
+	#int m_main = (m//6)*6
+	int m_main = m
+	int n_main = (n//16)*16
 
 	new_dims.append(m)
 	new_dims.append(n)
@@ -218,12 +235,11 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 
 
 	if x.type==float_t
-
 		float[] u = y.data
 		float[] w = out.data
 
 		int threads = min(tHW, max(1, m//MC))
-		print("Ideal threads: ", threads)
+		#int threads=16
 
 		finish
 			asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)

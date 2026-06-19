@@ -227,6 +227,7 @@ extern "C" bool map_has_i64(Scope_Struct *scope_struct, DT_map *map, int64_t que
 
 
 extern "C" map_get_int map_get_str_int(Scope_Struct *scope_struct, DT_map *map, DT_str query) {
+    std::cout << "map_get_str_int" << "\n";
     int hash_pos = str_hash(query.str, query.size) % map->capacity;
     DT_map_node *cur_node = map->nodes[hash_pos];
     while(cur_node!=nullptr) {
@@ -254,6 +255,9 @@ extern "C" map_get_any map_get_i64_any(Scope_Struct *scope_struct, DT_map *map, 
 }
 
 extern "C" map_get_int map_get_i64_int(Scope_Struct *scope_struct, DT_map *map, int64_t query) {
+    std::cout << "map_get_i64_int" << "\n";
+    std::cout << "map " << map << "\n";
+    std::cout << "query " << query << "\n";
     int hash_pos = query % map->capacity;
     DT_map_node *cur_node = map->nodes[hash_pos];
     
@@ -266,6 +270,7 @@ extern "C" map_get_int map_get_i64_int(Scope_Struct *scope_struct, DT_map *map, 
     
     return {-1, 0};
 }
+
 extern "C" bool map_has_float(Scope_Struct *scope_struct, DT_map *map, float query) {
     int hash_pos = float_hash(query) % map->capacity;
     DT_map_node *cur_node = map->nodes[hash_pos];

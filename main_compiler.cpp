@@ -113,10 +113,13 @@ static void Compile() {
 
 __attribute__((constructor))
 void early_init() {
-    // std::cout << "Constructor Function Executed\n";
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
   InitializeNativeTargetAsmParser();
+  // llvm::InitializeNVPTXTarget();
+  // llvm::InitializeNVPTXTargetInfo();
+  // llvm::InitializeNVPTXTargetMC();
+  // llvm::InitializeNVPTXAsmPrinter();
 }
 
 int main(int argc, char* argv[]) {

@@ -80,6 +80,7 @@ LCG rng(generate_custom_seed());
 
 
 std::vector<std::unique_ptr<FunctionAST>> AllFunctions;
+std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 // Vars
 std::map<std::string, std::vector<char *>> ClassStrVecs;
@@ -140,6 +141,25 @@ void HandleDefinition() {
         ExitOnErr(TheJIT->addAST(std::move(FnAST)));
     else
         AllFunctions.push_back(std::move(FnAST));
+
+  } else {
+    // Skip token for error recovery.
+    getNextToken();
+  }
+}
+
+
+void HandleGpuDef() {
+  
+  Parser_Struct parser_struct;
+  parser_struct.gpu=true;
+  if (auto FnAST = ParseDefinition(parser_struct)) {
+    std::string fn_name = FnAST->getProto().getName();
+
+    FunctionProtos[fn_name] =
+      std::make_unique<PrototypeAST>(FnAST->getProto());
+
+    GpuFunctions[fn_name] = std::move(FnAST);
 
   } else {
     // Skip token for error recovery.
@@ -231,6 +251,9 @@ void MainLoop() {
             break;
         case tok_def:
             HandleDefinition();
+            break;
+        case tok_gpu:
+            HandleGpuDef();
             break;
         case tok_op:
             HandleOp();

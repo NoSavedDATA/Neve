@@ -32,23 +32,31 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include <memory>
 
+#include "runtime/compiler_frontend/parser_struct.h"
+
 
 class PrototypeAST;
 class ExprAST;
+class FunctionAST;
+
+
+extern std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
+  Parser_Struct parser_struct;
   std::unique_ptr<PrototypeAST> Proto;
   //std::vector<ExprAST> Body;
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    FunctionAST(std::unique_ptr<PrototypeAST> Proto,
+    FunctionAST(Parser_Struct, std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body);
   
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
   llvm::Function *codegen();
+  llvm::Function *codegen_gpu();
 };
 
 

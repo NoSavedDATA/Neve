@@ -100,6 +100,7 @@ Value *vec_make(Parser_Struct parser_struct, Function *TheFunction,
         LogError(parser_struct.line, "Vec expected size");
     
     Value *ret = Builder->CreateVectorSplat(size, ArgsV[0]);
+    // TheModule->print(llvm::errs(), nullptr);
     return ret;
 }
 

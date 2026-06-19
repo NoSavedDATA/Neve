@@ -944,11 +944,12 @@ class PrototypeAST {
     unsigned Precedence; // Precedence if a binary op.
   
     public:
+      Parser_Struct parser_struct;
       Data_Tree ReturnType;
       std::vector<std::string> Args;
       std::vector<Data_Tree> Types;
 
-      PrototypeAST(const std::string &Name, Data_Tree ReturnType,
+      PrototypeAST(Parser_Struct parser_struct, const std::string &Name, Data_Tree ReturnType,
                   const std::string &Class, const std::string &Method,
                   std::vector<std::string> Args,
                   std::vector<Data_Tree> Types,

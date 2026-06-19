@@ -25,9 +25,9 @@ extern std::unique_ptr<LLVMContext> TheContext;
 extern std::unique_ptr<LLVMContext> GlobalContext;
 
 extern std::unique_ptr<IRBuilder<>> Builder;
-extern std::unique_ptr<Module> TheModule;
+extern std::unique_ptr<Module> TheModule, PtxModule;
 extern std::unique_ptr<Module> GlobalModule;
-extern std::unique_ptr<TargetMachine> CTM;
+extern std::unique_ptr<TargetMachine> CTM, PtxTM;
 
 
 extern std::map<std::string, StructType*> struct_types;
@@ -66,6 +66,7 @@ extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Funct
                                                        Value*, Value*)>> llvm_store_idx;
 
 
+std::string EmitPtx();
 
 
 
@@ -91,11 +92,11 @@ inline Value *const_float(float val) {
 inline Value *const_bool(bool val) {
     return ConstantInt::get(Type::getInt1Ty(*TheContext), val);
 }
-
-
+inline Value *global_str(std::string _string) {
+    return Builder->CreateGlobalString(_string);
+}
 
 inline Function *getFunctionCheck(std::string Name) {
-  // First, see if the function has already been added to the current module.
   if (auto *F = TheModule->getFunction(Name))
     return F;
 
@@ -103,7 +104,6 @@ inline Function *getFunctionCheck(std::string Name) {
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
   LogError(-1, "The function " + Name + " was not found.");
-  // If no existing prototype exists, return null.
   return nullptr;
 }
 
@@ -118,10 +118,42 @@ inline Value *callret(std::string fn, const std::vector<Value *> &args) {
 }
 
 
+inline Function *getGpuFnCheck(const std::string &Name) {
+    if (auto *F = PtxModule->getFunction(Name)) {
+        if (!F->empty())
+            return F;
+    }
 
-inline Value *global_str(std::string _string) {
-    return Builder->CreateGlobalString(_string);
+    auto FI = FunctionProtos.find(Name);
+    if (FI == FunctionProtos.end())
+        return nullptr;
+
+    Function *F = FI->second->codegen();
+
+    if (F->empty())
+        GpuFunctions[Name]->codegen_gpu();
+
+    return F;
 }
+
+inline Value *callgpu(std::string fn, const std::vector<Value *> &args) {
+    auto F = getGpuFnCheck(fn);
+
+
+// PtxModule->print(llvm::errs(), nullptr);
+    auto ptx = EmitPtx();
+    // std::cout << "ptx " << ptx << "\n";
+
+    call("neve_gpu_launch", {global_str(fn), global_str(ptx), args[0], args[1]});
+
+    return const_float(0);
+}
+
+
+
+
+
+
 
 
 

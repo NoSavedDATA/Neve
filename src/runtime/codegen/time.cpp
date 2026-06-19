@@ -77,22 +77,18 @@ extern "C" float silent_sleep(Scope_Struct *scope_struct, int duration)
 
 std::chrono::high_resolution_clock::time_point START_TIME;
 
-extern "C" float start_timer(Scope_Struct *scope_struct)
-{
+extern "C" float start_timer(Scope_Struct *scope_struct) {
   START_TIME = std::chrono::high_resolution_clock::now();
  
   return 0;
 }
 
-extern "C" float end_timer(Scope_Struct *scope_struct)
-{
+extern "C" float end_timer(Scope_Struct *scope_struct) {
   std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsedTime = endTime - START_TIME;
+  double elapsed = elapsedTime.count(); 
 
-  // Print the elapsed time in seconds
-  std::cout << "Elapsed time: " << elapsedTime.count() << " seconds.\n";
+  std::cout << "Elapsed time: " << elapsed << " seconds.\n";
 
-  //std::cout << "Length " << rds.size() << "\n";
-
-  return 0;
+  return elapsed*1000;
 }

@@ -33,6 +33,7 @@ enum Token {
     tok_proto = -71,
     tok_op = -74,
     tok_def = -2,
+    tok_gpu = -90,
     tok_constructor = -66,
     tok_class = -77,
     tok_self = -78,

@@ -216,6 +216,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel},
                                              {"main", tok_main},
+                                             {"gpu", tok_gpu},
                                              {"nil", tok_nil},
                                              {"lut_lo", tok_lutlo}, {"lut_hi", tok_luthi},
                                              {"any", tok_any},

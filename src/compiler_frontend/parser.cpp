@@ -1075,8 +1075,11 @@ std::unique_ptr<ExprAST> ParseProtoExpr(Parser_Struct parser_struct, std::string
     getNextToken(); // eat proto
     Data_Tree Return;
     std::string Name;
-    std::vector<std::string> ArgNames = {"scope_struct"};
-    std::vector<Data_Tree> Types = {Data_Tree("Scope_Struct")};
+    std::vector<std::string> ArgNames;
+    std::vector<Data_Tree> Types;
+    ArgNames.push_back("scope_struct");
+    Types.push_back(Data_Tree("Scope_Struct"));
+
  
     std::string data_type = IdentifierStr; 
 
@@ -1126,7 +1129,7 @@ std::unique_ptr<ExprAST> ParseProtoExpr(Parser_Struct parser_struct, std::string
             F->eraseFromParent();
         functions_return_data_type[Name] = Return;
     }
-    FunctionProtos[Name] = std::make_unique<PrototypeAST>(Name, Return, "", "",
+    FunctionProtos[Name] = std::make_unique<PrototypeAST>(parser_struct, Name, Return, "", "",
                                                 std::move(ArgNames),
                                                 std::move(Types));
     if (begins_with(Name, "map_get_")) {
@@ -2208,15 +2211,24 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     break;
   }
 
+  if (parser_struct.gpu)
+      gpu_fn[FnName] = 1;
+
 
 
 
   std::string type;
-  std::vector<std::string> ArgNames = {"scope_struct"};
-  std::vector<Data_Tree> Types = {Data_Tree("Scope_Struct")};
+  std::vector<std::string> ArgNames;
+  std::vector<Data_Tree> Types;
+
+  if (!parser_struct.gpu) {
+        ArgNames.push_back("scope_struct");
+        Types.push_back(Data_Tree("Scope_Struct"));
+   } 
 
   if(is_compiler_main)
-      return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, std::move(ArgNames),
+      return std::make_unique<PrototypeAST>(parser_struct, FnName,
+                                            return_type, _class, method, std::move(ArgNames),
                                             std::move(Types), Kind != 0,
                                             BinaryPrecedence);
   if (CurTok != '(')
@@ -2337,7 +2349,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
   functions_return_type[FnName] = return_type;
 
 
-  return std::make_unique<PrototypeAST>(FnName, return_data_type, _class, method, std::move(ArgNames),
+  return std::make_unique<PrototypeAST>(parser_struct, FnName,
+                                         return_data_type, _class, method, std::move(ArgNames),
                                          std::move(Types), Kind != 0,
                                          BinaryPrecedence);
 }
@@ -2384,11 +2397,10 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
 /// definition ::= 'def' prototype expression
 std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::string class_name) {
   
-
   int cur_level_tabs = SeenTabs;
 
   bool is_constructor = (CurTok==tok_constructor);
-  if (CurTok==tok_def)
+  if (CurTok==tok_def||CurTok==tok_gpu)
       getNextToken(); // eat def.
 
 
@@ -2426,14 +2438,13 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
   //std::cout << "function number of expressions: " << Body.size() << "\n";
 
-  if (Body.size()==0)
-  {
+  if (Body.size()==0) {
     std::string _error = "Function " + parser_struct.function_name + "'s body was not declared.";  
     LogError(parser_struct.line, _error);
     return nullptr;
   } 
 
-  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  return std::make_unique<FunctionAST>(parser_struct, std::move(Proto), std::move(Body));
   
 }
 
@@ -2454,11 +2465,11 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr(Parser_Struct parser_struct) {
 
   // Make an anonymous proto.
   
-  auto Proto = std::make_unique<PrototypeAST>("__anon_expr", Data_Tree("float"), "", "",
+  auto Proto = std::make_unique<PrototypeAST>(parser_struct, "__anon_expr", Data_Tree("float"), "", "",
                                                 std::vector<std::string>(),
                                                 std::vector<Data_Tree>());
     
-  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  return std::make_unique<FunctionAST>(parser_struct, std::move(Proto), std::move(Body));
   
   return nullptr;
 }

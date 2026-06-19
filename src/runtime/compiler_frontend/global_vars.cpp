@@ -26,6 +26,7 @@ std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 std::vector<std::string> Sys_Arguments;
+std::unordered_map<std::string, int> gpu_fn;
 
 
 std::map<std::string, std::string> elements_type_return, ops_type_return;
@@ -84,10 +85,10 @@ uint16_t data_type_count=113;
 
 std::vector<std::string> data_tokens = {"int", "bool", "str", "str_vec", "float_vec",
                                         "tuple", "any", "float_ptr",
-										"list", "map", "array", 
+										"list", "map", "array", "void",
                                         "float", "int_vec", "char", "charv", "vec", "i16", "i64", "i8", "str_view"};
 std::vector<std::string> compound_tokens = {"tuple", "channel", "list", "array", "map", "vec", "Function"};
-std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "bool", "foreach_control_var", "i64", "i8", "i16", "char"};
+std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "void", "bool", "foreach_control_var", "i64", "i8", "i16", "char"};
 
 
 std::vector<std::string> constants = {"float_t", "char_t", "int_t", "i16_t", "i8_t", "i64_t", "array_t", "str_t"};
