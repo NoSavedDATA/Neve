@@ -150,9 +150,9 @@ void HandleDefinition() {
 
 
 void HandleGpuDef() {
-  
   Parser_Struct parser_struct;
-  parser_struct.gpu=true;
+  parser_struct.gpu=(CurTok==tok_kernel) ? 1 : 2;
+
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
 
@@ -161,6 +161,7 @@ void HandleGpuDef() {
 
     GpuFunctions[fn_name] = std::move(FnAST);
 
+    getGpuFnCheck(fn_name);
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -181,8 +182,6 @@ void HandleClass() {
 
 
 void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
-
-
     
     // JIT Version
     auto *FnIR =  FnAST->codegen();
@@ -253,6 +252,9 @@ void MainLoop() {
             HandleDefinition();
             break;
         case tok_gpu:
+            HandleGpuDef();
+            break;
+        case tok_kernel:
             HandleGpuDef();
             break;
         case tok_op:
@@ -462,6 +464,16 @@ void build_dicts() {
   Function_Arg_DataTypes["swap_bit"]["2"] = Data_Tree("int");
   Function_Arg_Names["swap_bit"] = {"0", "1", "2"};
   Function_Required_Arg_Count["swap_bit"] = 2;
+
+
+  // shfl_sync
+  // function_return_overwrite["shfl_sync"] = swap_bit_ret;
+  functions_return_data_type["shfl_sync"] = Data_Tree("float");
+  Function_Arg_DataTypes["shfl_sync"]["0"] = Data_Tree("any");
+  Function_Arg_DataTypes["shfl_sync"]["1"] = Data_Tree("int");
+  Function_Arg_Names["shfl_sync"] = {"0", "1"};
+  Function_Required_Arg_Count["shfl_sync"] = 2;
+
 
   // // simd_load
   function_return_overwrite["simd_load"] = simd_load_ret;

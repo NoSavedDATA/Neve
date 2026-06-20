@@ -26,6 +26,7 @@ extern std::unique_ptr<LLVMContext> GlobalContext;
 
 extern std::unique_ptr<IRBuilder<>> Builder;
 extern std::unique_ptr<Module> TheModule, PtxModule;
+extern Module *CurModule;
 extern std::unique_ptr<Module> GlobalModule;
 extern std::unique_ptr<TargetMachine> CTM, PtxTM;
 
@@ -97,7 +98,7 @@ inline Value *global_str(std::string _string) {
 }
 
 inline Function *getFunctionCheck(std::string Name) {
-  if (auto *F = TheModule->getFunction(Name))
+  if (auto *F = CurModule->getFunction(Name))
     return F;
 
   auto FI = FunctionProtos.find(Name);
@@ -108,10 +109,12 @@ inline Function *getFunctionCheck(std::string Name) {
 }
 
 inline void call(std::string fn, const std::vector<Value *> &args) {
+    // std::cout << "callret " << fn << "\n";
     if(!Shall_Exit)
         Builder->CreateCall(getFunctionCheck(fn), args);
 }
 inline Value *callret(std::string fn, const std::vector<Value *> &args) { 
+    // std::cout << "callret " << fn << "\n";
     if(!Shall_Exit)
         return Builder->CreateCall(getFunctionCheck(fn), args);
     return const_float(0);
@@ -136,18 +139,6 @@ inline Function *getGpuFnCheck(const std::string &Name) {
     return F;
 }
 
-inline Value *callgpu(std::string fn, const std::vector<Value *> &args) {
-    auto F = getGpuFnCheck(fn);
-
-
-// PtxModule->print(llvm::errs(), nullptr);
-    auto ptx = EmitPtx();
-    // std::cout << "ptx " << ptx << "\n";
-
-    call("neve_gpu_launch", {global_str(fn), global_str(ptx), args[0], args[1]});
-
-    return const_float(0);
-}
 
 
 

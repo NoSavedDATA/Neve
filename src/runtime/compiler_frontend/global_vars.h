@@ -41,7 +41,7 @@ extern std::string CurrentFile;
 
 extern std::map<char, int> BinopPrecedence;
 
-extern std::unordered_map<std::string, int> gpu_fn;
+extern std::unordered_map<std::string, int> gpu_fn, gpu_ffi, kernel_fn;
 
 std::unordered_map<uint16_t, std::string>& data_type_to_name();
 std::unordered_map<std::string, uint16_t>& data_name_to_type();

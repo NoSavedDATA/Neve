@@ -13,7 +13,7 @@ struct Parser_Struct {
   std::string parse_fn="";
   bool can_be_string=false;
   bool can_be_list=false;
-  bool gpu=false;
+  int gpu=0;
   int line=0;
   int loop_depth=0;
   int control_flow_depth=0;

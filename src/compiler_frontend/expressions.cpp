@@ -186,7 +186,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
 
   i = i + arg_offset-1;
-  if (gpu_fn.count(fn_name)>0)
+  if (gpu_fn.count(fn_name)>0||gpu_ffi.count(fn_name))
       i++;
   // -- Add Default Arguments -- //
   if (Function_Arg_Count.count(fn_name)>0&&!is_vararg) {    
@@ -712,7 +712,7 @@ std::string BinaryExprAST::GetType(bool from_assignment) {
 
 Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   std::string operation = op_map[Op];
-  L_dt = LHS->GetDataTree();
+  L_dt = LHS->GetDataTree(Op=='=');
   R_dt = RHS->GetDataTree();
 
 
@@ -730,6 +730,12 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   if (RType=="char")
       RType = "i8";
 
+  
+
+  Elements = LType + "_" + RType;    
+  if (Elements=="float_int")
+    cast_R_to="int_to_float";
+
 
   if(auto *LHSV = dynamic_cast<NameableIdx *>(this->LHS.get())) {}
   else {
@@ -741,6 +747,9 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       if (R_dt.is_buffer)
         RType = "buffer_"+RType;
   }
+
+
+
 
   if (L_dt.is_array)
     LType = "buffer_"+LType;
@@ -762,7 +771,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   }
   if (Elements=="float_int") {
     Elements = "float_float"; 
-    cast_R_to="int_to_float";
   }
   if (in_vec(LType, {"str", "charv"})) {
       if (RType!="int"&&in_vec(RType, int_types)) {
@@ -772,6 +780,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   }
   // std::cout << Elements << " | " << Operation << "\n";
   Operation = Elements + "_" + operation;
+
 
   if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
     Operation = "channel_void_message";
@@ -1212,10 +1221,15 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   }
   
   auto &indices = Idx->Idxs;
+
+
+
+  if (!from_assignment&&(inner_dt.is_array||inner_dt.is_buffer))
+      return Data_Tree(inner_dt.Type);
   
   if (from_assignment || has_slice(indices) ||\
           !in_vec(compound_type, compound_tokens))
-    return inner_dt; //e.g: for list_Store_Idx
+    return inner_dt; 
 
 
   if(compound_type=="tuple") {
@@ -1235,6 +1249,7 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
   if(compound_type=="map")
     return inner_dt.Nested_Data[1];
+
   
   return inner_dt.Nested_Data[0];
 }
@@ -1583,7 +1598,7 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   if(Depth>1&&!FromLib&&is_nsk_fn)
       arg_type_check_offset++;
-  if (gpu_fn.count(Callee)>0)
+  if (gpu_fn.count(Callee)>0||gpu_ffi.count(Callee))
       arg_type_check_offset--;
 
   if(!is_first_citizen)

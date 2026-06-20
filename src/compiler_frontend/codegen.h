@@ -38,8 +38,6 @@ Value *VoidPtr_toValue(void *vec);
 Function *getFunction(std::string Name);
 
 
-/// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
-/// the function.  This is used for mutable variables etc.
 AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                                           StringRef VarName, llvm::Type *);
 

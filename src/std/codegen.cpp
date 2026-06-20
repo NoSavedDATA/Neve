@@ -1,3 +1,5 @@
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/IntrinsicsNVPTX.h>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
 
@@ -338,12 +340,34 @@ Value *c_memchr(Parser_Struct parser_struct, Function *TheFunction,
     return ret;
 }
 
+Value *shfl_sync(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+
+    Value *mask = ConstantInt::get(intTy, 0xFFFFFFFF);
+    Value *width  = ConstantInt::get(intTy, 31);
+
+    Value *delta = Builder->CreateIntCast(ArgsV[1], intTy, false);
+    Value *pred  = ConstantInt::get(Type::getInt1Ty(*TheContext), 1);
+
+    Function *shfl =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_shfl_sync_bfly_f32);
+            // Intrinsic::nvvm_shfl_sync_down_f32);
+    shfl->print(llvm::errs());
+
+    Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
+    return res;
+}
+
+
 Value *min(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
     std::string type = args_type[0].Type;
-    Value *x=Args[0]->codegen(scope_struct), *y=Args[1]->codegen(scope_struct);
+    Value *x=ArgsV[0], *y=ArgsV[1];
     if (type=="float")
         return Builder->CreateMinNum(x, y, "float_min");
     if (in_vec(type,int_types)) {
@@ -364,7 +388,7 @@ Value *max(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     std::string type = args_type[0].Type;
-    Value *x=Args[0]->codegen(scope_struct), *y=Args[1]->codegen(scope_struct);
+    Value *x=ArgsV[0], *y=ArgsV[1];
     if (type=="float")
         return Builder->CreateMaxNum(x, y, "float_max");
     if (in_vec(type,int_types)) {
@@ -380,6 +404,8 @@ Value *max(Parser_Struct parser_struct, Function *TheFunction,
 
     return const_int(0);
 }
+
+
 
 Value *err(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,

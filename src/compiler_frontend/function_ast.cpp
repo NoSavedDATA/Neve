@@ -41,33 +41,39 @@ inline void RegisterData() {
 }
 
 std::string EmitPtx() {
-    llvm::SmallString<0> Buffer;
-    llvm::raw_svector_ostream OS(Buffer);
 
-    llvm::legacy::PassManager PM;
+    static std::string ptx = "";
+    if (ptx=="") {
+        llvm::SmallString<0> Buffer;
+        llvm::raw_svector_ostream OS(Buffer);
 
-    if (PtxTM->addPassesToEmitFile(
-            PM,
-            OS,
-            nullptr,
-            llvm::CodeGenFileType::AssemblyFile))
-    {
-        std::cout << "CANNOT EMIT PTX" << "\n";
-        std::exit(0);
+        llvm::legacy::PassManager PM;
+
+        if (PtxTM->addPassesToEmitFile(
+                PM,
+                OS,
+                nullptr,
+                llvm::CodeGenFileType::AssemblyFile))
+        {
+            std::cout << "CANNOT EMIT PTX" << "\n";
+            std::exit(0);
+        }
+
+        PM.run(*PtxModule);
+
+        // OS.flush();
+        std::string PTX(Buffer.str());
+        ptx = PTX;
     }
 
-    PM.run(*PtxModule);
-
-    // OS.flush();
-    std::string PTX(Buffer.str());
-
-    return PTX;
+    return ptx;
 }
 
 void InitializeModule() {
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
+  CurModule = TheModule.get();
   PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
   if (IsJIT) { // As jit
       TheModule->setDataLayout(TheJIT->getDataLayout());
@@ -760,10 +766,10 @@ void SetKernelVars(std::string function_name) {
     Value *bid  = Builder->CreateCall(ctaid_x);
     Value *bdim = Builder->CreateCall(ntid_x);
 
-    
     function_values[function_name]["tid"] = tid;
     function_values[function_name]["bid"] = bid;
 }
+
 
 Function *FunctionAST::codegen_gpu() {
 
@@ -780,6 +786,8 @@ Function *FunctionAST::codegen_gpu() {
 
 
   auto oldBuilder = std::move(Builder);
+  CurModule = PtxModule.get();
+
   Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
 
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
@@ -804,15 +812,17 @@ Function *FunctionAST::codegen_gpu() {
   for (auto &body : Body)
     body->codegen(scope_struct);
   
-  Builder->CreateRetVoid(); 
+  if(!Builder->GetInsertBlock()->getTerminator())
+      Builder->CreateRetVoid(); 
 
 
   Builder = std::move(oldBuilder);
+  CurModule = TheModule.get();
+
 
   if (verifyFunction(*TheFunction, &errs())) {
     errs() << "Invalid function!\n";
   }
-  // PtxModule->print(llvm::errs(), nullptr);
 
   return TheFunction;
 }
@@ -833,7 +843,7 @@ Function *FunctionAST::codegen() {
     return nullptr;
 
 
-  if (parser_struct.gpu)
+  if (parser_struct.gpu>0)
       return codegen_gpu();
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a

@@ -25,4 +25,4 @@ std::unique_ptr<Module> TheModule, PtxModule;
 std::unique_ptr<Module> GlobalModule;
 std::unique_ptr<TargetMachine> CTM, PtxTM;
 
-
+Module *CurModule;

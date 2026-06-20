@@ -82,6 +82,7 @@ void set_user_functions() {
 	llvm_callee["alloc"] = alloc;
 	llvm_callee["min"] = min;
 	llvm_callee["max"] = max;
+	llvm_callee["shfl_sync"] = shfl_sync;
 	llvm_callee["swap_bit"] = swap_bit;
 	llvm_callee["ctz"] = ctz;
 	llvm_callee["simd_load"] = simd_load;

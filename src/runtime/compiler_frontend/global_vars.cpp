@@ -26,7 +26,7 @@ std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 std::vector<std::string> Sys_Arguments;
-std::unordered_map<std::string, int> gpu_fn;
+std::unordered_map<std::string, int> gpu_fn, kernel_fn;
 
 
 std::map<std::string, std::string> elements_type_return, ops_type_return;
@@ -82,6 +82,7 @@ std::unordered_map<uint16_t, std::string>& data_type_to_name() {
 uint16_t data_type_count=113;
 
 
+std::unordered_map<std::string, int> gpu_ffi = {{"shfl_sync", 1}};
 
 std::vector<std::string> data_tokens = {"int", "bool", "str", "str_vec", "float_vec",
                                         "tuple", "any", "float_ptr",

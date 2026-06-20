@@ -2211,8 +2211,10 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     break;
   }
 
-  if (parser_struct.gpu)
+  if (parser_struct.gpu>0)
       gpu_fn[FnName] = 1;
+  if (parser_struct.gpu==1)
+      kernel_fn[FnName] = 1;
 
 
 
@@ -2221,7 +2223,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
   std::vector<std::string> ArgNames;
   std::vector<Data_Tree> Types;
 
-  if (!parser_struct.gpu) {
+  if (parser_struct.gpu==0) {
         ArgNames.push_back("scope_struct");
         Types.push_back(Data_Tree("Scope_Struct"));
    } 
@@ -2400,7 +2402,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
   int cur_level_tabs = SeenTabs;
 
   bool is_constructor = (CurTok==tok_constructor);
-  if (CurTok==tok_def||CurTok==tok_gpu)
+  if (CurTok==tok_def||CurTok==tok_gpu||CurTok==tok_kernel)
       getNextToken(); // eat def.
 
 

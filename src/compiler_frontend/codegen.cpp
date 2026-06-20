@@ -273,7 +273,7 @@ Value *str_view_llvm_hash(Value *str_value, Function *F) {
 
 Function *getFunction(std::string Name) {
   // First, see if the function has already been added to the current module.
-  if (auto *F = TheModule->getFunction(Name))
+  if (auto *F = CurModule->getFunction(Name))
     return F;
 
   // If not, check whether we can codegen the declaration from some existing
@@ -334,14 +334,14 @@ Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprA
 
   // if (!idxs->IsSlice) {
   //   std::string fn = type+"_CalculateIdx";
-  //   Function *F = TheModule->getFunction(fn);
+  //   Function *F = CurModule->getFunction(fn);
   //   if (F)
   //     return callret(fn, idxs_values);
   // } else {
   //   for (int i=0; i<idxs->size(); i++)
   //     idxs_values.push_back(idxs->Second_Idxs[i]->codegen(scope_struct));
   //   std::string fn = type+"_CalculateSliceIdx";
-  //   Function *F = TheModule->getFunction(fn);
+  //   Function *F = CurModule->getFunction(fn);
   //   if (F)
   //     return callret(fn, idxs_values);
   //   else
@@ -831,7 +831,7 @@ Value *TupleExprAST::codegen(Value *scope_struct) {
 
 Value *Malloc_LLVM_Struct(Value *scope_struct, std::string &struct_name, std::string &type) {
     StructType *st = struct_types[struct_name];
-    DataLayout DL(TheModule.get());
+    DataLayout DL(CurModule);
     uint64_t size = DL.getTypeAllocSize(st);
 
 
@@ -957,7 +957,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
 
 
     std::string copy_fn = type+"_CopyArg";
-    Function *F = TheModule->getFunction(copy_fn);
+    Function *F = CurModule->getFunction(copy_fn);
     if (F&&!is_nsk_fn) {
         std::cout << "Copy of " << type << "\n";
         Value *copied_value = callret(copy_fn,
@@ -1064,6 +1064,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
         bool is_self = GetSelf();
         bool is_attr = GetIsAttribute();
+
+
 
         Value *initial_value = Init->codegen(scope_struct);
         Data_Tree init_dt = Init->GetDataTree();
@@ -1174,7 +1176,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
             Value *unpacked_val = initial_value;
             if (Type=="str")
                 unpacked_val = Builder->CreateExtractValue(initial_value, {0});
-            Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
+
+            if (parser_struct.gpu==0)
+                Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
+
             StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
         }
     }
@@ -1192,6 +1197,8 @@ Value *LibImportExprAST::codegen(Value *scope_struct) {
 
 
 Value *GCSafePointExprAST::codegen(Value *scope_struct) {
+    if (parser_struct.gpu>0)
+        return const_float(0.0f);
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     Set_Stack_Top(scope_struct, parser_struct.function_name);
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
@@ -1649,7 +1656,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
     function_allocas[parser_struct.function_name] = old_allocas;
     // verifyFunction(*TheFunction);
-    // TheModule->print(llvm::errs(), nullptr);
+    // CurModule->print(llvm::errs(), nullptr);
 
     return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
@@ -1972,7 +1979,7 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
         if (!in_str(LType, primary_data_tokens) && !is_high_lvl_obj) {
             std::string copy_fn = LType + "_Copy";
 
-            Function *F = TheModule->getFunction(copy_fn);
+            Function *F = CurModule->getFunction(copy_fn);
             if (!F) {
                 LogErrorV(parser_struct.line, "Tried to use channel operation for " + \
                         LType + ", but this data type has no Copy implementation.");
@@ -2018,11 +2025,11 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
 
             Value *Val_indexed = Builder->CreateExtractValue(Val, {static_cast<unsigned>(i)});
 
-            // Function *F = TheModule->getFunction(copy_fn);
+            // Function *F = CurModule->getFunction(copy_fn);
             // if (F)
             //   Val_indexed = callret(copy_fn, {scope_struct, Val_indexed});
 
-            Function *F = TheModule->getFunction(store_trigger);
+            Function *F = CurModule->getFunction(store_trigger);
             if (F) {
                 Value *old_val = LoadVal(parser_struct.function_name, Lname, ldt);
                 call(store_trigger, {scope_struct, old_val, Val_indexed});
@@ -2368,13 +2375,13 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             // Copy data types that support copying (i.e, function <DT>_Copy exists)
             if(auto Rvar = dynamic_cast<Nameable *>(RHS.get())) // if it is leaf
             {
-                Function *F = TheModule->getFunction(copy_fn);
+                Function *F = CurModule->getFunction(copy_fn);
                 if (!from_channel_op && F)
                     Val = callret(copy_fn, {scope_struct, Val});
             }
 
             // Store trigger behavior for supported types (i.e, function <DT>_StoreTrigger exists)
-            Function *F = TheModule->getFunction(store_trigger);
+            Function *F = CurModule->getFunction(store_trigger);
 
             if (F && function_values[parser_struct.function_name].count(Lname)>0) {
                 Value *old_val = LoadVal(parser_struct.function_name, Lname, L_dt);
@@ -2523,6 +2530,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     else if (Elements=="buffer_float_i64"||Elements=="buffer_float_int") {
         if(Op==tok_offby) {
             if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
+                std::cout << "offby of " << L_dt.is_buffer << "\n";
                 if (L_dt.is_buffer) {
                     llvm::Type *lTy = get_type_from_data(L_dt);
                     Value *ptr = Builder->CreateGEP(lTy, L, R);
@@ -2870,7 +2878,7 @@ Value *ChannelExprAST::codegen(Value *scope_struct) {
 
 Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
     int fnIndex = 1;
-    while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
+    while (CurModule->getFunction("__async_" + std::to_string(fnIndex)))
         fnIndex++;
 
 
@@ -3760,8 +3768,11 @@ Function *PrototypeAST::codegen() {
     llvm::Type *retTy = get_type_from_data(ReturnType);
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
-    auto llvm_module = (parser_struct.gpu) ? PtxModule.get() : TheModule.get();
-    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, llvm_module);
+
+    auto linkage = (parser_struct.gpu==2) ? Function::InternalLinkage : Function::ExternalLinkage;
+
+    auto llvm_module = (parser_struct.gpu>0) ? PtxModule.get() : TheModule.get();
+    Function *F = Function::Create(FT, linkage, Name, llvm_module);
 
     // Set names for all arguments.
     unsigned Idx = 0;
@@ -3786,7 +3797,7 @@ Function *PrototypeAST::codegen() {
         // Arg.addAttr(Attribute::NonNull);
     }
 
-    if (parser_struct.gpu) {
+    if (parser_struct.gpu==1) {
         llvm::Metadata *MDVals[] = {
             llvm::ValueAsMetadata::get(F),
             llvm::MDString::get(*TheContext, "kernel"),
@@ -3800,6 +3811,12 @@ Function *PrototypeAST::codegen() {
             ->addOperand(llvm::MDNode::get(*TheContext, MDVals));
 
         F->setCallingConv(llvm::CallingConv::PTX_Kernel);
+        F->addFnAttr(Attribute::NoInline);
+    }
+    if (parser_struct.gpu==2) {
+        F->setCallingConv(llvm::CallingConv::C);
+        F->addFnAttr(Attribute::AlwaysInline);
+        F->setDSOLocal(true);
     }
     
     return F;
@@ -4458,6 +4475,62 @@ Value *NameableAppend::codegen(Value *scope_struct) {
 
 
 
+Value *getValAddress(Function *TheFunction, Value *val, Data_Tree dt, int i) {
+    if (dt.is_buffer||dt.is_array)
+        return val;
+
+    // Needs stack address encapsulation for a register value
+    llvm::Type *Ty = get_type_from_data(dt);
+
+    Value *alloca = CreateEntryBlockAlloca(TheFunction, "args_"+std::to_string(i),
+            Ty);
+    Builder->CreateStore(val, alloca);
+
+    Value *address = Builder->CreateInBoundsGEP(
+        Ty,
+        alloca,
+        {const_int(0), const_int(0)}
+    );
+    
+    return address;
+}
+
+Value *callgpu(Function *TheFunction, std::string fn,
+                      const std::vector<Value *> &args, std::vector<Data_Tree> &Types) {
+
+
+    auto ptx = EmitPtx();
+    PtxModule->print(llvm::errs(), nullptr);
+
+    // Encapsulate within void **args
+    int nargs = args.size();
+
+        
+
+    ArrayType *ArgArrayTy = ArrayType::get(int8PtrTy, nargs);
+    Value *ArgArray = CreateEntryBlockAlloca(TheFunction, fn+"_args", ArgArrayTy);
+
+    for (size_t i = 0; i < nargs; ++i) {
+        Value *ElemPtr = Builder->CreateInBoundsGEP(
+            ArgArrayTy, ArgArray,
+            {const_int(0), const_int(i)}
+        );
+
+        Builder->CreateStore(getValAddress(TheFunction, args[i], Types[i], i), ElemPtr);
+    }
+
+    Value *ArgBase = Builder->CreateInBoundsGEP(
+        ArgArrayTy, ArgArray,
+        {const_int(0), const_int(0)}
+    );
+    
+
+    call("neve_gpu_launch", {global_str(fn), global_str(ptx), ArgBase});
+
+    return const_float(0);
+}
+
+
 Value *NameableCall::codegen(Value *scope_struct) {  
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -4466,7 +4539,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     Value *previous_obj, *previous_stack_top;
 
-    bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&llvm_callee.count(Callee)==0);
+    bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&\
+                          gpu_fn.count(Callee)==0&&llvm_callee.count(Callee)==0);
 
     if (may_allocate) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
@@ -4533,8 +4607,9 @@ Value *NameableCall::codegen(Value *scope_struct) {
         GetDataTree();
 
     if (!is_first_citizen)
-        ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes, scope_struct,\
-            Callee, is_nsk_fn, arg_type_check_offset);
+        ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
+                scope_struct,\
+                Callee, is_nsk_fn, arg_type_check_offset);
     else {
         for (int i=0; i<Args.size(); ++i)
             ArgsV.push_back(Args[i]->codegen(scope_struct));
@@ -4566,13 +4641,18 @@ Value *NameableCall::codegen(Value *scope_struct) {
             false
         );
     ret = Builder->CreateCall(fnTy, fn, ArgsV);
-  } else if(gpu_fn.count(Callee)>0) {
+  } else if(kernel_fn.count(Callee)>0) {
     std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
-    ret = callgpu(Callee, ArgsV_slice);
+    ret = callgpu(TheFunction, Callee, ArgsV_slice, ArgTypes);
     return const_float(0);
   }
-  else
-    ret = callret(Callee, ArgsV);
+  else {
+    if (gpu_fn.count(Callee)>0) {
+        std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
+        ret = callret(Callee, ArgsV_slice);
+    } else
+        ret = callret(Callee, ArgsV);
+  }
   
   cur_self = nullptr;
 
@@ -4590,8 +4670,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
   if(begins_with(Callee, "map_get_")) {
-
-    std::cout << "CALL A MAP GET" << "\n";
 
     Value *packed_val = Builder->CreateExtractValue(ret, {0});
     Value *packed_bool = Builder->CreateExtractValue(ret, {1});
