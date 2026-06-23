@@ -74,7 +74,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("print_int16", print_int16Ty);
 
 	FunctionType *print_intTy= FunctionType::get(
-		Type::getVoidTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{Type::getInt32Ty(*TheContext)},
 		false
 	);

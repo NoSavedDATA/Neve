@@ -766,8 +766,8 @@ void SetKernelVars(std::string function_name) {
     Value *bid  = Builder->CreateCall(ctaid_x);
     Value *bdim = Builder->CreateCall(ntid_x);
 
-    function_values[function_name]["tid"] = tid;
-    function_values[function_name]["bid"] = bid;
+    function_values[function_name]["tx"] = tid;
+    function_values[function_name]["bx"] = bid;
 }
 
 
@@ -820,9 +820,9 @@ Function *FunctionAST::codegen_gpu() {
   CurModule = TheModule.get();
 
 
-  if (verifyFunction(*TheFunction, &errs())) {
+  if (verifyFunction(*TheFunction, &errs()))
     errs() << "Invalid function!\n";
-  }
+
 
   return TheFunction;
 }

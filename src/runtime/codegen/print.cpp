@@ -22,9 +22,10 @@ extern "C" void print_int16(uint16_t x) {
     // if(x!=0)
     std::cout << "GOT INT: " << x << ".\n";
 }
-extern "C" void print_int(int x) {
+extern "C" int print_int(int x) {
     // if(x!=0)
     std::cout << "GOT INT: " << x << ".\n";
+    return 0;
 }
 extern "C" void print_float(float x) {
     // if(x!=0)

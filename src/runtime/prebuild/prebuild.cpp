@@ -43,6 +43,10 @@ extern "C" int prebuild() {
   BinopPrecedence['*'] = 39;
   BinopPrecedence['/'] = 40;
   BinopPrecedence[tok_int_div] = 40;
+  BinopPrecedence[tok_reduce] = 41;
+  BinopPrecedence[tok_mapit] = 41;
+  BinopPrecedence[tok_scan] = 41;
+  BinopPrecedence[tok_filter] = 41;
   BinopPrecedence['^'] = 50;
   BinopPrecedence['@'] = 60;
 
@@ -190,8 +194,8 @@ extern "C" int prebuild() {
                      {"buffer_i8_i64_add", "str"}, 
                      {"buffer_i8_int_offby", "str"}, 
                      {"buffer_i8_i64_offby", "str"}, 
-                     {"buffer_float_int_offby", "any"},
-                     {"buffer_float_i64_offby", "any"},
+                     // {"buffer_float_int_offby", "any"},
+                     // {"buffer_float_i64_offby", "any"},
                      {"i8_i8_equal", "bool"},  {"i8_i8_different", "bool"},
                      {"i8_i8_higher_eq", "bool"}, {"i8_i8_minor_eq", "bool"},
                      {"i16_higher", "bool"}, {"i16_minor", "bool"},
@@ -219,6 +223,11 @@ extern "C" int prebuild() {
         op_map_names.push_back(pair.second);
 
 
+
+
+    // functions_return_data_type
+    //                  {"buffer_float_int_offby", "any"},
+    //                  {"buffer_float_i64_offby", "any"},
 
     notators_str = {"bias", "fp32", "fp16", "causal"};
 

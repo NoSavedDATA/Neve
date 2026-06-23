@@ -355,7 +355,8 @@ Value *shfl_sync(Parser_Struct parser_struct, Function *TheFunction,
             PtxModule.get(),
             Intrinsic::nvvm_shfl_sync_bfly_f32);
             // Intrinsic::nvvm_shfl_sync_down_f32);
-    shfl->print(llvm::errs());
+
+    // shfl->print(llvm::errs());
 
     Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
     return res;

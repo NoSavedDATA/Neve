@@ -57,6 +57,13 @@ std::map<int, std::string> token_to_string = {
 
   { tok_new, "tok new" },
 
+
+  // functional
+  { tok_reduce, "reduce" },
+  { tok_scan, "scan" },
+  { tok_mapit, "mapit" },
+  { tok_filter, "filter" },
+
   // control
   { tok_if, "if" },
   { tok_then, "then" },
@@ -216,7 +223,12 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel},
                                              {"main", tok_main},
+                                             {"reduce", tok_reduce},
+                                             {"scan", tok_scan},
+                                             {"mapit", tok_mapit},
                                              {"kernel", tok_kernel},
+                                             {"launch", tok_launch},
+                                             {"layout", tok_layout},
                                              {"gpu", tok_gpu},
                                              {"nil", tok_nil},
                                              {"lut_lo", tok_lutlo}, {"lut_hi", tok_luthi},
@@ -228,6 +240,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"continue", tok_continue},
                                              {"offby", tok_offby},
                                              {"new", tok_new}};
+std::vector<int> functional_tokens = {tok_reduce, tok_scan, tok_mapit, tok_filter};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number

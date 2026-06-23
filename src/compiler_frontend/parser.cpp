@@ -1809,6 +1809,41 @@ std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct parser_struct, std::string c
 
 
 
+std::unique_ptr<ExprAST> ParseLayoutExpr(Parser_Struct parser_struct, std::string class_name) {
+  getNextToken(); // eat layout
+  
+  uint16_t type;
+  std::vector<int> const_args;
+  bool smem=false;
+
+  if (CurTok!='<')
+      LogError(parser_struct.line, "Layout expected <");
+  getNextToken(); // eat <
+  
+
+  if (CurTok!=tok_data)
+      LogError(parser_struct.line, "Layout expected type");
+  type = data_name_to_type()[IdentifierStr];
+  getNextToken(); // eat type
+
+  while(CurTok==',') {
+      getNextToken(); // eat ,
+      if (IdentifierStr=="smem")
+          smem = true;
+      else
+          const_args.push_back(NumVal);
+      getNextToken();
+  }
+
+  if (CurTok!='>')
+      LogError(parser_struct.line, "Layout expected >");
+  getNextToken(); // eat >
+
+  auto args = Parse_Arguments(parser_struct, class_name);
+
+  return std::make_unique<LayoutExprAST>(parser_struct, type,
+                std::move(const_args), std::move(*args), smem);
+}
 
 
 
@@ -1882,6 +1917,27 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
 }
 
 
+std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct parser_struct, std::string class_name) {
+    getNextToken();
+
+    if (CurTok!='[')
+        return LogErrorBreakLine(parser_struct.line, "launch expects grid size");
+    auto grid = ParseNewList(parser_struct, class_name);
+
+    if (CurTok!='[')
+        return LogErrorBreakLine(parser_struct.line, "launch expects block size");
+    auto block = ParseNewList(parser_struct, class_name);
+
+
+    std::string fn_name = IdentifierStr;
+    getNextToken();
+
+    auto args = Parse_Arguments(parser_struct, class_name);
+
+
+    return make_unique<LaunchExprAST>(parser_struct, std::move(grid),
+                    std::move(block), std::move(*args), fn_name);
+}
 
 
 
@@ -1950,6 +2006,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseSpawnExpr(parser_struct, class_name);
   case tok_lock:
     return ParseLockExpr(parser_struct, class_name);
+  case tok_layout:
+    return ParseLayoutExpr(parser_struct, class_name);
   // case tok_op:
   //   return ParseOpExpr(parser_struct, class_name);
   // case tok_proto:
@@ -1970,6 +2028,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseVarExpr(parser_struct, "", class_name);
   case tok_const:
     return ParseConstExpr(parser_struct, class_name);
+  case tok_launch:
+    return ParseLaunch(parser_struct, class_name);
   case '[':
     return ParseNewList(parser_struct, class_name);
   case '{':
@@ -1981,6 +2041,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParsePrimary(parser_struct ,class_name, can_be_list);
   }
 }
+
+
 
 /// unary
 ///   ::= primary
@@ -2018,8 +2080,85 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct parser_struct, std::string cla
 }
 
 
+std::unique_ptr<ExprAST> ParseReduce(Parser_Struct parser_struct,
+                                              std::unique_ptr<ExprAST> LHS,
+                                              std::string class_name) {
+    getNextToken(); // eat reduce
+    int Op = CurTok;
+    getNextToken(); // eat op
+
+    return std::make_unique<ReduceExprAST>(parser_struct, std::move(LHS), Op, "reduce");
+}
+
+std::unique_ptr<ExprAST> ParseScan(Parser_Struct parser_struct,
+                                              std::unique_ptr<ExprAST> LHS,
+                                              std::string class_name) {
+    getNextToken(); // eat scan
+    int Op = CurTok;
+    getNextToken(); // eat op
+
+    return std::make_unique<ReduceExprAST>(parser_struct, std::move(LHS), Op, "scan");
+}
 
 
+std::unique_ptr<LambdaExprAST> ParseLambda(Parser_Struct parser_struct, std::string lambda_fn, std::string class_name) {
+    // ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, false);
+
+    std::vector<std::string> args;
+    if (parser_struct.gpu==0)
+        args.push_back("scope_struct");
+    args.push_back(IdentifierStr);
+    getNextToken();
+    while (CurTok==',') {
+        getNextToken();
+        args.push_back(IdentifierStr);
+        getNextToken();
+    }
+
+    if (CurTok!=':') {
+        LogErrorBreakLine(parser_struct.line, "mapit expected :");
+        return nullptr;
+    }
+    getNextToken(); // eat :
+    return std::make_unique<LambdaExprAST>(parser_struct, lambda_fn, std::move(args));
+}
+
+
+std::unique_ptr<ExprAST> ParseMapit(Parser_Struct parser_struct,
+                                              std::unique_ptr<ExprAST> LHS,
+                                              std::string class_name) {
+    getNextToken(); // eat mapit
+
+    std::string prev_fn = parser_struct.function_name;
+    std::string lambda_fn = parser_struct.function_name + \
+                            "_lambda_" + std::to_string(parser_struct.line);
+
+    auto lambda = ParseLambda(parser_struct, lambda_fn, class_name);
+    auto mapit_expr = std::make_unique<MapitExprAST>(parser_struct, std::move(LHS), std::move(lambda));
+
+    parser_struct.function_name = lambda_fn;
+    auto body = ParseExpression(parser_struct, class_name);
+    parser_struct.function_name = prev_fn;
+    mapit_expr->Lambda->Body = std::move(body);
+
+    return std::move(mapit_expr);
+}
+
+std::unique_ptr<ExprAST> ParseFunctionalOp(Parser_Struct parser_struct,
+                                              std::unique_ptr<ExprAST> LHS,
+                                              std::string class_name) {
+
+    switch (CurTok) {
+        case (tok_reduce):
+            return ParseReduce(parser_struct, std::move(LHS), class_name);
+        case (tok_scan):
+            return ParseScan(parser_struct, std::move(LHS), class_name);
+        case (tok_mapit):
+            return ParseMapit(parser_struct, std::move(LHS), class_name);
+        default:
+            return nullptr;
+    }
+}
 
 
 /// binoprhs
@@ -2036,6 +2175,12 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct parser_struct, int ExprPrec
 
   while (true) {
     
+
+
+    while (in_vec(CurTok, functional_tokens))
+        LHS = ParseFunctionalOp(parser_struct, std::move(LHS), class_name);
+
+
 
     // If this is a binop, find its precedence.
     int TokPrec = get_tokenPrecedence();
@@ -2254,7 +2399,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     else
       type=IdentifierStr;
 
-    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)) && IdentifierStr!="channel" && Classes.count(type)==0)
+    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens) && (!in_vec(IdentifierStr, compound_tokens))) && IdentifierStr!="channel" && Classes.count(type)==0)
       LogErrorProto_to_comma(parser_struct.line, "Prototype var type must be s, t, i, f or a data type. Got " + IdentifierStr);
     else {
       std::string data_type = type;

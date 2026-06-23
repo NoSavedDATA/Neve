@@ -900,6 +900,82 @@ class LockExprAST : public ExprAST {
 };
 
 
+class ReduceExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+
+public:
+  std::unique_ptr<ExprAST> LHS;
+  std::string fn, functional_type;
+  char Op;
+  ReduceExprAST(Parser_Struct, std::unique_ptr<ExprAST> LHS, char Op, std::string functional_type);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+class LambdaExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+
+public:
+  std::unique_ptr<ExprAST> Body;
+  std::vector<std::string> Args;
+  std::vector<Data_Tree> ArgsType;
+  std::string lambda_fn;
+  LambdaExprAST(Parser_Struct, std::string lambda_fn, std::vector<std::string> Args);
+
+  Value *codegen(Value *scope_struct) override;
+  // Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+class MapitExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+
+public:
+  std::unique_ptr<LambdaExprAST> Lambda;
+  std::unique_ptr<ExprAST> LHS;
+  std::string fn="";
+  MapitExprAST(Parser_Struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+
+
+class LayoutExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+
+public:
+  Data_Tree dt;
+  uint16_t type;
+  std::vector<int> Const_Args;
+  bool smem;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::vector<int> Strides;
+
+  LayoutExprAST(Parser_Struct, uint16_t type, std::vector<int>, std::vector<std::unique_ptr<ExprAST>>, bool);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+class LaunchExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+
+public:
+  std::unique_ptr<ExprAST> Grid, Block;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::string fn_name;
+
+  LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, std::string);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
 
 
 class SplitParallelExprAST : public ExprAST {

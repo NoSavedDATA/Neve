@@ -33,7 +33,7 @@ void set_functions_return_type() {
 						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
 						{"emerge_int", "int"}, {"emerge_float", "float"}, {"tHW_fn", "int"}, {"get_tid", "int"}, 
 						{"_quit_", "float"}, {"fexists_C", "bool"}, 
-						{"print", "float"}, {"print_void_ptrC", "float"}, 
+						{"print", "float"}, {"print_void_ptrC", "float"}, {"print_int", "int"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
 						{"read_int", "int"}, {"i64_to_str_buffer", "int"}, {"i16_to_str_buffer", "int"}, {"i8_to_str_buffer", "int"}, {"int_to_str_buffer", "int"}, {"int_print_bits", "int"}, {"i8_print_bits", "int"}, {"i16_print_bits", "int"}, {"i64_print_bits", "int"}, {"get_size", "int"}, 
 						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, {"ctx_print_buffer", "float"}, {"scope_struct_print", "float"}, 
@@ -176,6 +176,7 @@ void set_functions_return_type() {
 	functions_return_data_type["object_Load_on_Offset_int"] = Data_Tree("int");
 	functions_return_data_type["print"] = Data_Tree("float");
 	functions_return_data_type["print_void_ptrC"] = Data_Tree("float");
+	functions_return_data_type["print_int"] = Data_Tree("int");
 	functions_return_data_type["_quit_"] = Data_Tree("float");
 	functions_return_data_type["fexists_C"] = Data_Tree("bool");
 	functions_return_data_type["GetEmptyChar"] = Data_Tree("str");

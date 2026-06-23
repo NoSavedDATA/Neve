@@ -224,7 +224,7 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 	int m = x.shape[-2]
 	int n = y.shape[-1]
 	int p = x.shape[-1]
-	#int m_main = (m//6)*6
+
 	int m_main = m
 	int n_main = (n//16)*16
 
@@ -239,7 +239,6 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 		float[] w = out.data
 
 		int threads = min(tHW, max(1, m//MC))
-		#int threads=16
 
 		finish
 			asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)

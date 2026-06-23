@@ -35,6 +35,7 @@ enum Token {
     tok_def = -2,
     tok_gpu = -90,
     tok_kernel = -91,
+    tok_launch = -97,
     tok_constructor = -66,
     tok_class = -77,
     tok_self = -78,
@@ -42,6 +43,16 @@ enum Token {
     tok_extern = -3,
     tok_import = -51,
 
+
+    // functional
+    tok_reduce = -92,
+    tok_mapit = -93,
+    tok_scan = -94,
+    tok_filter = -95,
+
+
+    // comptime
+    tok_layout = -96,
 
     // primary
     tok_identifier = -4,

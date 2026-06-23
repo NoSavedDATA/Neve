@@ -654,13 +654,152 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   
   
   
+Data_Tree ReduceExprAST::GetDataTree(bool from_assignment) {
+    bool is_reduce = functional_type == "reduce";
+    auto dt = LHS->GetDataTree();
+
+    std::string type = dt.Type;
+    if (dt.Type=="layout") {
+        std::string inner = dt.Nested_Data[0].Type;
+        fn = inner + "_buffer";
+        if(is_reduce)
+            return Data_Tree(inner);
+        else
+            return dt;
+
+    }
+    if (dt.is_array||dt.is_buffer) {
+        fn = type + "_buffer";
+        if(is_reduce)
+            return Data_Tree(type);
+        else
+            return dt;
+    }
+    if (type=="array") {
+        std::string inner = dt.Nested_Data[0].Type;
+        fn = "array_"+inner;
+        if(is_reduce)
+            return dt.Nested_Data[0];
+        else
+            return dt;
+    }
+    if (type=="map") {
+        std::string inner = dt.Nested_Data[1].Type;
+        fn = "map_"+inner;
+        if(is_reduce)
+            return dt.Nested_Data[1];
+        else
+            return dt;
+    }
+    return dt;
+}
+  
+  
+ReduceExprAST::ReduceExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS,
+                             char Op, std::string functional_type)
+            : parser_struct(parser_struct), LHS(std::move(LHS)),
+              Op(Op), functional_type(functional_type) {
+    GetDataTree();
+}
   
   
   
+LambdaExprAST::LambdaExprAST(Parser_Struct parser_struct, std::string lambda_fn, std::vector<std::string> Args)
+    : parser_struct(parser_struct), lambda_fn(lambda_fn), Args(std::move(Args)) {}
   
   
+Data_Tree MapitExprAST::GetDataTree(bool from_assignment) {
+    return LHS->GetDataTree();
+}
+
+MapitExprAST::MapitExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
+    : parser_struct(parser_struct), LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
+    Data_Tree dt = this->LHS->GetDataTree();
+    std::string scope = this->Lambda->lambda_fn;
+    
+
+    int first_idx;
+    if (parser_struct.gpu>0)
+        first_idx = 0;
+    else {
+        first_idx = 1;
+        this->Lambda->ArgsType.push_back(Data_Tree("any"));
+    }
+
+    if (dt.is_buffer||dt.is_array) {
+        fn = dt.Type + "_buffer";
+        this->Lambda->ArgsType.push_back(Data_Tree(dt.Type));
+        data_typeVars[scope][this->Lambda->Args[first_idx]] = Data_Tree(dt.Type);
+    }
+    if (dt.Type=="array") {
+        fn = "array_" + dt.Nested_Data[0].Type;
+        this->Lambda->ArgsType.push_back(dt.Nested_Data[0]);
+        data_typeVars[scope][this->Lambda->Args[first_idx]] = dt.Nested_Data[0];
+    }
+    if (dt.Type=="map") {
+        fn = "map_" + dt.Nested_Data[1].Type;
+        this->Lambda->ArgsType.push_back(dt.Nested_Data[1]);
+        data_typeVars[scope][this->Lambda->Args[first_idx]] = dt.Nested_Data[1];
+    }
+    
+    std::string gpu_str = (parser_struct.gpu>0) ? "_gpu" : "";
+    fn+=gpu_str+"_mapit";
+}
   
-  
+
+Data_Tree LayoutExprAST::GetDataTree(bool) {
+
+    dt = Data_Tree("layout");
+    dt.Nested_Data.push_back(Data_Tree(data_type_to_name()[type]));
+    for (int i=0; i<Const_Args.size(); ++i) {
+        // if (auto stmt = dynamic_cast<IntExprAST>(Const_Args[i].get())) {
+        //     std::cout << "As INT" << "\n";
+        //     dt.Nested_Data.push_back(Data_Tree(std::to_string(stmt->Val)));
+        // }
+        dt.Nested_Data.push_back(Data_Tree(std::to_string(Const_Args[i])));
+    }
+    return dt;
+}
+
+
+LayoutExprAST::LayoutExprAST(Parser_Struct parser_struct, uint16_t type,
+        std::vector<int> Const_Args, std::vector<std::unique_ptr<ExprAST>> Args, bool smem) 
+    : parser_struct(parser_struct), type(type), Const_Args(std::move(Const_Args)),
+      Args(std::move(Args)), smem(smem) {
+
+    GetDataTree();
+
+
+    int acc=1;
+    for (int i=this->Const_Args.size()-1; i>=0; --i) {
+        this->Strides.insert(this->Strides.begin(), acc);
+        acc *= this->Const_Args[i];
+    }
+}
+
+
+LaunchExprAST::LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST> Grid,
+        std::unique_ptr<ExprAST> Block,
+        std::vector<std::unique_ptr<ExprAST>> Args,
+        std::string fn_name) 
+    : Grid(std::move(Grid)), Block(std::move(Block)), Args(std::move(Args)),
+      fn_name(fn_name) {
+
+
+    if (auto stmt = dynamic_cast<NewVecExprAST*>(this->Grid.get())) {
+        for (int i=stmt->Values.size(); i<8; i=i+2) {
+            stmt->Values.insert(stmt->Values.end()-2, std::make_unique<IntExprAST>(1));
+            stmt->Values.insert(stmt->Values.end()-2, std::make_unique<IntExprAST>(1));
+        }
+    }
+
+    if (auto stmt = dynamic_cast<NewVecExprAST*>(this->Block.get())) {
+        for (int i=stmt->Values.size(); i<8; i=i+2) {
+            stmt->Values.insert(stmt->Values.end()-2, std::make_unique<IntExprAST>(1));
+            stmt->Values.insert(stmt->Values.end()-2, std::make_unique<IntExprAST>(1));
+        }
+    }
+}
   
   
 Data_Tree UnaryExprAST::GetDataTree(bool from_assignment) {
@@ -732,8 +871,10 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
   
 
+
+
   Elements = LType + "_" + RType;    
-  if (Elements=="float_int")
+  if (Elements=="float_int"&&Op!=tok_offby)
     cast_R_to="int_to_float";
 
 
@@ -780,6 +921,8 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   }
   // std::cout << Elements << " | " << Operation << "\n";
   Operation = Elements + "_" + operation;
+
+
 
 
   if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
@@ -1396,7 +1539,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = Data_Tree("function");
         return data_type;
     }
-    else if (in_vec(Name, {"tid", "tN", "tHW"}))
+    else if (in_vec(Name, {"tid", "tN", "tHW", "tx", "ty", "tz", "bx", "by", "bz"}))
         data_type = Data_Tree("int");
     else if (IsPositionalArg(parser_struct, Name)) {
         data_type = Data_Tree("any");

@@ -1,0 +1,44 @@
+
+def int array_int_reduce_add(array<int> v)
+	int size = v.size()
+	int acc = 0
+	for i=0, i<size
+		acc += v[i]
+	return acc
+
+
+def array<int> array_int_scan_add(array<int> v)
+	array<int> u
+	int size = v.size()
+	int acc = 0
+	for i=0, i<size
+		acc += v[i]
+		u.append(acc)
+	return u
+
+def array<int> array_int_scan_mult(array<int> v)
+	array<int> u
+	int size = v.size()
+	int acc = 1
+	for i=0, i<size
+		acc *= v[i]
+		u.append(acc)
+	return u
+
+
+def array<int> array_int_scan_sub(array<int> v)
+	array<int> u
+	int size = v.size()
+	int acc = 0
+	for i=0, i<size
+		acc -= v[i]
+		u.append(acc)
+	return u
+
+
+def array<int> array_int_mapit(array<int> v, Function<int, int> l)
+	int size = v.size()
+	array<int> u
+	for i=0, i<size
+		u.append(l(v[i]))
+	return u
