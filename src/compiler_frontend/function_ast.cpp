@@ -40,10 +40,10 @@ inline void RegisterData() {
     }
 }
 
-std::string EmitPtx() {
+std::string EmitPtx(bool re_emit) {
 
     static std::string ptx = "";
-    if (ptx=="") {
+    if (ptx==""||re_emit) {
         llvm::SmallString<0> Buffer;
         llvm::raw_svector_ostream OS(Buffer);
 
@@ -53,8 +53,7 @@ std::string EmitPtx() {
                 PM,
                 OS,
                 nullptr,
-                llvm::CodeGenFileType::AssemblyFile))
-        {
+                llvm::CodeGenFileType::AssemblyFile)) {
             std::cout << "CANNOT EMIT PTX" << "\n";
             std::exit(0);
         }
@@ -771,15 +770,21 @@ void SetKernelVars(std::string function_name) {
 }
 
 
-Function *FunctionAST::codegen_gpu() {
+Function *FunctionAST::codegen_gpu(int idx) {
 
   auto &P = *Proto;
 
-  FunctionProtos[Proto->getName()] = std::move(Proto);
+  // FunctionProtos[Proto->getName()] = std::move(Proto);
   std::string function_name = P.getName();
 
 
-  Function *TheFunction = PtxModule->getFunction(function_name); 
+  std::string fn_name = function_name;
+  if (idx>=0) {
+      fn_name += std::to_string(idx);
+      parser_struct.cvalues = Fn_Compiled_Values[fn_name];
+  }
+
+  Function *TheFunction = PtxModule->getFunction(fn_name); 
   if(!TheFunction)
     std::cout << "PTX function " << function_name << " not found.\n";
 
@@ -809,8 +814,13 @@ Function *FunctionAST::codegen_gpu() {
 
   SetKernelVars(function_name);
 
-  for (auto &body : Body)
+  for (auto &body : Body) {
+    if (idx>=0) {// is comp specialization
+        std::cout << "set cvalues " << parser_struct.cvalues.ints.size() << "\n";
+        body->SetCValues(parser_struct);
+    }
     body->codegen(scope_struct);
+  }
   
   if(!Builder->GetInsertBlock()->getTerminator())
       Builder->CreateRetVoid(); 

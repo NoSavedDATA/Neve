@@ -114,6 +114,93 @@ bool ExprAST::GetIsList() {
   return isList;
 }
 
+void ExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+}
+void BinaryExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    LHS->SetCValues(parser_struct);
+    RHS->SetCValues(parser_struct);
+}
+void UnkVarExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Notes)
+        expr->SetCValues(parser_struct);
+    for (auto &pair : VarNames) {
+        pair.second->SetCValues(parser_struct);
+    }
+}
+void DataExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Notes)
+        expr->SetCValues(parser_struct);
+    for (auto &pair : VarNames) {
+        pair.second->SetCValues(parser_struct);
+    }
+}
+void IfExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Then)
+        expr->SetCValues(parser_struct);
+    for (auto &expr : Else)
+        expr->SetCValues(parser_struct);
+}
+void ForExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void ForEachExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void WhileExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void AsyncsExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void AsyncExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void SpawnExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Body)
+        expr->SetCValues(parser_struct);
+}
+void FinishExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Bodies)
+        expr->SetCValues(parser_struct);
+}
+void LockExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    for (auto &expr : Bodies)
+        expr->SetCValues(parser_struct);
+}
+void UnaryExprAST::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    Operand->SetCValues(parser_struct);
+}
+void Nameable::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    if (Inner)
+        Inner->SetCValues(parser_struct);
+}
+void NameableIdx::SetCValues(Parser_Struct parser_struct) {
+    this->parser_struct.cvalues = parser_struct.cvalues;
+    if (Inner)
+        Inner->SetCValues(parser_struct);
+    Idx->SetCValues(parser_struct);
+}
+
 bool ExprAST::GetNeedGCSafePoint() {
     return false;
 }
@@ -217,7 +304,8 @@ Data_Tree ConstExprAST::GetDataTree(bool from_assignment) {
     return Data_Tree("int");
 }
 
-ConstExprAST::ConstExprAST(Parser_Struct parser_struct, std::string str) : parser_struct(parser_struct), str(str) {
+ConstExprAST::ConstExprAST(Parser_Struct parser_struct, std::string str) : str(str) {
+    this->parser_struct = parser_struct;
 } 
 
 LutLoExprAST::LutLoExprAST() {} 
@@ -307,9 +395,10 @@ NewDictExprAST::NewDictExprAST(
     std::vector<std::unique_ptr<ExprAST>> Keys,
     std::vector<std::unique_ptr<ExprAST>> Values,
     std::string Type, Parser_Struct parser_struct)
-    : Keys(std::move(Keys)), Values(std::move(Values)), Type(Type), parser_struct(parser_struct)
+    : Keys(std::move(Keys)), Values(std::move(Values)), Type(Type)
 {
   this->SetType(Type);
+  this->parser_struct = parser_struct;
 }
   
   
@@ -321,13 +410,14 @@ ObjectExprAST::ObjectExprAST(
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
   std::string Type,
   std::unique_ptr<ExprAST> Init, std::string ClassName)
-  : parser_struct(parser_struct), HasInit(std::move(HasInit)), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), ClassName(ClassName)
+  :  HasInit(std::move(HasInit)), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), ClassName(ClassName)
 {
+    this->parser_struct = parser_struct;
 
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i)
     {
         if (this->HasInit[i]) { // callee init
-          Semantic_Arguments_Check(parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
+          Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
         }
     }
 }
@@ -366,9 +456,11 @@ EmptyStrExprAST::EmptyStrExprAST() {
   End_of_Recursion=true;
   height=0;
 }
-NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct) : parser_struct(parser_struct)
-                                    {
+NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct)  {
+
   this->Inner_Expr = std::move(Inner_Expr);
+  this->parser_struct = parser_struct;
+
   this->Inner_Expr->IsLeaf=false;
   Name = name;
   
@@ -380,7 +472,8 @@ NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, 
 }
 
 NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
-                                        : parser_struct(parser_struct), Idx(std::move(Idx)) {
+                                        :  Idx(std::move(Idx)) {
+  this->parser_struct = parser_struct;
   this->Inner_Expr = std::move(Inner_Expr);
   this->Inner_Expr->IsLeaf=false;
   this->Name = name;
@@ -397,12 +490,12 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
 
 NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
   std::vector<std::unique_ptr<ExprAST>> Args)
-  : Inner_Expr(std::move(Inner_Expr)), Callee(Callee), parser_struct(parser_struct), Args(std::move(Args)) {
+  : Inner_Expr(std::move(Inner_Expr)), Callee(Callee), Args(std::move(Args)) {
 }
 
 
 NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct parser_struct, std::string type, Data_Tree data_type)
-      : Inner_Expr(std::move(Inner_Expr)), parser_struct(parser_struct) {
+      : Inner_Expr(std::move(Inner_Expr)) {
   this->SetType(type);
 
   this->Name = this->Inner_Expr->Name;
@@ -414,8 +507,10 @@ UnkVarExprAST::UnkVarExprAST(
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   std::vector<std::unique_ptr<ExprAST>> Notes)
-  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)),
+  : VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {
+
+  this->parser_struct = parser_struct;
 
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
@@ -448,7 +543,9 @@ TupleExprAST::TupleExprAST(
   Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
-  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+  Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+
+  this->parser_struct = parser_struct;
 
     
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
@@ -469,9 +566,10 @@ ListExprAST::ListExprAST(
   Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
-  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+  Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
 
-    
+  this->parser_struct = parser_struct;
+
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
@@ -489,9 +587,11 @@ DictExprAST::DictExprAST(
   Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
-  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+  Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
 
     
+  this->parser_struct = parser_struct;
+
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
@@ -511,8 +611,9 @@ DataExprAST::DataExprAST(
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type, Data_Tree data_type, bool HasNotes, bool IsStruct,
   std::vector<std::unique_ptr<ExprAST>> Notes)
-  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
+  : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
                 Notes(std::move(Notes)) {   
+  this->parser_struct = parser_struct;
   dt_type = "DT_"+data_type.Type;  
 
   if(data_type.Type=="charv") {      
@@ -593,7 +694,8 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
 }
 
 NewExprAST::NewExprAST(Parser_Struct parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
-            : parser_struct(parser_struct), DataName(DataName), Args(std::move(Args)) {
+            : DataName(DataName), Args(std::move(Args)) {
+    this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
     GetDataTree();
 }
@@ -603,7 +705,9 @@ bool NewExprAST::GetNeedGCSafePoint() {
 }
 
 LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
-  : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
+  : LibName(LibName), IsDefault(IsDefault) {
+
+  this->parser_struct = parser_struct;
 
 
   std::string ai_path = LibName+".nv";
@@ -697,15 +801,19 @@ Data_Tree ReduceExprAST::GetDataTree(bool from_assignment) {
   
 ReduceExprAST::ReduceExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS,
                              char Op, std::string functional_type)
-            : parser_struct(parser_struct), LHS(std::move(LHS)),
+            : LHS(std::move(LHS)),
               Op(Op), functional_type(functional_type) {
+    this->parser_struct = parser_struct;
     GetDataTree();
 }
   
   
   
 LambdaExprAST::LambdaExprAST(Parser_Struct parser_struct, std::string lambda_fn, std::vector<std::string> Args)
-    : parser_struct(parser_struct), lambda_fn(lambda_fn), Args(std::move(Args)) {}
+    : lambda_fn(lambda_fn), Args(std::move(Args)) {
+    this->parser_struct = parser_struct;
+}
+
   
   
 Data_Tree MapitExprAST::GetDataTree(bool from_assignment) {
@@ -713,7 +821,9 @@ Data_Tree MapitExprAST::GetDataTree(bool from_assignment) {
 }
 
 MapitExprAST::MapitExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
-    : parser_struct(parser_struct), LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
+    : LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
+    this->parser_struct = parser_struct;
+
     Data_Tree dt = this->LHS->GetDataTree();
     std::string scope = this->Lambda->lambda_fn;
     
@@ -751,40 +861,85 @@ Data_Tree LayoutExprAST::GetDataTree(bool) {
 
     dt = Data_Tree("layout");
     dt.Nested_Data.push_back(Data_Tree(data_type_to_name()[type]));
-    for (int i=0; i<Const_Args.size(); ++i) {
-        // if (auto stmt = dynamic_cast<IntExprAST>(Const_Args[i].get())) {
+    for (int i=0; i<CArgs.size(); ++i) {
+        // if (auto stmt = dynamic_cast<IntExprAST>(CArgs[i].get())) {
         //     std::cout << "As INT" << "\n";
         //     dt.Nested_Data.push_back(Data_Tree(std::to_string(stmt->Val)));
         // }
-        dt.Nested_Data.push_back(Data_Tree(std::to_string(Const_Args[i])));
+        dt.Nested_Data.push_back(Data_Tree(CArgs[i].name));
     }
     return dt;
 }
 
 
-LayoutExprAST::LayoutExprAST(Parser_Struct parser_struct, uint16_t type,
-        std::vector<int> Const_Args, std::vector<std::unique_ptr<ExprAST>> Args, bool smem) 
-    : parser_struct(parser_struct), type(type), Const_Args(std::move(Const_Args)),
-      Args(std::move(Args)), smem(smem) {
-
-    GetDataTree();
-
-
+std::vector<int> LayoutExprAST::GetStrides() {
+    std::vector<int> Strides;
     int acc=1;
-    for (int i=this->Const_Args.size()-1; i>=0; --i) {
-        this->Strides.insert(this->Strides.begin(), acc);
-        acc *= this->Const_Args[i];
+
+    for (int i=CArgs.size()-1; i>=0; --i) {
+        auto carg = CArgs[i];
+        std::string type = carg.dt.Type; 
+        std::string str = carg.name; 
+
+
+        Strides.insert(Strides.begin(), acc);
+        if (type=="int")
+            acc *= std::stoi(str);
+        else if (type=="string") {
+
+            if (parser_struct.cvalues.ints.count(str)==0)
+                LogErrorC(parser_struct.line, "Compile time value \"" + str + "\" not found in layout expr");
+            
+            acc *= parser_struct.cvalues.ints[str];
+        } else
+            LogErrorC(parser_struct.line, "layout does not support nested type " + type);
     }
+    return std::move(Strides);
 }
 
+LayoutExprAST::LayoutExprAST(Parser_Struct parser_struct, uint16_t type,
+        std::vector<CompiledArgs> CArgs, std::vector<std::unique_ptr<ExprAST>> Args, bool smem) 
+    : type(type), CArgs(std::move(CArgs)),
+      Args(std::move(Args)), smem(smem) {
+    this->parser_struct = parser_struct;
+    GetDataTree();
+}
+
+
+FnCompiledValues HandleCompiledArgs(Parser_Struct parser_struct, std::string fn_name, FnCompiledValuesVec CompiledArgsVec) {
+
+    FnCompiledValues fn_compiled_values; 
+    if (Fn_Compiled_Args.count(fn_name)==0) {
+        fn_compiled_values.has=false;
+        return fn_compiled_values;
+    }
+
+    std::vector<CompiledArgs> compiled_args = Fn_Compiled_Args[fn_name];
+    
+    int last_int=0, last_float=0, last_string=0;
+    
+    for (auto &arg : compiled_args) {
+        std::string type = arg.dt.Type;
+        std::string name = arg.name;
+        if (type=="int") {
+            std::cout << "set int " << name << ", " << CompiledArgsVec.ints[last_int] << "\n";
+            fn_compiled_values.ints[name] = CompiledArgsVec.ints[last_int++];
+        }
+    }
+
+    return fn_compiled_values;
+}
 
 LaunchExprAST::LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST> Grid,
         std::unique_ptr<ExprAST> Block,
         std::vector<std::unique_ptr<ExprAST>> Args,
+        FnCompiledValuesVec CompiledArgsVec,
         std::string fn_name) 
     : Grid(std::move(Grid)), Block(std::move(Block)), Args(std::move(Args)),
+      CompiledArgsVec(CompiledArgsVec),
       fn_name(fn_name) {
 
+    Semantic_Arguments_Check(parser_struct, this->Args, fn_name, false, this->Args.size(), 0);
 
     if (auto stmt = dynamic_cast<NewVecExprAST*>(this->Grid.get())) {
         for (int i=stmt->Values.size(); i<8; i=i+2) {
@@ -799,6 +954,10 @@ LaunchExprAST::LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST> Grid,
             stmt->Values.insert(stmt->Values.end()-2, std::make_unique<IntExprAST>(1));
         }
     }
+    
+    CompiledArgs = HandleCompiledArgs(parser_struct, fn_name, CompiledArgsVec);
+    if (CompiledArgs.has)
+        fn_name = mangle_cargs_proto(fn_name);
 }
   
   
@@ -808,9 +967,13 @@ Data_Tree UnaryExprAST::GetDataTree(bool from_assignment) {
     return Operand->GetDataTree();
 }
 
+
+
   /// UnaryExprAST - Expression class for a unary operator.
 UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
-    : Opcode(Opcode), Operand(std::move(Operand)), parser_struct(parser_struct) {}
+    : Opcode(Opcode), Operand(std::move(Operand)) {
+  this->parser_struct = parser_struct;
+}
   
 bool UnaryExprAST::GetNeedGCSafePoint() {
     return Operand->GetNeedGCSafePoint();
@@ -972,10 +1135,13 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
     return (LHS->GetNeedGCSafePoint()||RHS->GetNeedGCSafePoint());
 }
   
+
   /// binaryexprAST - Expression class for a binary operator.
 BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {
+    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
+
+  this->parser_struct = parser_struct;
 
   GetDataTree();
 
@@ -1081,7 +1247,9 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
 
 RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct parser_struct)
-    : Vars(std::move(Vars)), parser_struct(parser_struct) {
+    : Vars(std::move(Vars)) {
+
+    this->parser_struct = parser_struct;
 
     return_expected_type = functions_return_data_type[parser_struct.function_name];
 
@@ -1097,7 +1265,10 @@ RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct
 fn_descriptor::fn_descriptor(const std::string &Name, const std::string &Return) : Name(Name), Return(Return) {}
 
 ClassExprAST::ClassExprAST(Parser_Struct parser_struct, const std::string &Name, const std::vector<fn_descriptor> &Functions)
-  : Name(Name), parser_struct(parser_struct), Functions(Functions) {}
+  : Name(Name), Functions(Functions) {
+    this->parser_struct = parser_struct;
+}
+
 
 // nlohmann::json ClassExprAST::toJSON() {
 //   std::cout << "class to json" << ".\n";
@@ -1140,7 +1311,9 @@ ClassExprAST::ClassExprAST(Parser_Struct parser_struct, const std::string &Name,
 //   return j;
 // }
   
-GCSafePointExprAST::GCSafePointExprAST(Parser_Struct parser_struct) : parser_struct(parser_struct) {}
+GCSafePointExprAST::GCSafePointExprAST(Parser_Struct parser_struct) {
+  this->parser_struct = parser_struct;
+}
   
   
   /// IfExprAST - Expression class for if/then/else.
@@ -1148,7 +1321,9 @@ IfExprAST::IfExprAST(Parser_Struct parser_struct,
           std::unique_ptr<ExprAST> Cond,
           std::vector<std::unique_ptr<ExprAST>> Then,
           std::vector<std::unique_ptr<ExprAST>> Else)
-    : parser_struct(parser_struct), Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+    : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {
+  this->parser_struct = parser_struct;
+}
   
   
 /// ForExprAST - Expression class for for.
@@ -1156,14 +1331,17 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
           std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
           std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
-      Step(std::move(Step)), Body(std::move(Body)), parser_struct(parser_struct) {}
+      Step(std::move(Step)), Body(std::move(Body)) {
+    this->parser_struct = parser_struct;
+}
+
   
 
 /// ForExprAST - Expression class for for.
 ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
           std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct, Data_Tree data_type)
-    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct) {
-
+    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {
+    this->parser_struct = parser_struct;
     this->data_type = data_type;
     Type = data_type.Nested_Data[0].Type;
     typeVars[parser_struct.function_name][VarName] = "foreach_control_var";
@@ -1173,7 +1351,9 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
   
   /// WhileExprAST - Expression class for while.
 WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
-  : Cond(std::move(Cond)), Body(std::move(Body)), parser_struct(parser_struct) {}
+  : Cond(std::move(Cond)), Body(std::move(Body)) {
+    this->parser_struct = parser_struct;
+}
 
 BreakExprAST::BreakExprAST() {}
 ContinueExprAST::ContinueExprAST() {}
@@ -1191,24 +1371,30 @@ Data_Tree IndexExprAST::GetDataTree(bool from_assignment) {
 
 ExitCheckExprAST::ExitCheckExprAST() {}
 
-ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type, std::string Name, bool isSelf) : parser_struct(parser_struct) {
+ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type, std::string Name, bool isSelf) {
+  this->parser_struct = parser_struct;
   this->data_type = data_type;
   this->Name = Name;
   this->isSelf = isSelf;
   std::cout << "--ChannelExpr" << "\n";
 }
 
-SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {}
+SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)) {
+  this->parser_struct = parser_struct;
+}
 
-// AsyncFnPriorExprAST::AsyncFnPriorExprAST(std::string Async_Name, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Async_Name(Async_Name), Body(std::move(Body)), parser_struct(parser_struct) {}
+
 AsyncFnPriorExprAST::AsyncFnPriorExprAST() {}
   
   /// AsyncExprAST - Expression class for async.
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
-  : Body(std::move(Body)), parser_struct(parser_struct) {}
+  : Body(std::move(Body)) {
+    this->parser_struct = parser_struct;
+}
   
 AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct parser_struct)
-  : Body(std::move(Body)), Count(std::move(Count)), parser_struct(parser_struct) {
+  : Body(std::move(Body)), Count(std::move(Count)) {
+    this->parser_struct = parser_struct;
 
     std::string type = this->Count->GetDataTree().Type;
 
@@ -1263,8 +1449,10 @@ PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
               bool IsOperator, unsigned Prec)
-      : parser_struct(parser_struct), Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
+      : Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
         IsOperator(IsOperator), Precedence(Prec) {
+    this->parser_struct = parser_struct;
+
 
     functions_return_data_type[Name] = ReturnType;
     // std::cout << Name << "|" << this->Types.size() << "|" << this->Args.size() << "\n";
@@ -1281,13 +1469,16 @@ PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name,
 
     int initialized_args = (ArgsInit.count(Name)>0) ? ArgsInit[Name].size() : 0;
     
+    int ctx_offset = (parser_struct.gpu>0) ? 0 : 1;
     Function_Arg_Names[Name] = std::move(arg_names);
-    Function_Required_Arg_Count[Name] = arg_count-1-initialized_args; // Desconsider scope_struct
+    Function_Required_Arg_Count[Name] = arg_count-ctx_offset-initialized_args; // Desconsider scope_struct
     native_fn.push_back(Name);
 
     if (ends_with(Name, "_prebuild"))
         prebuild_functions.push_back(Name);
     // std::cout << "proto " << Name << " has " << arg_count-1 << " args\n";
+
+    has_compiled_args = Fn_Compiled_Args.count(Name)>0;
 }
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -1314,7 +1505,9 @@ Data_Tree ViewExprAST::GetDataTree(bool from_assignment) {
     
 ViewExprAST::ViewExprAST(std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct) \
-            : LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {
+            : LHS(std::move(LHS)), RHS(std::move(RHS)) {
+    this->parser_struct = parser_struct;
+
     std::string R_Type = this->RHS->GetDataTree().Type;
     if(R_Type!="int") {
         if (!in_vec(R_Type, int_types))
@@ -1568,15 +1761,19 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
 
 
 
-Nameable::Nameable(Parser_Struct parser_struct) : parser_struct(parser_struct) {}
+Nameable::Nameable(Parser_Struct parser_struct) {
+  this->parser_struct = parser_struct;
+}
 
-Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth) : parser_struct(parser_struct), Depth(Depth) {
+Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth) : Depth(Depth) {
+  this->parser_struct = parser_struct;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
 }
 
-Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth, bool IsUnique) : parser_struct(parser_struct), Depth(Depth), IsUnique(IsUnique) {
+Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth, bool IsUnique) : Depth(Depth), IsUnique(IsUnique) {
+  this->parser_struct = parser_struct;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
@@ -1629,7 +1826,7 @@ NameableAppend::NameableAppend(Parser_Struct parser_struct, std::unique_ptr<Name
     }
 }
 
-NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
+NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
   this->Inner = std::move(Inner);
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
@@ -1746,6 +1943,10 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   if(!is_first_citizen)
       Semantic_Arguments_Check(parser_struct, this->Args, Callee, is_nsk_fn, sent_args, arg_type_check_offset);
+
+  CompiledArgs = HandleCompiledArgs(parser_struct, Callee, CompiledArgsVec);
+  if (CompiledArgs.has)
+    Callee = mangle_cargs_proto(Callee);
 }
 
 
@@ -1756,7 +1957,9 @@ bool NameableCall::GetNeedGCSafePoint() {
 
 
 PositionalArgExprAST::PositionalArgExprAST(Parser_Struct parser_struct, const std::string & ArgName, std::unique_ptr<ExprAST> Inner)
-    : parser_struct(parser_struct), ArgName(ArgName), Inner(std::move(Inner)) {}
+    : ArgName(ArgName), Inner(std::move(Inner)) {
+  this->parser_struct = parser_struct;
+}
 
 Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
     return Inner->GetDataTree(false);

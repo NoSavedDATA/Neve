@@ -2354,6 +2354,12 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
+        } else if (L_dt.Type=="layout") {// layout<float, 3,4,...>
+            L_dt = LHS->GetDataTree(true);
+            llvm::Type *Ty = get_type_from_data(Data_Tree(L_dt.Nested_Data[0]));
+            
+            Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
+            Builder->CreateStore(R, gep);
         } else 
             call(type+"_Store_Idx", {vec_ptr, idx, Val, scope_struct});
 
@@ -3748,7 +3754,12 @@ Value *NewExprAST::codegen(Value *scope_struct) {
 
 
 
-
+std::string mangle_cargs_proto(std::string fn_name, bool inc) {
+    int idx = (Fn_Last_Version.count(fn_name)==0) ? 0 : Fn_Last_Version[fn_name];
+    if (inc)
+        Fn_Last_Version[fn_name]++;
+    return fn_name+std::to_string(idx);
+}
 
 
 Function *PrototypeAST::codegen() {
@@ -3767,11 +3778,15 @@ Function *PrototypeAST::codegen() {
     llvm::Type *retTy = get_type_from_data(ReturnType);
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
+    std::string fn_name = Name;
+    if (has_compiled_args)
+        fn_name = mangle_cargs_proto(fn_name, true);
 
-    auto linkage = (parser_struct.gpu==2) ? Function::InternalLinkage : Function::ExternalLinkage;
+    auto linkage = (parser_struct.gpu==2) ?\
+                     Function::InternalLinkage : Function::ExternalLinkage;
 
     auto llvm_module = (parser_struct.gpu>0) ? PtxModule.get() : TheModule.get();
-    Function *F = Function::Create(FT, linkage, Name, llvm_module);
+    Function *F = Function::Create(FT, linkage, fn_name, llvm_module);
 
     // Set names for all arguments.
     unsigned Idx = 0;
@@ -3826,10 +3841,10 @@ Function *PrototypeAST::codegen() {
 
 Value *ReduceExprAST::codegen(Value *scope_struct) {
     std::string gpu_str = (parser_struct.gpu>0)  ? "gpu_" : "";
-    fn += "_" + gpu_str + functional_type + "_" + op_map[Op];
+    std::string callee = fn + "_" + gpu_str + functional_type + "_" + op_map[Op];
     if(parser_struct.gpu==0)
-        return callret(fn, {scope_struct, LHS->codegen(scope_struct)});
-    return callret(fn, {LHS->codegen(scope_struct)});
+        return callret(callee, {scope_struct, LHS->codegen(scope_struct)});
+    return callret(callee, {LHS->codegen(scope_struct)});
 }
 
 
@@ -3928,10 +3943,11 @@ Value *LayoutExprAST::codegen(Value *scope_struct) {
 
     Value *ptr = Args[0]->codegen(scope_struct);
 
+    std::vector<int> strides = GetStrides();
     Value *offset = const_int(0);
-    for (int i=0; i<Strides.size(); ++i) {
+    for (int i=0; i<strides.size(); ++i) {
         offset = Builder->CreateAdd(offset, 
-                        Builder->CreateMul(const_int(Strides[i]),
+                        Builder->CreateMul(const_int(strides[i]),
                                            Args[i+1]->codegen(scope_struct))
                     );
     }
@@ -4612,11 +4628,29 @@ Value *getValAddress(Function *TheFunction, Value *val, Data_Tree dt, int i) {
 
 Value *callgpu(Function *TheFunction, std::string fn,
                       Value *gx, Value *gy, Value *gz, Value *bx, Value *by, Value *bz,
-                      const std::vector<Value *> &args, std::vector<Data_Tree> &Types) {
+                      const std::vector<Value *> &args, std::vector<Data_Tree> &Types,
+                      FnCompiledValues CompiledArgs) {
 
-    auto ptx = EmitPtx();
+    bool re_emit_ptx=false;
+    if (CompiledArgs.has) {
+        int idx=0;
+        if (Fn_Compiled_Version[fn].count(CompiledArgs)==0) {
+            re_emit_ptx=true;
+            auto proto = FunctionProtos[fn].get();
+            auto FnAst = GpuFunctions[fn].get();
+            
+            idx = (Fn_Last_Version.count(fn)==0) ? 0 : Fn_Last_Version[fn];
+            fn+=std::to_string(idx);
+            Fn_Compiled_Values[fn] = CompiledArgs;
+
+            Function *F= proto->codegen();
+            FnAst->codegen_gpu(idx);
+        }
+    }
+    auto ptx = EmitPtx(re_emit_ptx);
     // PtxModule->print(llvm::errs(), nullptr);
 
+    // std::cout << "" << ptx << "\n";
 
     // Encapsulate within void **args
     int nargs = args.size();
@@ -4649,7 +4683,6 @@ Value *callgpu(Function *TheFunction, std::string fn,
 
 Value *LaunchExprAST::codegen(Value *scope_struct) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    std::cout << "launch codegen" << "\n";
 
     std::vector<Value*> ArgsV = {scope_struct};
     std::vector<Data_Tree> ArgTypes;
@@ -4658,15 +4691,12 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
             scope_struct,\
             fn_name, false, 0);
 
-
     if(kernel_fn.count(fn_name)==0)
         LogErrorC(parser_struct.line, "Kernel " + fn_name + " not found.");
     
 
     Value *grid = Grid->codegen(scope_struct);
     Value *block = Block->codegen(scope_struct);
-    call("array_print_int",  {scope_struct, grid});
-    call("array_print_int",  {scope_struct, block});
 
     Value *grid_gep = Builder->CreateStructGEP(struct_types["array"], grid, 3);
     Value *block_gep = Builder->CreateStructGEP(struct_types["array"], block, 3);
@@ -4675,20 +4705,21 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
 
     
 
-    Value *bx, *by, *bz, *tx, *ty, *tz;
-    bx = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(0)));
-    by = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(1)));
-    bz = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(2)));
-    tx = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(0)));
-    ty = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(1)));
-    tz = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(2)));
+    Value *gx, *gy, *gz, *bx, *by, *bz;
+    gx = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(0)));
+    gy = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(1)));
+    gz = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(2)));
+    bx = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(0)));
+    by = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(1)));
+    bz = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(2)));
 
 
 
     std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
     callgpu(TheFunction, fn_name,
-            bx, by, bz, tx, ty, tz,
-            ArgsV_slice, ArgTypes);
+            gx, gy, gz, bx, by, bz,
+            ArgsV_slice, ArgTypes,
+            CompiledArgs);
     return const_int(0);
 }
 

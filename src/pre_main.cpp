@@ -155,13 +155,15 @@ void HandleGpuDef() {
 
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
+    bool has_compiled_args = FnAST->getProto().has_compiled_args;
 
     FunctionProtos[fn_name] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
-
     GpuFunctions[fn_name] = std::move(FnAST);
 
-    getGpuFnCheck(fn_name);
+    if (!has_compiled_args) {
+        getGpuFnCheck(fn_name);
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();

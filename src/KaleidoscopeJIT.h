@@ -56,7 +56,7 @@ class FunctionAST {
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
   llvm::Function *codegen();
-  llvm::Function *codegen_gpu();
+  llvm::Function *codegen_gpu(int idx=-1); // idx for compile time
 };
 
 

@@ -67,7 +67,7 @@ extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Funct
                                                        Value*, Value*)>> llvm_store_idx;
 
 
-std::string EmitPtx();
+std::string EmitPtx(bool re_emit=false);
 
 
 

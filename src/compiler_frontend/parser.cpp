@@ -64,6 +64,13 @@ std::map<std::string, llvm::Type *> ClassStructs;
 
 
 
+// Compiled args
+CompiledArgs::CompiledArgs(Data_Tree dt, std::string name) : dt(dt), name(name) {}
+std::unordered_map<std::string,std::vector<CompiledArgs>> Fn_Compiled_Args;
+std::unordered_map<std::string,std::map<FnCompiledValues, int>> Fn_Compiled_Version;
+std::unordered_map<std::string,int> Fn_Last_Version;
+std::unordered_map<std::string,FnCompiledValues> Fn_Compiled_Values;
+
 
 std::string Extract_List_Suffix(const std::string& input) {
     std::string target = "_list";
@@ -541,6 +548,31 @@ std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_p
 }
 
 
+FnCompiledValuesVec Parse_Compile_Args(Parser_Struct parser_struct, std::string class_name) {
+    FnCompiledValuesVec compiled_args;
+    if (CurTok=='<') {
+        getNextToken(); // eat <
+        int i=0;
+        while(true) {
+            if (CurTok==tok_int)
+                compiled_args.ints.push_back(IntVal);
+            if (CurTok==tok_identifier)
+                compiled_args.strings.push_back(IdentifierStr);
+            if (CurTok==tok_number)
+                compiled_args.floats.push_back(NumVal);
+            getNextToken();
+            if(CurTok=='>')
+                break;
+            if(CurTok!=',')
+                LogErrorC(parser_struct.line, "Compile-time args expected , or ]");
+            getNextToken(); // eat ,
+        }
+        getNextToken(); // eat >
+    }
+    return compiled_args;
+}
+
+
 
 std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
 
@@ -551,7 +583,9 @@ std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_
     return nullptr;
   parser_struct.parse_fn = prev_call_fn;
 
-  std::unique_ptr<NameableCall> call_expr = std::make_unique<NameableCall>(parser_struct, std::move(inner), std::move(*Args));
+  auto CompiledArgs = Parse_Compile_Args(parser_struct, class_name);
+
+  std::unique_ptr<NameableCall> call_expr = std::make_unique<NameableCall>(parser_struct, std::move(inner), std::move(*Args), CompiledArgs);
 
   if (CurTok=='.') {
     getNextToken();
@@ -608,7 +642,7 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
           return Parse_Append_Expr(parser_struct, std::move(nameable), class_name);
   }
   
-  if(in_str(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
+  if(in_vec(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
     return ParseLLVM_IR_CallExpr(parser_struct, std::move(nameable), class_name);
 
   if (CurTok=='.') {
@@ -1325,7 +1359,7 @@ std::string CheckListAppend(std::string callee, std::vector<std::unique_ptr<Expr
     LogError(parser_struct.line, "Tried to append " + argument_type + " to " + list_type + " list.");
 
 
-  if(in_str(list_type,{"int","float","bool"}))
+  if(in_vec(list_type,{"int","float","bool"}))
     return callee+"_"+list_type;
   
   arguments.push_back(std::make_unique<StringExprAST>(list_type));
@@ -1574,7 +1608,7 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string
 
 
   //   std::string prefix_datatype = Extract_List_Prefix(data_type);
-  //   if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
+  //   if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_vec(prefix_datatype, data_tokens) )
   //     Object_toClass[parser_struct.function_name][IdentifierStr] = prefix_datatype;
   //   typeVars[parser_struct.function_name][IdentifierStr] = data_type;
   //   getNextToken(); // eat identifier.
@@ -1712,7 +1746,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     std::string prefix_datatype = Extract_List_Prefix(data_type);
 
 
-    if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
+    if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_vec(prefix_datatype, data_tokens) )
       Object_toClass[parser_struct.function_name][IdentifierStr] = Data_Tree(prefix_datatype);
 
     getNextToken(); // eat identifier.
@@ -1813,7 +1847,7 @@ std::unique_ptr<ExprAST> ParseLayoutExpr(Parser_Struct parser_struct, std::strin
   getNextToken(); // eat layout
   
   uint16_t type;
-  std::vector<int> const_args;
+  std::vector<CompiledArgs> const_args;
   bool smem=false;
 
   if (CurTok!='<')
@@ -1830,8 +1864,10 @@ std::unique_ptr<ExprAST> ParseLayoutExpr(Parser_Struct parser_struct, std::strin
       getNextToken(); // eat ,
       if (IdentifierStr=="smem")
           smem = true;
+      else if (CurTok==tok_int)
+          const_args.push_back(CompiledArgs(Data_Tree("int"), std::to_string(NumVal)));
       else
-          const_args.push_back(NumVal);
+          const_args.push_back(CompiledArgs(Data_Tree("string"), IdentifierStr));
       getNextToken();
   }
 
@@ -1935,8 +1971,11 @@ std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct parser_struct, std::string cl
     auto args = Parse_Arguments(parser_struct, class_name);
 
 
+    auto CompiledArgs = Parse_Compile_Args(parser_struct, class_name);
+
+
     return make_unique<LaunchExprAST>(parser_struct, std::move(grid),
-                    std::move(block), std::move(*args), fn_name);
+                    std::move(block), std::move(*args), CompiledArgs, fn_name);
 }
 
 
@@ -2300,7 +2339,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
       return_data_type = Data_Tree("int");
   } else {  
       return_type = IdentifierStr;
-      return_data_type = ParseDataTree(return_type, in_str(IdentifierStr,compound_tokens), parser_struct);
+      return_data_type = ParseDataTree(return_type, in_vec(IdentifierStr,compound_tokens), parser_struct);
   }
   
 
@@ -2399,12 +2438,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
     else
       type=IdentifierStr;
 
-    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens) && (!in_vec(IdentifierStr, compound_tokens))) && IdentifierStr!="channel" && Classes.count(type)==0)
+    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_vec(IdentifierStr, data_tokens) && (!in_vec(IdentifierStr, compound_tokens))) && IdentifierStr!="channel" && Classes.count(type)==0)
       LogErrorProto_to_comma(parser_struct.line, "Prototype var type must be s, t, i, f or a data type. Got " + IdentifierStr);
     else {
       std::string data_type = type;
 
-      Data_Tree data_tree = ParseDataTree(type, in_str(type, compound_tokens), parser_struct);
+      Data_Tree data_tree = ParseDataTree(type, in_vec(type, compound_tokens), parser_struct);
 
       std::string IdName = IdentifierStr;
 
@@ -2424,8 +2463,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
 
         getNextToken(); // get channel
 
-        if (CurTok==tok_arrow)
-        {
+        if (CurTok==tok_arrow) {
           channel_direction = ch_sender;
           getNextToken(); // <- ch
         }
@@ -2437,8 +2475,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
         IdName = IdentifierStr;
         getNextToken(); // get arg name;
         
-        if (CurTok==tok_arrow)
-        {
+        if (CurTok==tok_arrow) {
           channel_direction = ch_receiver;
           getNextToken(); // ch <-
         }
@@ -2480,6 +2517,32 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool f
         getNextToken();
   }
   getNextToken(); // eat ')'.
+
+
+  if (CurTok=='[') {// Compiletime values
+      getNextToken(); // eat '['
+      while(true) {
+          if (CurTok!=tok_data&&CurTok!=tok_struct)
+            return LogErrorProto(parser_struct.line, "Prototype compiletime args require a data type.");
+
+          Data_Tree data_tree = ParseDataTree(IdentifierStr, in_vec(IdentifierStr, compound_tokens), parser_struct);
+          data_tree.ctime = true;
+
+          if (CurTok!=tok_identifier)
+            return LogErrorProto(parser_struct.line, "Prototype compiletime args require name");
+          std::string arg_name = IdentifierStr;
+          getNextToken(); 
+          if (CurTok==',')
+              getNextToken(); 
+
+          data_typeVars[FnName][arg_name] = data_tree;
+          Fn_Compiled_Args[FnName].push_back(CompiledArgs(data_tree, arg_name));
+
+          if (CurTok==']')
+              break;
+      }  
+      getNextToken(); // eat ]
+  }
     
   // Verify right number of names for operator.
   if (Kind && ArgNames.size() != Kind)

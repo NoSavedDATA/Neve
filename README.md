@@ -63,3 +63,7 @@ make -j8
 
 This adds neve to bin/neve
 
+
+# Implementations
+
+[Byte-Pair Encoding](https://github.com/NoSavedDATA/Neve_Byte_Pair_Encoding)

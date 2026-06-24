@@ -29,6 +29,7 @@ class ExprAST {
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
     bool isMessage = false;
+    Parser_Struct parser_struct;
   
     Data_Tree data_type = Data_Tree("");
 
@@ -74,7 +75,7 @@ class ExprAST {
     virtual bool GetIsMsg(); 
 
     virtual bool GetNeedGCSafePoint();
-
+    virtual void SetCValues(Parser_Struct);
     // virtual nlohmann::json toJSON();
 };
 
@@ -190,7 +191,6 @@ class VarExprAST : public ExprAST {
 
 class TupleExprAST : public VarExprAST {
   public:
-    Parser_Struct parser_struct;
     Data_Tree data_type;
 
     TupleExprAST(
@@ -203,7 +203,6 @@ class TupleExprAST : public VarExprAST {
 
 class ListExprAST : public VarExprAST {
   public:
-    Parser_Struct parser_struct;
     Data_Tree data_type;
 
     ListExprAST(
@@ -216,7 +215,6 @@ class ListExprAST : public VarExprAST {
 
 class DictExprAST : public VarExprAST {
   public:
-    Parser_Struct parser_struct;
     Data_Tree data_type;
 
     DictExprAST(
@@ -232,7 +230,6 @@ class DictExprAST : public VarExprAST {
 class UnkVarExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
-    Parser_Struct parser_struct;
 
     UnkVarExprAST(
       Parser_Struct,
@@ -242,6 +239,7 @@ class UnkVarExprAST : public VarExprAST {
 
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
+  void SetCValues(Parser_Struct) override;
 };
   
   
@@ -291,7 +289,6 @@ class NewVecExprAST : public ExprAST {
 class NewDictExprAST : public ExprAST {
 
   public:
-    Parser_Struct parser_struct;
     std::vector<std::unique_ptr<ExprAST>> Keys, Values;
     std::string Type;
     
@@ -307,7 +304,6 @@ class NewDictExprAST : public ExprAST {
 class ObjectExprAST : public VarExprAST {
 
 public:
-  Parser_Struct parser_struct;
   std::unique_ptr<ExprAST> Init;
   std::vector<bool> HasInit;
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args;
@@ -335,7 +331,6 @@ class DataExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
     Data_Tree data_type;
-    Parser_Struct parser_struct;
     bool HasNotes, IsStruct, DtHasCreateFn;
     std::string dt_type, create_fn; 
 
@@ -347,6 +342,7 @@ class DataExprAST : public VarExprAST {
 
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -356,7 +352,6 @@ class NewExprAST : public ExprAST {
     std::vector<std::unique_ptr<ExprAST>> Args;
     bool is_high_level_obj=false;
     Data_Tree data_type=Data_Tree("");
-    Parser_Struct parser_struct;
 
     NewExprAST(
       Parser_Struct, std::string,
@@ -373,7 +368,6 @@ class LibImportExprAST : public ExprAST {
   public:
     std::string LibName;
     bool IsDefault;
-    Parser_Struct parser_struct;
 
   LibImportExprAST(std::string, bool, Parser_Struct); 
 
@@ -392,7 +386,6 @@ class LibImportExprAST : public ExprAST {
 
 /// UnaryExprAST - Expression class for a unary operator.
 class UnaryExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   int Opcode;
@@ -402,12 +395,12 @@ public:
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void SetCValues(Parser_Struct) override;
 };
   
   
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   std::string cast_L_to="", cast_R_to="";
   Data_Tree L_dt, R_dt;
 
@@ -423,12 +416,12 @@ public:
   std::string GetType(bool from_assignment=false) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
 class ConstExprAST : public ExprAST {
 public:
-  Parser_Struct parser_struct;
   std::string str;
   Data_Tree data_type;
   
@@ -441,7 +434,6 @@ public:
 
 
 class ViewExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   Data_Tree data_type;
 public:
   std::unique_ptr<ExprAST> LHS;
@@ -465,7 +457,6 @@ class Nameable : public ExprAST {
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1;
   bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true; 
-  Parser_Struct parser_struct;
 
   Nameable(Parser_Struct);
   Nameable(Parser_Struct, std::string, int);
@@ -481,6 +472,7 @@ class Nameable : public ExprAST {
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -513,8 +505,10 @@ class NameableCall : public Nameable {
   int arg_type_check_offset=1; 
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, ReturnType="";
+  FnCompiledValuesVec CompiledArgsVec;
+  FnCompiledValues CompiledArgs;
 
-  NameableCall(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
+  NameableCall(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec);
 
 
   Value *codegen(Value *scope_struct) override;
@@ -529,9 +523,9 @@ class NameableIdx : public Nameable {
 
   NameableIdx(Parser_Struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx);
 
-
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -557,7 +551,6 @@ class PositionalArgExprAST : public ExprAST {
     public:
         std::string ArgName;
         std::unique_ptr<ExprAST> Inner;
-        Parser_Struct parser_struct;
 
         PositionalArgExprAST(Parser_Struct, const std::string &, std::unique_ptr<ExprAST>);
 
@@ -615,7 +608,6 @@ class SelfExprAST : public NameableExprAST {
 
 
 class NestedStrExprAST : public NameableExprAST {
-  Parser_Struct parser_struct;
   
   public:
     NestedStrExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct);
@@ -624,7 +616,6 @@ class NestedStrExprAST : public NameableExprAST {
   
 
 class NestedVectorIdxExprAST : public NameableExprAST {
-  Parser_Struct parser_struct;
   
   public:
     std::unique_ptr<IndexExprAST> Idx;
@@ -644,7 +635,6 @@ void Print_Names_Str(std::vector<std::string>);
 class NestedVariableExprAST : public ExprAST {
   
   public:
-    Parser_Struct parser_struct;
     std::unique_ptr<NameableExprAST> Inner_Expr;
     bool Load_Val = true;
     
@@ -658,7 +648,6 @@ class NestedCallExprAST : public ExprAST {
   std::unique_ptr<NameableExprAST> Inner_Expr;
   std::string Callee;
   std::vector<std::unique_ptr<ExprAST>> Args;
-  Parser_Struct parser_struct;
 
   public:
     NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
@@ -674,7 +663,6 @@ class RetExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Vars;
-    Parser_Struct parser_struct;
     Data_Tree return_expected_type, returning_type;
     
     RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct);
@@ -692,7 +680,6 @@ struct fn_descriptor {
 class ClassExprAST : public ExprAST {
   public:
     std::string Name;
-    Parser_Struct parser_struct;
     std::vector<fn_descriptor> Functions;
 
     ClassExprAST(Parser_Struct, const std::string &, const std::vector<fn_descriptor> &);
@@ -709,7 +696,6 @@ class ClassExprAST : public ExprAST {
 
 class GCSafePointExprAST : public ExprAST {
   public:
-    Parser_Struct parser_struct;
 
   GCSafePointExprAST(Parser_Struct); 
 
@@ -720,7 +706,6 @@ class GCSafePointExprAST : public ExprAST {
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
-  Parser_Struct parser_struct;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Then, Else;
@@ -734,6 +719,7 @@ class IfExprAST : public ExprAST {
                 std::map<std::string, Value*> &break_values_snapshot,
                 std::vector<BasicBlock *> &BreakBB,
                 std::vector<BasicBlock *> &ContinueBB);
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -742,7 +728,6 @@ class IfExprAST : public ExprAST {
 class ForExprAST : public ExprAST {
   std::string VarName;
   std::unique_ptr<ExprAST> Start, End, Step;
-  Parser_Struct parser_struct;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
@@ -751,13 +736,13 @@ class ForExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 /// ForExprAST - Expression class for for.
 class ForEachExprAST : public ExprAST {
   std::string VarName;
   std::unique_ptr<ExprAST> Vec;
-  Parser_Struct parser_struct;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
@@ -765,29 +750,28 @@ class ForEachExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct, Data_Tree);
 
   Value *codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 /// WhileExprAST - Expression class for while.
 class WhileExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
-  Parser_Struct parser_struct;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
     WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
   
 
 class BreakExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   public:
     BreakExprAST();
   Value *codegen(Value *scope_struct) override;
 };
 class ContinueExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   public:
     ContinueExprAST();
   Value *codegen(Value *scope_struct) override;
@@ -804,7 +788,6 @@ class ExitCheckExprAST : public ExprAST {
 
 
 class ChannelExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
   public:
     ChannelExprAST(Parser_Struct, Data_Tree, std::string, bool isSelf=false);
@@ -816,7 +799,6 @@ class ChannelExprAST : public ExprAST {
 
 class AsyncFnPriorExprAST : public ExprAST {
   // std::string Async_Name;
-  // Parser_Struct parser_struct;
   // std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
@@ -827,13 +809,13 @@ class AsyncFnPriorExprAST : public ExprAST {
 };
 
 class SpawnExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
     SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -842,13 +824,13 @@ class SpawnExprAST : public ExprAST {
   
 /// AsyncExprAST - Expression class for async.
 class AsyncExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
     AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
@@ -864,11 +846,11 @@ class FinishExprAST : public ExprAST {
 
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
 class AsyncsExprAST : public ExprAST {
-  Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
   std::unique_ptr<ExprAST> Count;
 
@@ -876,6 +858,7 @@ class AsyncsExprAST : public ExprAST {
     AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
   
 
@@ -897,11 +880,11 @@ class LockExprAST : public ExprAST {
 
 
   Value* codegen(Value *scope_struct) override;
+  void SetCValues(Parser_Struct) override;
 };
 
 
 class ReduceExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   std::unique_ptr<ExprAST> LHS;
@@ -914,7 +897,6 @@ public:
 };
 
 class LambdaExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   std::unique_ptr<ExprAST> Body;
@@ -929,7 +911,6 @@ public:
 
 
 class MapitExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   std::unique_ptr<LambdaExprAST> Lambda;
@@ -945,32 +926,32 @@ public:
 
 
 class LayoutExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   Data_Tree dt;
   uint16_t type;
-  std::vector<int> Const_Args;
+  std::vector<CompiledArgs> CArgs;
   bool smem;
   std::vector<std::unique_ptr<ExprAST>> Args;
-  std::vector<int> Strides;
 
-  LayoutExprAST(Parser_Struct, uint16_t type, std::vector<int>, std::vector<std::unique_ptr<ExprAST>>, bool);
+  LayoutExprAST(Parser_Struct, uint16_t type, std::vector<CompiledArgs>, std::vector<std::unique_ptr<ExprAST>>, bool);
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  std::vector<int> GetStrides();
 };
 
 
 class LaunchExprAST : public ExprAST {
-  Parser_Struct parser_struct;
 
 public:
   std::unique_ptr<ExprAST> Grid, Block;
   std::vector<std::unique_ptr<ExprAST>> Args;
+  FnCompiledValuesVec CompiledArgsVec;
+  FnCompiledValues CompiledArgs;
   std::string fn_name;
 
-  LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, std::string);
+  LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, FnCompiledValuesVec CompiledArgsVec, std::string);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -1010,16 +991,13 @@ class MainExprAST : public ExprAST {
 };
 
 
-/// PrototypeAST - This class represents the "prototype" for a function,
-/// which captures its name, and its argument names (thus implicitly the number
-/// of arguments the function takes), as well as if it is an operator.
 class PrototypeAST {  
     std::string Name, Class, Method;
   
-    bool IsOperator;
     unsigned Precedence; // Precedence if a binary op.
   
     public:
+      bool IsOperator, has_compiled_args=false;
       Parser_Struct parser_struct;
       Data_Tree ReturnType;
       std::vector<std::string> Args;
