@@ -66,4 +66,6 @@ This adds neve to bin/neve
 
 # Implementations
 
+[File reader (std lib)](https://github.com/NoSavedDATA/Neve/blob/main/lib/std_lib/file_lib.nv)
+[Csv Parser](https://github.com/NoSavedDATA/Neve_CSV)
 [Byte-Pair Encoding](https://github.com/NoSavedDATA/Neve_Byte_Pair_Encoding)
