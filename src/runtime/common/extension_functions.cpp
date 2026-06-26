@@ -7,6 +7,7 @@
 #include<memory>
 #include<cstring>
 #include<sstream>
+#include <charconv>
 
 
 #include "../compiler_frontend/global_vars.h"
@@ -29,6 +30,18 @@ int round_nearest_pow2(int x) {
 }
 
 
+bool is_number(std::string s) {
+    int value;
+    auto [ptr, ec] = std::from_chars(
+        s.data(),
+        s.data() + s.size(),
+        value
+    );
+
+    if (ec == std::errc() && ptr == s.data() + s.size())
+        return true;
+    return false;
+}
 
 
 

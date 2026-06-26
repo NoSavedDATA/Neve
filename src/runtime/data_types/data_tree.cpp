@@ -3,9 +3,12 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <charconv>
+#include <string>
 
 
 #include "../compiler_frontend/include.h"
+#include "../compiler_frontend/parser_struct.h"
 #include "../common/extension_functions.h"
 #include "data_tree.h"
 
@@ -196,6 +199,15 @@ std::string Data_Tree::toString() {
     }
     return str;
 }
+
+
+bool Data_Tree::IsTemplate() {
+    if (Type=="layout")
+        return true;
+    return false;
+}
+
+
 
 
 

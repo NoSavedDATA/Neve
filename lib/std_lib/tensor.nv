@@ -128,7 +128,6 @@ def tensor tensor_tensor_mult(tensor x, tensor y)
 def int float_tensor_mma_worker(tensor x, tensor y, tensor out,
 								   int m, int n, int p,
 								   int m_main, int n_main)
-
 	int t_rows = m_main//tN
 	int row_offset = tid * t_rows
 
@@ -240,7 +239,7 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 
 		int threads = min(tHW, max(1, m//MC))
 
-		finish
-			asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
+		#finish
+		#	asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
 
 	return out

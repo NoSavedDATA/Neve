@@ -282,9 +282,7 @@ Function *getFunction(std::string Name) {
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
 
-  // auto FP = FunctionUserProtos.find(Name);
-  // if (FP != FunctionUserProtos.end())
-  //   return FP->second->codegen();
+  std::cout << "getFunction " << CurModule << "\n";
   LogError(-1, "The function " + Name + " was not found.");
 
   // If no existing prototype exists, return null.
@@ -734,6 +732,7 @@ void MakeWriteBarrier(Parser_Struct parser_struct, Function *TheFunction, Value 
 
 
 Value *UnkVarExprAST::codegen(Value *scope_struct) {
+  Checks();
   if (not ShallCodegen)
     return const_float(0.0f);
 
@@ -790,7 +789,8 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
             unpacked_val = Builder->CreateExtractValue(initial_value, {0});
       }
       StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
-      Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
+      if(parser_struct.gpu==0)
+          Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
     }
       
 
@@ -1051,6 +1051,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
 
 
 Value *DataExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return const_float(0.0f);
 
@@ -1537,6 +1538,7 @@ void Get_Recursive_Assign_Statements(const std::vector<std::unique_ptr<ExprAST>>
 
 
 Value *ForExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return const_float(0);
 
@@ -1666,6 +1668,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
 Value *ForEachExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1764,8 +1767,11 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
         Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), array, Builder->CreateMul(LoopVar, elem_size));
         vec_value = Builder->CreateLoad(elem_type, element, "elem");  
-    } else
+    } else {
+        std::cout << "ForEach idx" << "\n";
+        std::cout << "for each vec_type: " << vec_type << "\n";
         vec_value = callret(vec_type+"_Idx", {scope_struct, vec, LoopVar});
+    }
     if((vec_type=="list"||vec_type=="tuple")&&(Type=="float"||Type=="int"))
         vec_value = callret("to_"+Type, {scope_struct, vec_value});
     function_values[parser_struct.function_name][VarName] = vec_value;
@@ -2360,8 +2366,9 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
-        } else 
+        } else  {
             call(type+"_Store_Idx", {vec_ptr, idx, Val, scope_struct});
+        }
 
         return;
     } 
@@ -2425,10 +2432,104 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
     seen_var_attr=false;
 }
 
+Data_Tree SolveComptimeValues(Data_Tree dt, Parser_Struct parser_struct) {
+    Data_Tree ret_dt = Data_Tree(dt.Type);
+
+    if (dt.Type=="layout") {
+        ret_dt.Nested_Data.push_back(dt.Nested_Data[0]);
+        for(int i=1; i<dt.Nested_Data.size();++i) {
+            std::string type = dt.Nested_Data[i].Type;
+            if (type=="smem")
+                ret_dt.Nested_Data.push_back(Data_Tree("smem"));
+            else if (is_number(type))
+                ret_dt.Nested_Data.push_back(Data_Tree(type));
+            else {
+                if (parser_struct.cvalues.ints.count(type)==0)
+                    LogErrorC(parser_struct.line, "Int comptime "+type+" not found.");
+                ret_dt.Nested_Data.push_back(Data_Tree(std::to_string(parser_struct.cvalues.ints[type])));
+            }
+        }
+    }
+    return ret_dt;
+}
+
+
+inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs, Data_Tree &arg_dt, Data_Tree &sent_dt) {
+    
+    std::string key = arg_dt.Type;
+    if (!in_vec(key, data_tokens)&&!in_vec(key, compound_tokens)&&key!="layout") {
+        std::cout << "SPECIALIZE " << arg_dt.Type << "\n";
+    
+        std::string sent_type = sent_dt.Type;
+        if (is_number(sent_type)) {
+            CompiledArgs.ints[key] = std::stoi(sent_type);
+        }
+    }
+    
+    for (int i=0; i<arg_dt.Nested_Data.size(); ++i)
+        BuildTemplateArgTree(CompiledArgs, arg_dt.Nested_Data[i], sent_dt.Nested_Data[i]);
+}
+
+
+inline void BuildSpecializedArgs(FnCompiledValues &CompiledArgs, Data_Tree &L_dt, Data_Tree &R_dt, std::vector<Data_Tree> &ProtoTypes, int arg_offset) {
+    BuildTemplateArgTree(CompiledArgs, ProtoTypes[arg_offset],   L_dt);
+    BuildTemplateArgTree(CompiledArgs, ProtoTypes[arg_offset+1], R_dt);
+}
+
+std::string SpecializeOperation(std::string fn, Parser_Struct parser_struct, Data_Tree L_dt, Data_Tree R_dt) {
+    std::string fn_name = fn;
+
+
+    L_dt = SolveComptimeValues(L_dt, parser_struct);
+    R_dt = SolveComptimeValues(R_dt, parser_struct);
+
+    if (FunctionProtos.count(fn)==0)
+        LogErrorC(parser_struct.line, "Could not find operation " + fn);
+    auto proto = FunctionProtos[fn].get();
+    std::vector<std::string> Args = proto->Args;
+
+    int arg_offset = (parser_struct.gpu==0) ? 1 : 0;
+
+    FnCompiledValues CompiledArgs;
+    if (L_dt.Type=="layout")
+        CompiledArgs.layouts[Args[arg_offset]] = L_dt;
+    if (R_dt.Type=="layout")
+        CompiledArgs.layouts[Args[arg_offset+1]] = R_dt;
+    
+    std::cout << "--send " << "\n";
+    L_dt.Print();
+    R_dt.Print();
+    std::cout << "to" << "\n";
+    BuildSpecializedArgs(CompiledArgs, L_dt, R_dt, proto->Types, arg_offset);
+
+
+
+    int idx=0;
+    if (Fn_Compiled_Version[fn].count(CompiledArgs)==0) {
+        FunctionAST *FnAst;
+        if (parser_struct.gpu>0) {
+            need_re_emit_ptx = true;
+            FnAst = GpuFunctions[fn].get();
+        }
+        else
+            std::cout << "Uninmplemented non-gpu template fn logic (" << fn << ")\n";
+
+        idx = (Fn_Last_Version.count(fn)==0) ? 0 : Fn_Last_Version[fn];
+        fn+=std::to_string(idx);
+        Fn_Compiled_Values[fn] = CompiledArgs;
+        std::cout << "Specialize: " << fn << "|" << Fn_Compiled_Values[fn].ints.size() << "\n";
+
+        Function *F= proto->codegen();
+        FnAst->codegen_gpu(idx);
+    }
+
+    return fn;
+}
 
 
 
 Value *BinaryExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -2589,8 +2690,20 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             default:
                 break;
         }
-    }
-    else if (Elements=="vec_vec") {
+    } else if (L_dt.Type=="layout"||R_dt.Type=="layout") {
+        switch (Op) {
+            case tok_offby: {
+                L_dt = LHS->GetDataTree();
+                llvm::Type *Ty = get_type_from_data(Data_Tree(L_dt.Nested_Data[0]));
+                ret = Builder->CreateGEP(Ty, L, R);
+                break;
+            }
+            default:
+                std::string called_op = SpecializeOperation(Operation, parser_struct, L_dt, R_dt);
+                ret = callret(called_op, {L, R}); 
+                break;
+        }       
+    } else if (Elements=="vec_vec") {
         switch (Op) {
             case '+':
                 ret = simd_add(LHS, RHS, L, R);
@@ -2760,8 +2873,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     else if (llvm_data_ops.count(Operation)>0)
         ret = llvm_data_ops[Operation](parser_struct, Builder->GetInsertBlock()->getParent(),
                                         L_dt, R_dt, LHS, RHS, scope_struct, L, R);
-    else
-        ret = callret(Operation, {scope_struct, L, R}); 
+    else {
+        std::string called_op = Operation;
+        if (L_dt.IsTemplate()||R_dt.IsTemplate())
+            called_op = SpecializeOperation(Operation, parser_struct, L_dt, R_dt);
+        if (parser_struct.gpu==0)
+            ret = callret(called_op, {scope_struct, L, R}); 
+        else
+            ret = callret(called_op, {L, R}); 
+    }
 
 
 
@@ -2772,10 +2892,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
     return ret;
-
-
-
-
 
 
     // If it wasn't a builtin binary operator, it must be a user defined one. Emit
@@ -2866,6 +2982,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 Value *ChannelExprAST::codegen(Value *scope_struct) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     int buffer_size = stoi(data_type.Nested_Data[1].Type);
+
 
     p2t("create channel expr");
     call("print_int", {const_int(buffer_size)});
@@ -3056,6 +3173,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 Value *SpawnExprAST::codegen(Value *scope_struct) {
+    Checks();
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
@@ -3091,6 +3209,7 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
 
 
 Value *AsyncExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
     // Create/Spawn Threads
@@ -3130,6 +3249,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
 }
 
 Value *AsyncsExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -3430,7 +3550,7 @@ Data_Tree NewTupleExprAST::GetDataTree(bool from_assignment) {
 
     data_type.Type = "tuple";
     for (int i=0; i<Values.size(); i++) {
-        std::string type = Values[i]->GetType();
+        std::string type = Values[i]->GetDataTree().Type;
         data_type.Nested_Data.push_back(Data_Tree(type));
     }
     data_type.empty=false;
@@ -3453,7 +3573,7 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
     bool is_type=true;
     for (int i=0; i<Values.size(); i++) {
         Value *value = Values[i]->codegen(scope_struct);
-        std::string type = Values[i]->GetType();
+        std::string type = Values[i]->GetDataTree().Type;
 
 
         if (!is_type) {
@@ -3480,21 +3600,19 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
 
 
 Data_Tree NewVecExprAST::GetDataTree(bool from_assignment) {
-    if(!data_type.empty)
-        return data_type;
     // data_type.Type = "tuple";
     // for (int i=1; i<Values.size(); i=i+2) {
     //     Data_Tree type = Values[i]->GetDataTree();
     //     data_type.Nested_Data.push_back(type);
     // }
-    data_type.Type = "array";
-    data_type.Nested_Data.push_back(Values[1]->GetDataTree());
-    data_type.empty=false;
+    data_type = Data_Tree("array");
+    data_type.Nested_Data.push_back(Values[0]->GetDataTree());
 
     return data_type;
 }
 
 Value *NewVecExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return const_float(0);
 
@@ -3502,28 +3620,32 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     values.push_back(scope_struct);
     
 
-    bool is_type=true;
+    std::string type;
     for (int i=0; i<Values.size(); i++) {
-        std::string type;
         Value *value;
 
-        if (!is_type) {
-            type = Values[i]->GetDataTree().Type;
-            value = Values[i]->codegen(scope_struct);
+        type = Values[i]->GetDataTree().Type;
+        value = Values[i]->codegen(scope_struct);
 
-            if(!in_vec(type, primary_data_tokens)) {
-                std::string copy_fn = type + "_Copy";
-                Function *F = TheModule->getFunction(copy_fn);
-                if (F)
-                    value = callret(copy_fn, {scope_struct, value});
-            }
-            values.push_back(value);
-            is_type=true;
-        } else
-            is_type=false;
+        if(!in_vec(type, primary_data_tokens)) {
+            std::string copy_fn = type + "_Copy";
+            Function *F = TheModule->getFunction(copy_fn);
+            if (F)
+                value = callret(copy_fn, {scope_struct, value});
+        }
+        values.push_back(value);
     }
 
-    std::string type = data_type.Nested_Data[0].Type;
+    if (type=="int")
+        values.push_back(const_int(TERMINATE_VARARG));
+    else if (type=="str")
+        values.push_back(global_str("TERMINATE_VARARG"));
+    else
+        values.push_back(ConstantPointerNull::get(
+            cast<PointerType>(int8PtrTy))
+        );
+
+
     if(!in_vec(type, primary_data_tokens)&&type!="str")
         type = "void";
     std::string Callee = "array_" + type + "_NewVec";
@@ -3543,8 +3665,8 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
     for (int i=0; i<Values.size()-1; i++)
     {
-        std::string key_type = Keys[i]->GetType();
-        std::string type = Values[i]->GetType();
+        std::string key_type = Keys[i]->GetDataTree().Type;
+        std::string type = Values[i]->GetDataTree().Type;
 
         if (key_type!="str")
         {
@@ -3779,8 +3901,10 @@ Function *PrototypeAST::codegen() {
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
     std::string fn_name = Name;
-    if (has_compiled_args)
+    if (has_compiled_args) {
         fn_name = mangle_cargs_proto(fn_name, true);
+        // std::cout << "COMP NEW PROTO " << fn_name << "|" << (parser_struct.gpu>0) << "\n";
+    }
 
     auto linkage = (parser_struct.gpu==2) ?\
                      Function::InternalLinkage : Function::ExternalLinkage;
@@ -4079,9 +4203,6 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
 
 
-std::string NestedVectorIdxExprAST::GetType(bool from_assignment) {  
-    return "";
-}
 
 
 Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {  
@@ -4108,6 +4229,7 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 }
 
 Value *ViewExprAST::codegen(Value *scope_struct) {
+    Checks();
     Value *view_val = UndefValue::get(struct_types["DT_str"]);
     Value *inner = LHS->codegen(scope_struct);
     inner = Builder->CreateExtractValue(inner, {0});
@@ -4221,6 +4343,8 @@ Value *Nameable::codegen(Value *scope_struct) {
             function_values[parser_struct.function_name]["tHW"] = tHW;
             return tHW;
         }
+        if (parser_struct.cvalues.ints.count(Name)>0)
+            return const_int(parser_struct.cvalues.ints[Name]);
         return getFunctionCheck(Name);
     }
 
@@ -4471,6 +4595,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         return Builder->CreateLoad(elemTy, element, "elem"); 
     }
 
+    std::cout << "bleIdx _Idx" << "\n";
     std::string idx_fn = compound_type + "_Idx";
     if (TheModule->getFunction(idx_fn))
         return callret(idx_fn, {scope_struct, loaded_var, idx});
@@ -4510,15 +4635,15 @@ inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_
 }
 
 Value *NameableAppend::codegen(Value *scope_struct) {  
+    Checks();
 
-    Value *loaded_var = Inner->codegen(scope_struct);
-
-    Value *appended_val = Args[0]->codegen(scope_struct);
-
-    std::string elem_type = inner_dt.Nested_Data[0].Type;
-
+    Value *loaded_var = Inner->Inner->codegen(scope_struct);
 
     if (inner_dt.Type=="array") {
+        Value *appended_val = Args[0]->codegen(scope_struct);
+
+        std::string elem_type = inner_dt.Nested_Data[0].Type;
+
         Function *TheFunction = Builder->GetInsertBlock()->getParent();
         BasicBlock *good_sizeBB = BasicBlock::Create(*TheContext, "array.append.ok_size", TheFunction);
         BasicBlock *bad_sizeBB = BasicBlock::Create(*TheContext, "array.append.bad_size", TheFunction);
@@ -4597,7 +4722,17 @@ Value *NameableAppend::codegen(Value *scope_struct) {
         //post
         Builder->SetInsertPoint(postBB); 
         // std::cout << "append post: " << parser_struct.function_name  << " " << postBB << "\n";
+    } else {
+        // std::vector<Value *> ArgsV = {scope_struct, loaded_var};
+        std::vector<Value *> ArgsV = {scope_struct, loaded_var, Args[0]->codegen(scope_struct)};
+        // std::vector<Data_Tree> ArgTypes;
+        // ArgsV.push_back(Args[0]->codegen(scope_struct));
+        // ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
+        //         scope_struct,\
+        //         Callee, false, 1);
+        call(Callee, ArgsV);
     }
+
 
 
     return const_float(0.0f);
@@ -4703,7 +4838,6 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     Value *grid_v = Builder->CreateLoad(int8PtrTy, grid_gep);
     Value *block_v = Builder->CreateLoad(int8PtrTy, block_gep);
 
-    
 
     Value *gx, *gy, *gz, *bx, *by, *bz;
     gx = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, grid_v, const_int(0)));
@@ -4714,7 +4848,6 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     bz = Builder->CreateLoad(intTy, Builder->CreateGEP(intTy, block_v, const_int(2)));
 
 
-
     std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
     callgpu(TheFunction, fn_name,
             gx, gy, gz, bx, by, bz,
@@ -4723,13 +4856,109 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     return const_int(0);
 }
 
+Value *NameableCall::codegen_append(Value *scope_struct) {  
+
+    Data_Tree inner_dt = Inner->GetDataTree();
+    Value *loaded_var = Inner->codegen(scope_struct);
+
+    Value *appended_val = Args[0]->codegen(scope_struct);
+
+    std::string elem_type = inner_dt.Nested_Data[0].Type;
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    BasicBlock *good_sizeBB = BasicBlock::Create(*TheContext, "array.append.ok_size", TheFunction);
+    BasicBlock *bad_sizeBB = BasicBlock::Create(*TheContext, "array.append.bad_size", TheFunction);
+    BasicBlock *postBB = BasicBlock::Create(*TheContext, "array.append.post", TheFunction);
+
+    if (elem_type=="float"&&Args[0]->GetDataTree().Type=="int")
+        appended_val = Builder->CreateSIToFP(appended_val, floatTy, "lfp");
+
+
+    StructType *st = struct_types["scope_struct"];
+    llvm::Type *elemTy;
+    Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+
+    if (!in_vec(elem_type, primary_data_tokens)) {
+        Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
+        Value *gc = Builder->CreateLoad(int8PtrTy, gc_gep);
+        Value *marking = Builder->CreateLoad(boolTy,
+                                    Builder->CreateStructGEP(struct_types["GC"], gc, 3));
+
+        BasicBlock *MarkingBB = BasicBlock::Create(*TheContext, "array.marking", TheFunction);
+        BasicBlock *StandardBB = BasicBlock::Create(*TheContext, "array.standard", TheFunction);
+        
+        Builder->CreateCondBr(marking, MarkingBB, StandardBB);
+        Builder->SetInsertPoint(MarkingBB);
+
+        if (elem_type=="str") {
+            Value *str  = Builder->CreateExtractValue(appended_val, {0});
+            Value *size = Builder->CreateExtractValue(appended_val, {1});
+            call("GC_array_append_str_barrier",
+                 {const_int16(data_name_to_type()[elem_type]), scope_struct, loaded_var, str, size});
+        } else
+            call("GC_array_append_barrier",
+                 {const_int16(data_name_to_type()[elem_type]), scope_struct, loaded_var, appended_val});
+        Builder->CreateBr(postBB);
+
+        Builder->SetInsertPoint(StandardBB);
+    }
+
+    elemTy = get_type_from_str(elem_type); 
+
+
+    Value *vsize_gep = Builder->CreateStructGEP(st, loaded_var, 0);
+    Value *vsize = Builder->CreateLoad(intTy, vsize_gep);
+
+    Value *size_gep = Builder->CreateStructGEP(st, loaded_var, 1);
+    Value *size = Builder->CreateLoad(intTy, size_gep);
+
+
+
+
+
+    Value *Cond = Builder->CreateICmpSLT(vsize, size);
+    Builder->CreateCondBr(Cond, good_sizeBB, bad_sizeBB);
+
+
+    //good size
+    Builder->SetInsertPoint(good_sizeBB);
+    Value *elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
+    Builder->CreateStore(appended_val, elem_gep);
+    Value *next_vsize = Builder->CreateAdd(vsize, const_int(1));
+    Builder->CreateStore(next_vsize, vsize_gep);
+    Builder->CreateBr(postBB);
+
+
+    //bad size (thus double array size)
+    Builder->SetInsertPoint(bad_sizeBB);
+    call("array_double_size", {scope_struct, loaded_var}); 
+    vec = Load_Array(parser_struct.function_name, loaded_var);
+    elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
+    Builder->CreateStore(appended_val, elem_gep);
+    next_vsize = Builder->CreateAdd(vsize, const_int(1));
+    Builder->CreateStore(next_vsize, vsize_gep);
+    Builder->CreateBr(postBB);
+
+
+    //post
+    Builder->SetInsertPoint(postBB); 
+    // std::cout << "append post: " << parser_struct.function_name  << " " << postBB << "\n";
+
+    return const_int(0);
+}
+
 Value *NameableCall::codegen(Value *scope_struct) {  
+    Checks();
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
     int target_args_size=Args.size()+1;
 
     Value *previous_obj, *previous_stack_top;
+
+    if (Callee=="array_append")
+        return codegen_append(scope_struct);
+    
 
     bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&\
                           gpu_fn.count(Callee)==0&&llvm_callee.count(Callee)==0);
@@ -4751,7 +4980,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
         // }
         Set_Stack_Top(scope_struct, parser_struct.function_name);
     }
-
 
     std::vector<Value*> ArgsV = {scope_struct};
     std::vector<Data_Tree> ArgTypes;

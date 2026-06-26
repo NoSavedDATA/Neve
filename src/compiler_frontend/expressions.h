@@ -39,7 +39,6 @@ class ExprAST {
     virtual Data_Tree GetDataTree(bool from_assignment=false);
 
     virtual void SetType(std::string Type);
-    virtual std::string GetType(bool from_assignment=false);
     virtual void SetReturnType(std::string ReturnType);
   
     virtual void SetIsVarLoad(bool isVarLoad);
@@ -240,6 +239,7 @@ class UnkVarExprAST : public VarExprAST {
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
   
   
@@ -284,6 +284,7 @@ class NewVecExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void Checks();
 };
 
 class NewDictExprAST : public ExprAST {
@@ -343,6 +344,7 @@ class DataExprAST : public VarExprAST {
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 
@@ -413,10 +415,10 @@ public:
                 std::unique_ptr<ExprAST> RHS, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
-  std::string GetType(bool from_assignment=false) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 
@@ -443,6 +445,7 @@ public:
                 std::unique_ptr<ExprAST> RHS, Parser_Struct);
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void Checks();
 };
 
 
@@ -500,6 +503,7 @@ class NameableLLVMIRCall : public Nameable {
 
 
 class NameableCall : public Nameable {
+  bool checked=false;
   public:
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
   int arg_type_check_offset=1; 
@@ -512,8 +516,10 @@ class NameableCall : public Nameable {
 
 
   Value *codegen(Value *scope_struct) override;
+  Value *codegen_append(Value *scope_struct);
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
+  void Checks();
 };
 
 
@@ -541,6 +547,7 @@ class NameableAppend : public Nameable {
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void Checks();
 };
 
 
@@ -622,7 +629,6 @@ class NestedVectorIdxExprAST : public NameableExprAST {
     NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::unique_ptr<IndexExprAST> Idx, std::string);
     Value *codegen(Value *scope_struct) override;
 
-    std::string GetType(bool from_assignment=false) override;
 };
 
 
@@ -668,6 +674,7 @@ class RetExprAST : public ExprAST {
     RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
+  void Checks();
 };
 
 
@@ -688,7 +695,6 @@ class ClassExprAST : public ExprAST {
     
     // nlohmann::json toJSON() override;
 
-    // std::string GetType(bool from_assignment=false) override; 
     // Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
@@ -737,6 +743,7 @@ class ForExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 /// ForExprAST - Expression class for for.
@@ -747,10 +754,11 @@ class ForEachExprAST : public ExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct, Data_Tree);
+              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 /// WhileExprAST - Expression class for while.
@@ -816,6 +824,7 @@ class SpawnExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 
@@ -831,6 +840,7 @@ class AsyncExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
 
 
@@ -859,6 +869,7 @@ class AsyncsExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct) override;
+  void Checks();
 };
   
 

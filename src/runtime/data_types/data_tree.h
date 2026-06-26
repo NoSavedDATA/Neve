@@ -6,19 +6,22 @@
 #include <vector>
 
 
+
 struct Data_Tree {
     std::vector<Data_Tree> Nested_Data;
     std::string Type="";
-    bool empty=true, is_array=false, is_buffer=false, ctime=false;
+    bool empty=true, is_array=false, is_buffer=false, ctime=false, retry=false;
     
     Data_Tree() = default;
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);
     Data_Tree(std::string);
 
     bool CompareMap(Data_Tree&);
+    bool IsTemplate();
     int Compare(Data_Tree);
     void Print();
     std::string toString();
+
 };
 
 

@@ -23,3 +23,5 @@ void InitializeModule();
 ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
                                        const std::string &Suffix);
 
+
+extern bool need_re_emit_ptx;

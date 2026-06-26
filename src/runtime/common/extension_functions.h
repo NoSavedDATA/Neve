@@ -67,6 +67,9 @@ bool in_vec(const T& str, const std::vector<T>& list) {
     return std::find(list.begin(), list.end(), str) != list.end();
 }
 
+
+bool is_number(std::string s); 
+
 int round_nearest_pow2(int x); 
 
 bool CheckIsEquivalent(std::string LType, std::string RType);

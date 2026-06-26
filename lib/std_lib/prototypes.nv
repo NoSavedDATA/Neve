@@ -27,3 +27,4 @@ proto tuple<int,int> map_get_i64_int(any, i64)
 
 operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby
+operation float[] layout_float_int_offby

@@ -104,6 +104,7 @@ inline Function *getFunctionCheck(std::string Name) {
   auto FI = FunctionProtos.find(Name);
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
+
   LogError(-1, "The function " + Name + " was not found.");
   return nullptr;
 }

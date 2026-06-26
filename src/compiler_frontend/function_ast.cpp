@@ -32,6 +32,8 @@ std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 
+
+
 inline void RegisterData() {
     for (auto data_info : data_register_fn) {
         std::string name = data_info.first;
@@ -40,10 +42,12 @@ inline void RegisterData() {
     }
 }
 
+bool need_re_emit_ptx=false;
 std::string EmitPtx(bool re_emit) {
 
     static std::string ptx = "";
-    if (ptx==""||re_emit) {
+    if (ptx==""||re_emit||need_re_emit_ptx) {
+        need_re_emit_ptx = false;
         llvm::SmallString<0> Buffer;
         llvm::raw_svector_ostream OS(Buffer);
 
@@ -57,7 +61,6 @@ std::string EmitPtx(bool re_emit) {
             std::cout << "CANNOT EMIT PTX" << "\n";
             std::exit(0);
         }
-
         PM.run(*PtxModule);
 
         // OS.flush();
@@ -779,10 +782,9 @@ Function *FunctionAST::codegen_gpu(int idx) {
 
 
   std::string fn_name = function_name;
-  if (idx>=0) {
+  if (idx>=0)
       fn_name += std::to_string(idx);
-      parser_struct.cvalues = Fn_Compiled_Values[fn_name];
-  }
+  
 
   Function *TheFunction = PtxModule->getFunction(fn_name); 
   if(!TheFunction)
@@ -790,8 +792,9 @@ Function *FunctionAST::codegen_gpu(int idx) {
 
 
 
-  auto oldBuilder = std::move(Builder);
+  auto prev_module = CurModule;
   CurModule = PtxModule.get();
+  auto oldBuilder = std::move(Builder);
 
   Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
 
@@ -810,13 +813,21 @@ Function *FunctionAST::codegen_gpu(int idx) {
 
         std::string arg_name = Arg.getName().str();
         function_values[function_name][arg_name] = &Arg;
+
+        if (Fn_Compiled_Values[fn_name].layouts.count(arg_name))
+            data_typeVars[function_name][arg_name] = Fn_Compiled_Values[fn_name].layouts[arg_name]; 
+        
+  }
+
+  if (idx>=0) {
+      parser_struct.cvalues = Fn_Compiled_Values[fn_name];
+      std::cout << fn_name << ": " << parser_struct.cvalues.ints.size() << "\n";
   }
 
   SetKernelVars(function_name);
 
   for (auto &body : Body) {
     if (idx>=0) {// is comp specialization
-        std::cout << "set cvalues " << parser_struct.cvalues.ints.size() << "\n";
         body->SetCValues(parser_struct);
     }
     body->codegen(scope_struct);
@@ -827,7 +838,7 @@ Function *FunctionAST::codegen_gpu(int idx) {
 
 
   Builder = std::move(oldBuilder);
-  CurModule = TheModule.get();
+  CurModule = prev_module;
 
 
   if (verifyFunction(*TheFunction, &errs()))

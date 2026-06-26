@@ -32,6 +32,7 @@ struct FnCompiledValues {
     std::unordered_map<std::string, int64_t> i64s;
     std::unordered_map<std::string, float> floats;
     std::unordered_map<std::string, std::string> strings;
+    std::unordered_map<std::string, Data_Tree> layouts;
 
     bool operator<(const FnCompiledValues& rhs) const {
         return ints.size()+floats.size() < rhs.ints.size()+rhs.floats.size();
