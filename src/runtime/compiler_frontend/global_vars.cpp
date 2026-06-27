@@ -50,12 +50,14 @@ std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"int", {"fl
                                                                     {"i64", {"int", "i8", "i16"}},
                                                                     {"i16", {"int", "i8", "i64"}},
                                                                     {"i8", {"int", "i16", "i64"}},
+                                                                    {"bf16", {"float"}},
+                                                                    {"float", {"bf16"}},
                                                                     {"char", {"i8"}}};
 
 std::vector<std::string> int_types = {"int", "i64", "i8", "i16", "char"};
 
 
-std::unordered_map<std::string, uint16_t> data_name_to_size = {{"int", 4}, {"i64", 8}, {"i8", 1}, {"char", 1}, {"i16", 2}, {"float", 4}, {"bool", 1}, {"any", 8}, {"double", 8}, {"str", 16}, {"str_view", 16}, {"Function", 8}, {"array", 8}};
+std::unordered_map<std::string, uint16_t> data_name_to_size = {{"int", 4}, {"i64", 8}, {"i8", 1}, {"char", 1}, {"i16", 2}, {"float", 4}, {"half", 2}, {"bf16", 2}, {"bool", 1}, {"any", 8}, {"double", 8}, {"str", 16}, {"str_view", 16}, {"Function", 8}, {"array", 8}};
 std::unordered_map<uint16_t, uint16_t> data_type_to_size; 
  
 
@@ -82,20 +84,22 @@ std::unordered_map<uint16_t, std::string>& data_type_to_name() {
 uint16_t data_type_count=113;
 
 
-std::unordered_map<std::string, int> gpu_ffi = {{"shfl_sync", 1}};
+std::unordered_map<std::string, int> gpu_ffi = {{"shfl_sync", 1},
+        {"cp_async16", 1}, {"cp_wait_group", 1}, {"cp_commit_group", 1},
+        {"ldmatrix_x4", 1}, {"ldmatrix_x2", 1}, {"mma_16x8x16", 1}};
 
 std::vector<std::string> data_tokens = {"int", "bool", "str", "str_vec", "float_vec",
-                                        "tuple", "any", "float_ptr",
-										"list", "map", "array", "void",
+                                        "tuple", "any", "float_ptr", "half",
+										"list", "map", "array", "void", "bf16",
                                         "float", "int_vec", "char", "charv", "vec", "i16", "i64", "i8", "str_view"};
 std::vector<std::string> compound_tokens = {"tuple", "channel", "list", "array", "map", "vec", "Function"};
-std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "void", "bool", "foreach_control_var", "i64", "i8", "i16", "char"};
+std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "void", "bool", "foreach_control_var", "i64", "i8", "i16", "char", "half", "bf16"};
 
 
+std::vector<std::string> constants = {"float_t", "char_t", "int_t", "i16_t", "i8_t", "i64_t", "array_t", "str_t", "half_t", "bf16_t"};
 
 
-std::vector<std::string> constants = {"float_t", "char_t", "int_t", "i16_t", "i8_t", "i64_t", "array_t", "str_t"};
+std::vector<std::string> int_fn_values = {"tid", "smem_size", "tN", "tHW", "tx", "ty", "tz", "bx", "by", "bz"};
 
-
-std::vector<uint16_t> primary_data_types = {2, 3, 4, 5, 6, 15, 16, 17, 18, 21};
+std::vector<uint16_t> primary_data_types = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 18, 21};
 std::vector<uint16_t> compound_types = {6, 7, 8, 9, 12};

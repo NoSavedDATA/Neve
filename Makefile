@@ -1,5 +1,5 @@
-CXX := clang++-19 -std=c++17
-LLVM_CONFIG := llvm-config-19 --link-static --libs core orcjit native
+CXX := clang++-21 -std=c++17
+LLVM_CONFIG := llvm-config-21 --libs all
 
 MAIN_CXXFLAGS := -rdynamic -fno-exceptions -march=native -mavx -mavx2 -O3 -ffast-math
 OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -finline-functions -funroll-loops -w -flto

@@ -1,0 +1,136 @@
+import nsk_cuda
+import networks
+
+
+class cfg
+	int bs, num_workers
+	ctor()
+		self.bs = 4
+		self.num_workers = 3
+
+class Dataset
+    int batch_size, yield_ptr, _len, num_workers, epoch
+    array<str> files
+	channel<int, 3> load_ch
+	tensor_cpu x, y
+
+    ctor(i num_workers, str path)
+        self.batch_size = $cfg.bs
+        self.num_workers = num_workers
+            
+        self.files = glob(path)
+
+        self.yield_ptr = 0
+		self.epoch=0
+
+        self._len = self.files.size()
+        self.shuf()
+
+		self.x = new tensor_cpu([num_workers, $cfg.bs], [28,28])
+		self.y = new tensor_cpu([num_workers, $cfg.bs], [1])
+
+    def int shuf()
+		self.files.shuffle()
+		0
+
+    def float terminate_workers()
+        print("Terminating ", self.num_workers, " workers")
+        self.load_ch.terminate()
+
+    def int increment_yield_ptr()
+		lock "yield"
+			if (self.yield_ptr + self.batch_size) <= self._len
+				int ret = self.yield_ptr
+				self.yield_ptr = self.yield_ptr + self.batch_size
+			else
+				self.yield_ptr = 0
+				self.shuf()
+				self.epoch=self.epoch+1
+        return self.yield_ptr
+
+    def float getitem_w(i idx, i b)
+		lock "yield"
+			var aux = self.files[idx]
+
+		var img = self.x.at(b)
+		img.load_img(aux)
+
+		var y = self.y.at(b)
+		y[0] = aux.split('/')[-2].float()
+
+    def float worker()
+        print("Start worker")
+
+        int yield_ptr, bs=self.batch_size
+		print("worker ", tid)
+
+        while self.load_ch.alive()
+			yield_ptr = self.increment_yield_ptr()
+
+			for b=0, b<bs
+				self.getitem_w(yield_ptr+b, b)
+			#print("[w", tid, "] -> batch ", yield_ptr//bs)
+				
+			self.load_ch <- tid
+			self.x.switch()
+			self.y.switch()
+
+    def tuple<gpu_tensor,gpu_tensor> batch()
+		int w <- self.load_ch
+
+		var x = self.x.load(w)
+		var y = self.y.load(w)
+		x = x.view([$cfg.bs, 1, 28,28])
+
+        return x, y
+
+class MyModel
+	Linear l1
+	Conv2d c1, c2
+	ctor()
+		self.c1 = new Conv2d(1,5, 5,2,1, "xavu")
+		self.c2 = new Conv2d(5,50, 5,2,0, "xavu")
+		self.l1 = new Linear(1250, 10, "xavu")
+	
+	def gpu_tensor forward(gpu_tensor x)
+		int bs = x.dims[0]
+		x = self.c1.forward(x)
+
+		x = relu(x)
+		x = self.c2.forward(x)
+		x = x.view([bs, -1])
+		x = relu(x)
+		x = self.l1.forward(x)
+		return x
+
+main
+	Dataset ds(3, "/nsd_home/Datasets/mnist/train/*/*.jpg")
+	MyModel model()
+
+	AdamW optim(0.001, 0.9, 0.98)
+	p
+
+	finish
+		asyncs 3 ds.worker()
+
+		for i=0, i<1000
+			gpu_tensor a, b
+			a, b = ds.batch()
+			var y_hat = model.forward(a)
+			ce_loss(y_hat, b)
+
+			$backprop.backward()
+			optim.step()
+		ds.terminate_workers()
+
+
+	print()
+	print("Mnist CNN trained")
+	print()
+	print("Probabilities for image of class 2:")
+	#gpu_tensor t = image_gpu_tensor("/nsd_home/Datasets/mnist/test/1/1004.jpg").view([1,1,28,28])
+	gpu_tensor t = image_gpu_tensor("/nsd_home/Datasets/mnist/test/2/1407.jpg").view([1,1,28,28])
+	#gpu_tensor t = image_gpu_tensor("/nsd_home/Datasets/mnist/test/9/322.jpg").view([1,1,28,28])
+
+	var x = model.forward(t)
+	softmax(x).print()

@@ -34,6 +34,7 @@ class tensor
 				for j=1, j<self.stride.size()
 					int stride = self.stride[j]
 					if (i+1)%stride==0
+						0
 						if stride==ld
 							print("],")
 							has_ld=i<self.dims_prod-1
@@ -45,6 +46,7 @@ class tensor
 					
 			for i=0, i<self.stride.size()-1
 				printl("]")
+		return 0
 
 	def int pack_float_256(float[] pack, int m_offset, int n_offset)
 		int m=self.shape[-2], n=self.shape[-1]
@@ -239,7 +241,7 @@ def tensor tensor_tensor_mma(tensor x, tensor y)
 
 		int threads = min(tHW, max(1, m//MC))
 
-		#finish
-		#	asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
+		finish
+			asyncs threads float_tensor_mma_worker(x, y, out, m, n, p, m_main, n_main)
 
 	return out

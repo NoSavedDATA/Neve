@@ -39,6 +39,7 @@ void set_functions_return_type() {
 						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, {"ctx_print_buffer", "float"}, {"scope_struct_print", "float"}, 
 						{"memp_start", "int"}, {"memp_end", "int"}, 
 						{"psweep", "float"}, {"join_gc", "float"}, {"sweep", "float"}, {"GC_print", "float"}, 
+						{"float_to_bf16", ""}, {"bf16_to_float", "float"}, {"bf16_to_str_buffer", "int"}, 
 						{"str_Copy", "str"}, {"str_eq", "bool"}, {"str_str_add", "str"}, {"str_float", "float"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"can_convert_to_float", "bool"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, {"_glob_b_", "array"}, 
 						{"channel_void_message", "int"}, {"str_channel_message", "str"}, {"channel_str_message", "int"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
 						{"dir_exists", "float"}, {"path_exists", "float"}, 
@@ -65,6 +66,9 @@ void set_functions_return_type() {
 	functions_return_data_type["int_channel_sum"] = Data_Tree("int");
 	functions_return_data_type["int_channel_terminate"] = Data_Tree("float");
 	functions_return_data_type["int_channel_alive"] = Data_Tree("bool");
+	functions_return_data_type["float_to_bf16"] = Data_Tree("");
+	functions_return_data_type["bf16_to_float"] = Data_Tree("float");
+	functions_return_data_type["bf16_to_str_buffer"] = Data_Tree("int");
 	functions_return_data_type["map_Create"] = Data_Tree("map");
 	functions_return_data_type["map_node_reclaim"] = Data_Tree("int");
 	functions_return_data_type["map_size"] = Data_Tree("int");

@@ -51,11 +51,11 @@ extern std::map<std::string, std::string> stringMethods;
 
 
 
-extern std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
+extern std::unique_ptr<KaleidoscopeJIT> TheJIT;
 extern ExitOnError ExitOnErr;
 
 extern PointerType *floatPtrTy, *int8PtrTy, *int1PtrTy;
-extern llvm::Type *floatTy, *intTy, *int8Ty, *int16Ty, *int64Ty, *m256Ty, *boolTy, *voidTy;
+extern llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64Ty, *m256Ty, *boolTy, *voidTy;
 
 extern Value *stack, *stack_top_value, *cur_self;
 

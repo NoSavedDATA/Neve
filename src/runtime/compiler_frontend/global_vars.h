@@ -25,6 +25,7 @@ extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 extern std::map<std::string, std::string> elements_type_return, ops_type_return;
 extern std::map<int, std::string> op_map;
 extern std::vector<std::string> op_map_names;
+extern std::vector<std::string> int_fn_values;
 
 constexpr int32_t TERMINATE_VARARG = -2147483647;
 constexpr int32_t COPY_TO_END_INST = 0x7FADBEEF;

@@ -131,14 +131,10 @@ Napi::Value parse(const Napi::CallbackInfo& info) {
 
 // Module initialization
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-    // InitializeNativeTarget();
-    // InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
-    // InitializeNativeTargetAsmParser();
     set_functions_return_type();
     set_functions_args_type();
     set_user_functions();
-    // TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
-    // InitializeModule();
+
     exports.Set("parse", Napi::Function::New(env, parse));
     return exports;
 }

@@ -5,6 +5,7 @@ proto i64 sys strlen(any)
 proto any sys memchr(any, int, i64)
 proto any sys aligned_alloc(i64, i64)
 proto any sys free(any)
+proto any sys malloc(int)
 proto int print_bb()
 proto int print_Value(any)
 proto any simd_load(any, int, int)
@@ -20,7 +21,10 @@ proto int c_memcpy(str, charv, i64)
 proto any alloc(int, str)
 proto bool fexists(str)
 proto any vec_shuffle(any,any)
+proto any array_append(any,any)
 proto array<str> _glob_b_(str)
+proto bf16 float_to_bf16(float)
+proto float bf16_to_float(bf16)
 proto tuple<any,int> map_get_i64_any(any, i64)
 proto tuple<int,int> map_get_str_int(any, str)
 proto tuple<int,int> map_get_i64_int(any, i64)
@@ -28,3 +32,8 @@ proto tuple<int,int> map_get_i64_int(any, i64)
 operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby
 operation float[] layout_float_int_offby
+
+operation bf16[] buffer_bf16_int_offby
+operation bf16[] buffer_bf16_i64_offby
+operation bf16[] layout_bf16_int_offby
+

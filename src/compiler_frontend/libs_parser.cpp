@@ -101,6 +101,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
 
     llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     llvm::Type *floatTy = Type::getFloatTy(*TheContext);
+    llvm::Type *halfTy = Type::getFloatTy(*TheContext);
     llvm::Type *boolTy = Type::getInt1Ty(*TheContext);
     llvm::Type *intTy = Type::getInt32Ty(*TheContext);
 
@@ -230,17 +231,22 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         TheModule->getOrInsertFunction(Name, llvm_function).getCallee()
     );
 
-    
-    auto &JD = TheJIT->getMainJITDylib();
-    
-    SymbolMap symbols;
-    symbols[TheJIT->Mangle(Name)] = {
-        ExecutorAddr::fromPtr(func_ptr),
-        JITSymbolFlags::Exported | JITSymbolFlags::Callable
+    auto &ES = TheJIT->JIT->getExecutionSession();
+
+    // THIS replaces old Mangle(Name)
+    auto Sym = ES.intern(Name);
+
+    llvm::orc::SymbolMap symbols;
+
+    symbols[Sym] = llvm::orc::ExecutorSymbolDef{
+        llvm::orc::ExecutorAddr::fromPtr(func_ptr),
+        llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable
     };
 
-    if (auto Err = JD.define(llvm::orc::absoluteSymbols(symbols)))
-        LogError(-1, "Failed to define native function in JIT: " + toString(std::move(Err)));
+    if (auto Err = TheJIT->getMainJITDylib().define(
+            llvm::orc::absoluteSymbols(symbols)))
+        LogError(-1, "Failed to define native function in JIT: " + llvm::toString(std::move(Err)));
+
 }
 
 

@@ -144,7 +144,6 @@ void IfExprAST::SetCValues(Parser_Struct parser_struct) {
 }
 void ForExprAST::SetCValues(Parser_Struct parser_struct) {
     this->parser_struct.cvalues = parser_struct.cvalues;
-    std::cout << "got For: " <<  parser_struct.cvalues.ints.size() << "\n";
     Start->SetCValues(parser_struct);
     End->SetCValues(parser_struct);
     Step->SetCValues(parser_struct);
@@ -229,7 +228,6 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::string fn_name,
                                                   bool is_nsk_fn, int sent_args, int arg_offset=1) {
-    return;
 
   bool is_vararg = in_vec(fn_name, vararg_methods);
 
@@ -254,7 +252,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
         return;
     }
     if(tgt_arg>=Function_Arg_Names[fn_name].size()) {
-        LogErrorS(parser_struct.line, "Extrapolated " + fn_name + " arguments count.");
+        LogErrorS(parser_struct.line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(Function_Arg_Names[fn_name].size()));
         return;
     }
 
@@ -410,6 +408,13 @@ NewDictExprAST::NewDictExprAST(
 }
   
   
+void ObjectExprAST::Checks() {
+    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+        if (this->HasInit[i]) { // callee init
+          Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
+        }
+    }
+}
 
 ObjectExprAST::ObjectExprAST(
     Parser_Struct parser_struct,
@@ -422,12 +427,6 @@ ObjectExprAST::ObjectExprAST(
 {
     this->parser_struct = parser_struct;
 
-    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i)
-    {
-        if (this->HasInit[i]) { // callee init
-          Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
-        }
-    }
 }
 
 
@@ -463,20 +462,6 @@ EmptyStrExprAST::EmptyStrExprAST() {
   Expr_String = {};
   End_of_Recursion=true;
   height=0;
-}
-NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct)  {
-
-  this->Inner_Expr = std::move(Inner_Expr);
-  this->parser_struct = parser_struct;
-
-  this->Inner_Expr->IsLeaf=false;
-  Name = name;
-  
-  From_Self = this->Inner_Expr->From_Self;
-  height=this->Inner_Expr->height+1;
-
-  Expr_String = this->Inner_Expr->Expr_String;
-  Expr_String.push_back(name);
 }
 
 NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
@@ -528,6 +513,11 @@ void UnkVarExprAST::Checks() {
     //     LogErrorS(parser_struct.line, "Redefinition of " + VarName);
     //     continue;
     // }
+
+    if (dt.Type=="layout") {
+        std::cout << "UnkVar " << VarName << " got" << "\n";
+        dt.Print();
+    }
 
     data_typeVars[parser_struct.function_name][VarName] = dt;
   }
@@ -881,6 +871,30 @@ Data_Tree LayoutExprAST::GetDataTree(bool) {
 }
 
 
+int LayoutExprAST::DimsProd() {
+
+    int prod=1;
+    for (int i=CArgs.size()-1; i>=0; --i) {
+        auto carg = CArgs[i];
+        std::string type = carg.dt.Type; 
+        std::string str = carg.name; 
+
+
+        if (type=="int")
+            prod *= std::stoi(str);
+        else if (type=="string") {
+
+            if (parser_struct.cvalues.ints.count(str)==0)
+                LogErrorC(parser_struct.line, "Compile time value \"" + str + "\" not found in layout expr");
+            
+            prod *= parser_struct.cvalues.ints[str];
+        } else
+            LogErrorC(parser_struct.line, "layout does not support nested type " + type);
+    }
+    return prod;
+
+}
+
 std::vector<int> LayoutExprAST::GetStrides() {
     std::vector<int> Strides;
     int acc=1;
@@ -940,16 +954,22 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct parser_struct, std::string fn_
     return fn_compiled_values;
 }
 
+void LaunchExprAST::Checks() {
+    Semantic_Arguments_Check(parser_struct, Args, fn_name, false, Args.size(), 0);
+}
+
 LaunchExprAST::LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST> Grid,
         std::unique_ptr<ExprAST> Block,
+        std::unique_ptr<ExprAST> Smem,
+        std::unique_ptr<ExprAST> Stream,
         std::vector<std::unique_ptr<ExprAST>> Args,
         FnCompiledValuesVec CompiledArgsVec,
         std::string fn_name) 
     : Grid(std::move(Grid)), Block(std::move(Block)), Args(std::move(Args)),
+      Smem(std::move(Smem)), Stream(std::move(Stream)),
       CompiledArgsVec(CompiledArgsVec),
       fn_name(fn_name) {
 
-    Semantic_Arguments_Check(parser_struct, this->Args, fn_name, false, this->Args.size(), 0);
 
     if (auto stmt = dynamic_cast<NewVecExprAST*>(this->Grid.get())) {
         for (int i=stmt->Values.size(); i<3; i++)
@@ -1103,12 +1123,12 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     RType = "buffer_"+RType;
   if (L_dt.Type=="layout") {
     if (L_dt.Nested_Data.size()==0)
-        LogErrorC(parser_struct.line, "Op with unspecialized layout");
+        LogErrorC(parser_struct.line, "Op " + operation + " with unspecialized layout");
     LType = "layout_"+L_dt.Nested_Data[0].Type;
   }
   if (R_dt.Type=="layout") {
-    if (L_dt.Nested_Data.size()==0)
-        LogErrorC(parser_struct.line, "Op with unspecialized layout");
+    if (R_dt.Nested_Data.size()==0)
+        LogErrorC(parser_struct.line, "Op " + operation + " with unspecialized layout");
     RType = "layout_"+R_dt.Nested_Data[0].Type;
   }
 
@@ -1815,7 +1835,6 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     //     return data_type;
 
 
-
   if(IsUnique)
       return Data_Tree(Name);
   
@@ -1832,7 +1851,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = Data_Tree("function");
         return data_type;
     }
-    else if (in_vec(Name, {"tid", "tN", "tHW", "tx", "ty", "tz", "bx", "by", "bz"}))
+    else if (in_vec(Name, int_fn_values))
         data_type = Data_Tree("int");
     else if (IsPositionalArg(parser_struct, Name)) {
         data_type = Data_Tree("any");

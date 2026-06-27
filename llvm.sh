@@ -8,7 +8,20 @@
 # This script will install the llvm toolchain on the different
 # Debian and Ubuntu versions
 
-set -eux
+# This script is stored on:
+# https://github.com/opencollab/llvm-jenkins.debian.net/blob/master/llvm.sh
+
+set -euxo pipefail
+
+info()  { printf "[info] %s\n" "$*"; }
+warn()  { printf "[warn] %s\n" "$*" >&2; }
+# error MESSAGE [EXIT_CODE] — default exit code is 1
+error() {
+    local msg="$1"
+    local code="${2:-1}"
+    printf "[error] %s\n" "$msg" >&2
+    exit "$code"
+}
 
 usage() {
     set +x
@@ -20,10 +33,10 @@ usage() {
     exit 1;
 }
 
-CURRENT_LLVM_STABLE=19
-BASE_URL="http://apt.llvm.org"
+CURRENT_LLVM_STABLE=22
+BASE_URL="https://apt.llvm.org"
 
-NEW_DEBIAN_DISTROS=("trixie" "unstable")
+NEW_DEBIAN_DISTROS=("trixie" "forky" "unstable")
 # Set default values for commandline arguments
 # We default to the current stable branch of LLVM
 LLVM_VERSION=$CURRENT_LLVM_STABLE
@@ -37,7 +50,28 @@ CODENAME_FROM_ARGUMENTS=""
 source /etc/os-release
 DISTRO=${DISTRO,,}
 
-# Check for required tools
+# Downloader abstraction: prefer wget, fall back to curl
+download_key() {
+    local url="$1"
+    if command -v wget &>/dev/null; then
+        wget -qO- --retry-connrefused --waitretry=1 --tries=3 "$url"
+    elif command -v curl &>/dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf --retry 3 "$url"
+    else
+        error "Neither wget nor curl found. Install one and retry." 4
+    fi
+}
+
+check_url() {
+    local url="$1"
+    if command -v wget &>/dev/null; then
+        wget -q --method=HEAD "$url" &>/dev/null
+    elif command -v curl &>/dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf --head --retry 2 "$url" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
 
 # Check if this is a new Debian distro
 is_new_debian=0
@@ -58,29 +92,26 @@ if [[ $is_new_debian -eq 0 ]]; then
 fi
 
 missing_binaries=()
-using_curl=
 for binary in "${needed_binaries[@]}"; do
-    if ! command -v $binary &>/dev/null ; then
+    if ! command -v "$binary" &>/dev/null; then
         if [[ "$binary" == "wget" ]] && command -v curl &>/dev/null; then
-            using_curl=1
             continue
         fi
-        missing_binaries+=($binary)
+        missing_binaries+=("$binary")
     fi
 done
 
 if [[ ${#missing_binaries[@]} -gt 0 ]] ; then
-    echo "You are missing some tools this script requires: ${missing_binaries[@]}"
-    echo "(hint: apt install lsb-release wget software-properties-common gnupg)"
-    echo "curl is also supported"
-    exit 4
+    error "Missing required tools: ${missing_binaries[*]}
+(hint: apt install lsb-release wget software-properties-common gnupg)
+curl is also supported as an alternative to wget" 4
 fi
 
 case ${DISTRO} in
     debian)
-        # Debian Trixie has a workaround because of
+        # Debian Forky has a workaround because of
         # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1038383
-        if [[ "${VERSION}" == "unstable" ]] || [[ "${VERSION}" == "testing" ]] || [[ "${VERSION_CODENAME}" == "trixie" ]]; then
+        if [[ "${VERSION}" == "unstable" ]] || [[ "${VERSION}" == "testing" ]] || [[ "${VERSION_CODENAME}" == "forky" ]]; then
             CODENAME=unstable
             LINKNAME=
         else
@@ -140,8 +171,7 @@ while getopts ":hm:n:" arg; do
 done
 
 if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root!"
-   exit 1
+    error "This script must be run as root!"
 fi
 
 declare -A LLVM_VERSION_PATTERNS
@@ -157,11 +187,12 @@ LLVM_VERSION_PATTERNS[17]="-17"
 LLVM_VERSION_PATTERNS[18]="-18"
 LLVM_VERSION_PATTERNS[19]="-19"
 LLVM_VERSION_PATTERNS[20]="-20"
-LLVM_VERSION_PATTERNS[21]=""
+LLVM_VERSION_PATTERNS[21]="-21"
+LLVM_VERSION_PATTERNS[22]="-22"
+LLVM_VERSION_PATTERNS[23]=""
 
 if [ ! ${LLVM_VERSION_PATTERNS[$LLVM_VERSION]+_} ]; then
-    echo "This script does not support LLVM version $LLVM_VERSION"
-    exit 3
+    error "This script does not support LLVM version $LLVM_VERSION" 3
 fi
 
 LLVM_VERSION_STRING=${LLVM_VERSION_PATTERNS[$LLVM_VERSION]}
@@ -170,14 +201,12 @@ LLVM_VERSION_STRING=${LLVM_VERSION_PATTERNS[$LLVM_VERSION]}
 if [[ -n "${CODENAME}" ]]; then
     REPO_NAME="deb ${BASE_URL}/${CODENAME}/  llvm-toolchain${LINKNAME}${LLVM_VERSION_STRING} main"
     # check if the repository exists for the distro and version
-    if ! wget -q --method=HEAD ${BASE_URL}/${CODENAME} &> /dev/null && \
-      ! curl -sSLI -XHEAD ${BASE_URL}/${CODENAME} &> /dev/null; then
+    if ! check_url "${BASE_URL}/${CODENAME}"; then
         if [[ -n "${CODENAME_FROM_ARGUMENTS}" ]]; then
-            echo "Specified codename '${CODENAME}' is not supported by this script."
+            error "Specified codename '${CODENAME}' is not supported by this script." 2
         else
-            echo "Distribution '${DISTRO}' in version '${VERSION}' is not supported by this script."
+            error "Distribution '${DISTRO}' in version '${VERSION}' is not supported by this script." 2
         fi
-        exit 2
     fi
 fi
 
@@ -185,12 +214,11 @@ fi
 # install everything
 
 if [[ ! -f /etc/apt/trusted.gpg.d/apt.llvm.org.asc ]]; then
-    # download GPG key once
-    if [[ -z "$using_curl" ]]; then
-        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-    else
-        curl -sSL https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+    GPG_KEY_URL="https://apt.llvm.org/llvm-snapshot.gpg.key"
+    if ! check_url "$GPG_KEY_URL"; then
+        error "GPG key not reachable at $GPG_KEY_URL" 2
     fi
+    download_key "$GPG_KEY_URL" | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
 fi
 
 if [[ -z "`apt-key list 2> /dev/null | grep -i llvm`" ]]; then

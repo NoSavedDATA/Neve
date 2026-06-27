@@ -167,7 +167,10 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
     
     if(CurTok=='<'||CurTok=='[') 
       data_type.Nested_Data.push_back(Parse_Data_Type(dt, parser_struct));
-    else
+    else if (IdentifierStr=="smem") {
+      data_type.is_smem=true;
+      data_type.Nested_Data.push_back(Data_Tree(dt));
+    } else
       data_type.Nested_Data.push_back(Data_Tree(dt));
 
     if(CurTok==',')
@@ -1620,49 +1623,6 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
   // if (!in_vec(CurTok, {'[', tok_self, tok_identifier})) {}
   
 
-  // Get the Notes vector
-  if (CurTok == '[')
-  {
-    has_notes=true;
-    getNextToken();
-    
-    int arg_idx=0;
-    while (true) {
-      if (CurTok==tok_number) { 
-        notes.push_back(std::make_unique<NumberExprAST>(NumVal));
-        getNextToken();
-      } else if (CurTok==tok_data&&data_type=="vec"&&arg_idx==0) {
-        notes.push_back(std::make_unique<IntExprAST>(data_name_to_type()[IdentifierStr]));
-        getNextToken();
-      } else if (CurTok==tok_str) {
-        notes.push_back(std::make_unique<StringExprAST>(IdentifierStr));
-        getNextToken();
-
-      } else if (CurTok==tok_number) {
-        notes.push_back(std::make_unique<IntExprAST>(NumVal));
-        getNextToken();
-       
-      } else if (CurTok==tok_identifier||CurTok==tok_self)
-        notes.push_back(ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, false));
-      else if (CurTok=='[')
-        notes.push_back(std::move(ParseNewList(parser_struct, class_name)));
-      else {
-        notes.push_back(std::move(ParsePrimary(parser_struct, class_name, false)));
-      }
-      arg_idx++;
-      
-      if (CurTok != ',')
-        break;
-      getNextToken(); // eat the ','.
-    }
-
-    
-    if (CurTok != ']')
-      return LogError(parser_struct.line, "] not found at " + data_type + " variable declaration.");
-    getNextToken();
-  }
-
-
 
 
   std::string pre_dot="";
@@ -1709,6 +1669,8 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
       if (data_tree.is_array||data_tree.is_buffer)
         Init = std::make_unique<NullPtrExprAST>();
       else if (data_type=="float")
+        Init = std::make_unique<NumberExprAST>(0.0f);
+      else if (data_type=="bf16")
         Init = std::make_unique<NumberExprAST>(0.0f);
       else if (data_type=="int")
         Init = std::make_unique<IntExprAST>(0);
@@ -1909,6 +1871,22 @@ std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct parser_struct, std::string cl
 
 
     std::string fn_name = IdentifierStr;
+    std::unique_ptr<ExprAST> smem;
+    if (gpu_fn.count(IdentifierStr)==0)
+        smem = ParseExpression(parser_struct, class_name);
+    else
+        smem = std::make_unique<IntExprAST>(0);
+
+    fn_name = IdentifierStr;
+    std::unique_ptr<ExprAST> stream=nullptr;
+    if (gpu_fn.count(IdentifierStr)==0) {
+        stream = ParseExpression(parser_struct, class_name);
+    }
+    fn_name = IdentifierStr;
+
+    if (gpu_fn.count(IdentifierStr)==0)
+        LogError(parser_struct.line, "Gpu kernel " + IdentifierStr + " not found.");
+
     getNextToken();
 
     auto args = Parse_Arguments(parser_struct, class_name);
@@ -1917,8 +1895,9 @@ std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct parser_struct, std::string cl
     auto CompiledArgs = Parse_Compile_Args(parser_struct, class_name);
 
 
-    return make_unique<LaunchExprAST>(parser_struct, std::move(grid),
-                    std::move(block), std::move(*args), CompiledArgs, fn_name);
+    return make_unique<LaunchExprAST>(parser_struct, std::move(grid), 
+                    std::move(block), std::move(smem), std::move(stream),
+                    std::move(*args), CompiledArgs, fn_name);
 }
 
 

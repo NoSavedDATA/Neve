@@ -72,11 +72,12 @@ std::string EmitPtx(bool re_emit) {
 }
 
 void InitializeModule() {
+    std::cout << "INIT MODULE" << "\n";
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
   CurModule = TheModule.get();
-  PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
+  // PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
   if (IsJIT) { // As jit
       TheModule->setDataLayout(TheJIT->getDataLayout());
   }
@@ -96,26 +97,25 @@ void InitializeModule() {
     );
   }
 
-  {
-    std::string Error;
-    auto Target = llvm::TargetRegistry::lookupTarget("nvptx64", Error);
+  // {
+  //   std::string Error;
+  //   auto Target = llvm::TargetRegistry::lookupTarget("nvptx64", Error);
 
-    llvm::TargetOptions Opt;
-    auto RM = std::optional<llvm::Reloc::Model>();
+  //   llvm::TargetOptions Opt;
+  //   auto RM = std::optional<llvm::Reloc::Model>();
 
-    PtxTM = std::unique_ptr<llvm::TargetMachine>(
-        Target->createTargetMachine(
-            "nvptx64-nvidia-cuda",
-            "sm_80",          // or sm_70, sm_86, etc
-            "",
-            Opt,
-            RM
-        )
-    );
-    PtxModule->setDataLayout(PtxTM->createDataLayout());
-    PtxModule->setTargetTriple("nvptx64-nvidia-cuda");
-  }
-  //std::cout << "Initialize Module\n";
+  //   PtxTM = std::unique_ptr<llvm::TargetMachine>(
+  //       Target->createTargetMachine(
+  //           "nvptx64-nvidia-cuda",
+  //           "sm_89",          // or sm_70, sm_86, etc
+  //           "",
+  //           Opt,
+  //           RM
+  //       )
+  //   );
+  //   PtxModule->setDataLayout(PtxTM->createDataLayout());
+  //   PtxModule->setTargetTriple(llvm::Triple("nvptx64-nvidia-cuda"));
+  // }
 
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
@@ -125,8 +125,10 @@ void InitializeModule() {
   int8Ty = Type::getInt8Ty(*TheContext);
   intTy = Type::getInt32Ty(*TheContext);
   int16Ty = Type::getInt16Ty(*TheContext);
+  bf16Ty = Type::getInt16Ty(*TheContext);
   int64Ty = Type::getInt64Ty(*TheContext);
   floatTy = Type::getFloatTy(*TheContext);
+  halfTy = Type::getHalfTy(*TheContext);
   boolTy = Type::getInt1Ty(*TheContext);
   voidTy = Type::getVoidTy(*TheContext);
   ShallCodegen = true;
@@ -136,6 +138,7 @@ void InitializeModule() {
   Generate_Struct_Types();
   str_toTy = {{"char", int8Ty}, {"i8", int8Ty}, {"int", intTy}, {"i64", int64Ty}, {"i16", int16Ty},
               {"bool", boolTy}, {"float_ptr", floatPtrTy}, {"void", voidTy},
+              {"half", halfTy}, {"bf16", int16Ty},
               {"float", floatTy}, {"void", voidTy}, {"str", struct_types["DT_str"]}};
 
   for (auto &pair : PriorityProtos) {
@@ -701,18 +704,32 @@ void InitializeModule() {
 }
 
 
+void print_allBB() {
+    for (Function &F : *TheModule) {
+        for (BasicBlock &BB : F) {
+            for (Instruction &I : BB) {
+                if (auto *BI = dyn_cast<BranchInst>(&I)) {
+                    errs() << "Branch @" << BI
+                           << " in function " << &F << "\n";
 
-ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
-                                       const std::string &Suffix) {
-  if (auto *F = FnAST.codegen()) {
-    F->setName(F->getName() + Suffix);
-    auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-    // Start a new module.
-    InitializeModule();
-    return TSM;
-  } else
-    report_fatal_error("failed to JIT.");
+                    for (unsigned i = 0; i < BI->getNumSuccessors(); ++i) {
+                        BasicBlock *Succ = BI->getSuccessor(i);
+                        errs()
+                            << "  succ " << i
+                            << " BB=" << Succ
+                            << " parent=" << Succ->getParent()
+                            << "\n";
+                    }
+                }
+            }
+        }
+    }
 }
+
+
+
+
+
 
 // nlohmann::json FunctionAST::toJSON() {
 //     std::cout << "FUNCTION AST JSON" << ".\n";
@@ -819,10 +836,9 @@ Function *FunctionAST::codegen_gpu(int idx) {
         
   }
 
-  if (idx>=0) {
+  if (idx>=0)
       parser_struct.cvalues = Fn_Compiled_Values[fn_name];
-      std::cout << fn_name << ": " << parser_struct.cvalues.ints.size() << "\n";
-  }
+  
 
   SetKernelVars(function_name);
 
@@ -874,6 +890,7 @@ Function *FunctionAST::codegen() {
     
 
   FunctionProtos[Proto->getName()] = std::move(Proto);
+  // FunctionProtos[Proto->getName()] = Proto.get();
   std::string function_name = P.getName();
 
 
@@ -953,10 +970,12 @@ Function *FunctionAST::codegen() {
         Builder->CreateRet(RetVal); 
     }
 
+    // print_allBB();
     // Validate the generated code, checking for consistency.
-    verifyFunction(*TheFunction);
-    // TheModule->print(llvm::errs(), nullptr);
-
+    // verifyFunction(*TheFunction);
+    // if (current_codegen_function=="__anon_expr")
+    //     TheModule->print(llvm::errs(), nullptr);
+    // verifyFunction(*TheFunction, &errs());
     return TheFunction;
   } 
 

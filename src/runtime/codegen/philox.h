@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 
 static constexpr uint32_t PHILOX_M0 = 0xD2511F53;

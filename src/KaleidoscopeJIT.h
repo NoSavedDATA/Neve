@@ -23,6 +23,7 @@
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
@@ -33,6 +34,7 @@
 #include <memory>
 
 #include "runtime/compiler_frontend/parser_struct.h"
+#include "compiler_frontend/expressions.h"
 
 
 class PrototypeAST;
@@ -66,94 +68,33 @@ class FunctionAST {
 /// suffix (needed to prevent a name-clash with the function's stub),
 /// and then take ownership of the module that the function was compiled
 /// into.
-llvm::orc::ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
-                                                  const std::string &Suffix);
 
 namespace llvm {
 namespace orc {
 
-class KaleidoscopeASTLayer;
-class KaleidoscopeJIT;
-
-
-class KaleidoscopeASTMaterializationUnit : public MaterializationUnit {
-  public:
-    KaleidoscopeASTMaterializationUnit(KaleidoscopeASTLayer &L,
-                                      std::unique_ptr<FunctionAST> F);
-
-  StringRef getName() const override; 
-
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
-
-  private:
-    void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override; 
-
-  KaleidoscopeASTLayer &L;
-  std::unique_ptr<FunctionAST> F;
-};
-
-
-class KaleidoscopeASTLayer {
-public:
-  KaleidoscopeASTLayer(IRLayer &BaseLayer, const DataLayout &DL);
-
-  Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F); 
-
-  void emit(std::unique_ptr<MaterializationResponsibility> MR,
-            std::unique_ptr<FunctionAST> F); 
-  
-
-  MaterializationUnit::Interface getInterface(FunctionAST &F); 
-
-  private:
-    IRLayer &BaseLayer;
-    const DataLayout &DL;
-};
-
-
-
-
-
 
 class KaleidoscopeJIT {
-private:
-  std::unique_ptr<ExecutionSession> ES;
-  std::unique_ptr<EPCIndirectionUtils> EPCIU;
-
-  DataLayout DL;
-
-  RTDyldObjectLinkingLayer ObjectLayer;
-  IRCompileLayer CompileLayer;
-  IRTransformLayer OptimizeLayer;
-  KaleidoscopeASTLayer ASTLayer;
-
-  JITDylib &MainJD;
-
-  static void handleLazyCallThroughError(); 
-
 public:
-  MangleAndInterner Mangle;
-  KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES,
-                  std::unique_ptr<EPCIndirectionUtils> EPCIU,
-                  JITTargetMachineBuilder JTMB, DataLayout DL);
+    std::vector<std::unique_ptr<FunctionAST>> fn_vec;
+    
+    llvm::orc::MangleAndInterner Mangle;
+    static Expected<std::unique_ptr<KaleidoscopeJIT>> Create();
 
-  ~KaleidoscopeJIT(); 
+    Error addModule(ThreadSafeModule TSM);
+    JITDylib &getMainJITDylib();
 
-  static Expected<std::unique_ptr<KaleidoscopeJIT>> Create(); 
+    std::string MangleName(const std::string &Name);
 
-  const DataLayout &getDataLayout() const; 
+    Error addAST(std::unique_ptr<FunctionAST> AST); 
+    Error genAST(); 
 
-  JITDylib &getMainJITDylib();
+    const DataLayout &getDataLayout() const {
+        return JIT->getDataLayout();
+    }
+    KaleidoscopeJIT(std::unique_ptr<LLJIT> J);
 
-  Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
 
-  Error addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr); 
-
-  Expected<ExecutorSymbolDef> lookup(StringRef Name); 
-
-private:
-  static Expected<ThreadSafeModule>
-  optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R); 
+    std::unique_ptr<LLJIT> JIT;
 };
 
 } // end namespace orc

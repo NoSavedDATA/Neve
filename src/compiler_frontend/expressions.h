@@ -319,6 +319,7 @@ public:
       std::unique_ptr<ExprAST> Init, std::string ClassName);
 
   Value *codegen(Value *scope_struct) override;
+  void Checks();
 };
   
   
@@ -614,12 +615,6 @@ class SelfExprAST : public NameableExprAST {
 };
 
 
-class NestedStrExprAST : public NameableExprAST {
-  
-  public:
-    NestedStrExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct);
-    Value *codegen(Value *scope_struct) override;
-};
   
 
 class NestedVectorIdxExprAST : public NameableExprAST {
@@ -950,21 +945,23 @@ public:
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   std::vector<int> GetStrides();
+  int DimsProd();
 };
 
 
 class LaunchExprAST : public ExprAST {
 
 public:
-  std::unique_ptr<ExprAST> Grid, Block;
+  std::unique_ptr<ExprAST> Grid, Block, Smem, Stream;
   std::vector<std::unique_ptr<ExprAST>> Args;
   FnCompiledValuesVec CompiledArgsVec;
   FnCompiledValues CompiledArgs;
   std::string fn_name;
 
-  LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, FnCompiledValuesVec CompiledArgsVec, std::string);
+  LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, FnCompiledValuesVec CompiledArgsVec, std::string);
 
   Value *codegen(Value *scope_struct) override;
+  void Checks();
 };
 
 

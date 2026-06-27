@@ -5,6 +5,7 @@
 
 #include "any_map.h"
 #include "array.h"
+#include "bf16.h"
 #include "bool.h"
 #include "charv.h"
 #include "codegen_notes.h"

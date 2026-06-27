@@ -30,6 +30,7 @@ void set_user_functions() {
 		"_quit_", "fexists_C", 
 		"offset_object_ptr", "object_Attr_float", "object_Attr_int", "object_Load_float", "object_Load_int", "object_Load_slot", "tie_object_to_object", "object_Attr_on_Offset_float", "object_Attr_on_Offset_int", "object_Attr_on_Offset", "object_Load_on_Offset_float", "object_Load_on_Offset_int", "object_Load_on_Offset", "object_ptr_Load_on_Offset", "object_ptr_Attribute_object", 
 		"allocate_void", "allocate_pool", 
+		"float_to_bf16", "bf16_to_float", "bf16_to_str_buffer", 
 		"str_Copy", "str_eq", "str_str_add", "str_float", "str_int_add", "str_float_add", "int_str_add", "float_str_add", "str_bool_add", "bool_str_add", "PrintStr", "cat_str_float", "str_split_idx", "can_convert_to_float", "str_to_float", "str_str_different", "str_str_equal", "str_Delete", "readline", "_glob_b_", 
 		"list_New", "list_append_int", "list_append_float", "list_append_bool", "list_append", "list_print", "tuple_print", "list_Create", "list_shuffle", "list_size", "list_CalculateIdx", "to_int", "to_float", "to_bool", "assign_wise_list_Idx", "int_list_Store_Idx", "float_list_Store_Idx", "list_Store_Idx", "zip", "list_Idx", "tuple_Idx", 
 		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "tHW_fn", "get_tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 
@@ -77,6 +78,14 @@ void set_user_functions() {
 	llvm_callee["str_size"] = str_size;
 	llvm_callee["c_memcpy"] = c_memcpy;
 	llvm_callee["c_memchr"] = c_memchr;
+	llvm_callee["cp_async16"] = cp_async16;
+	llvm_callee["cp_commit_group"] = cp_commit_group;
+	llvm_callee["cp_wait_group"] = cp_wait_group;
+	llvm_callee["cp_wait_all"] = cp_wait_all;
+	llvm_callee["syncthreads"] = syncthreads;
+	llvm_callee["ldmatrix_x2"] = ldmatrix_x2;
+	llvm_callee["ldmatrix_x4"] = ldmatrix_x4;
+	llvm_callee["mma_16x8x16"] = mma_16x8x16;
 	llvm_callee["str_set"] = str_set;
 	llvm_callee["str_offset"] = str_offset;
 	llvm_callee["alloc"] = alloc;

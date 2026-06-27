@@ -101,10 +101,6 @@ extern "C" int randint(Scope_Struct *scope_struct, int b, int f) {
 }
 
 
-inline float uniform01() {
-    constexpr float scale = 1.0f / 4294967296.0f;
-    return rng_philox.next_u32() * scale;
-}
 
 extern "C" float randu(Scope_Struct *scope_struct, float a, float b) {
     return a + (b - a) * uniform01();

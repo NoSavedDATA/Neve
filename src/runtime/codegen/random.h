@@ -5,6 +5,7 @@
 #include <mutex>
 #include <random> 
 
+#include "philox.h"
 
 // extern std::mutex MAIN_PRNG_MUTEX;
 
@@ -66,3 +67,7 @@ extern std::mt19937 MAIN_PRNG;
 
 
 
+inline float uniform01() {
+    constexpr float scale = 1.0f / 4294967296.0f;
+    return rng_philox.next_u32() * scale;
+}

@@ -37,6 +37,37 @@ void set_functions_args_type() {
 		Function_Arg_Names["print_void_ptrC"].push_back("1");
 	
 		
+		Function_Arg_Types["float_to_bf16"]["0"] = "Scope_Struct";
+		Function_Arg_Types["float_to_bf16"]["1"] = "float";
+		
+		Function_Arg_DataTypes["float_to_bf16"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["float_to_bf16"]["1"] = Data_Tree("float");
+		
+		Function_Arg_Names["float_to_bf16"].push_back("0");
+		Function_Arg_Names["float_to_bf16"].push_back("1");
+		
+		Function_Arg_Types["bf16_to_float"]["0"] = "Scope_Struct";
+		Function_Arg_Types["bf16_to_float"]["1"] = "i16";
+		
+		Function_Arg_DataTypes["bf16_to_float"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["bf16_to_float"]["1"] = Data_Tree("i16");
+		
+		Function_Arg_Names["bf16_to_float"].push_back("0");
+		Function_Arg_Names["bf16_to_float"].push_back("1");
+		
+		Function_Arg_Types["bf16_to_str_buffer"]["0"] = "Scope_Struct";
+		Function_Arg_Types["bf16_to_str_buffer"]["1"] = "i16";
+		Function_Arg_Types["bf16_to_str_buffer"]["2"] = "str";
+		
+		Function_Arg_DataTypes["bf16_to_str_buffer"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["bf16_to_str_buffer"]["1"] = Data_Tree("i16");
+		Function_Arg_DataTypes["bf16_to_str_buffer"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["bf16_to_str_buffer"].push_back("0");
+		Function_Arg_Names["bf16_to_str_buffer"].push_back("1");
+		Function_Arg_Names["bf16_to_str_buffer"].push_back("2");
+	
+		
 		Function_Arg_Types["_quit_"]["0"] = "Scope_Struct";
 		
 		Function_Arg_DataTypes["_quit_"]["0"] = Data_Tree("Scope_Struct");

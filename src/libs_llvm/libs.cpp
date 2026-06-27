@@ -1029,6 +1029,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("logical_not", logical_notTy);
 
+	FunctionType *float_to_bf16Ty= FunctionType::get(
+		Type::getInt16Ty(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_to_bf16", float_to_bf16Ty);
+
+	FunctionType *bf16_to_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt16Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("bf16_to_float", bf16_to_floatTy);
+
+	FunctionType *bf16_to_str_bufferTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt16Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("bf16_to_str_buffer", bf16_to_str_bufferTy);
+
 	FunctionType *charv_printTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},

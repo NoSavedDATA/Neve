@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 
 struct PtrInfo {
     uint16_t offset;

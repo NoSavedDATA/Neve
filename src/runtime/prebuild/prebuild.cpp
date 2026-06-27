@@ -95,6 +95,8 @@ extern "C" int prebuild() {
     name_to_type["i16"] = 7;
     name_to_type["i64"] = 8;
     name_to_type["char"] = 9;
+    name_to_type["half"] = 10;
+    name_to_type["bf16"] = 11;
 
     name_to_type["str"] = 100;
     name_to_type["list"] = 101;

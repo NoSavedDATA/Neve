@@ -184,32 +184,34 @@ void HandleClass() {
 
 
 void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
-    
-    // JIT Version
-    auto *FnIR =  FnAST->codegen();
-    // Create a ResourceTracker for memory managment
-    // anonymous expression -- that way we can free it after executing.
-    auto RT = TheJIT->getMainJITDylib().createResourceTracker();
-    auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-    ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
-    // Add IR module
 
-    InitializeModule();
-    // Points __anon_expr
-    auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
-    // Get the symbol's address and cast it to the right type (takes no
-    // arguments, returns a float) so we can call it as a native function.
-    auto *FP = Sym.getAddress().toPtr<float (*)()>();
-    auto fp = FP();
-    // fprintf(stderr, "%.2f\n", fp);
-    // Delete the anonymous expression module from the JIT.
-    ExitOnErr(RT->remove());    
+    auto Err = TheJIT->addAST(std::move(FnAST));
+    TheJIT->genAST();
+    // TheModule->print(llvm::errs(), nullptr);
+   
+    // if (verifyModule(*TheModule, &errs())) {
+    //     errs() << "Module invalid\n";
+    //     abort();
+    // }
+
+    auto TSM = llvm::orc::ThreadSafeModule(
+        std::move(TheModule),
+        std::move(TheContext)
+    );
+
+    Err = TheJIT->JIT->addIRModule(std::move(TSM));
+    if (Err)
+        ExitOnErr(std::move(Err));
+    auto Sym = TheJIT->JIT->lookup("__anon_expr");
+    auto *FP = Sym->toPtr<float (*)()>();
+    float Result = FP();
+
+    // InitializeModule();
 }
 
 
 
 void HandleTopLevelExpression() {
-  // Evaluate a top-level expression into an anonymous function.
   
   Parser_Struct parser_struct;
   parser_struct.function_name = "__anon_expr";
@@ -475,7 +477,52 @@ void build_dicts() {
   Function_Arg_DataTypes["shfl_sync"]["1"] = Data_Tree("int");
   Function_Arg_Names["shfl_sync"] = {"0", "1"};
   Function_Required_Arg_Count["shfl_sync"] = 2;
+  // cp_async16
+  functions_return_data_type["cp_async16"] = Data_Tree("void");
+  Function_Arg_DataTypes["cp_async16"]["0"] = Data_Tree("any");
+  Function_Arg_DataTypes["cp_async16"]["1"] = Data_Tree("any");
+  Function_Arg_Names["cp_async16"] = {"0", "1"};
+  Function_Required_Arg_Count["cp_async16"] = 2;
+  // cp_commit_group
+  functions_return_data_type["cp_commit_group"] = Data_Tree("void");
+  Function_Required_Arg_Count["cp_commit_group"] = 0;
+  // cp_wait_group
+  functions_return_data_type["cp_wait_group"] = Data_Tree("int");
+  Function_Arg_DataTypes["cp_wait_group"]["0"] = Data_Tree("int");
+  Function_Required_Arg_Count["cp_wait_group"] = 1;
+  Function_Arg_Names["cp_wait_group"] = {"0"};
+  // cp_wait_all
+  functions_return_data_type["cp_wait_all"] = Data_Tree("void");
+  Function_Required_Arg_Count["cp_wait_all"] = 0;
+  // ldmatrix_x4
+  Data_Tree ldmatrix_x4_dt = Data_Tree("int");
+  ldmatrix_x4_dt.Nested_Data.push_back(Data_Tree("4"));
+  ldmatrix_x4_dt.is_array = true;
+  functions_return_data_type["ldmatrix_x4"] = ldmatrix_x4_dt;
+  Function_Arg_DataTypes["ldmatrix_x4"]["0"] = Data_Tree("any");
+  Function_Required_Arg_Count["ldmatrix_x4"] = 1;
+  Function_Arg_Names["ldmatrix_x4"] = {"0"};
+  // ldmatrix_x2
+  Data_Tree ldmatrix_x2_dt = Data_Tree("int");
+  ldmatrix_x2_dt.Nested_Data.push_back(Data_Tree("2"));
+  ldmatrix_x2_dt.is_array = true;
+  functions_return_data_type["ldmatrix_x2"] = ldmatrix_x2_dt;
+  Function_Arg_DataTypes["ldmatrix_x2"]["0"] = Data_Tree("any");
+  Function_Required_Arg_Count["ldmatrix_x2"] = 1;
+  Function_Arg_Names["ldmatrix_x2"] = {"0"};
 
+  // mma_16x8x16
+  // Data_Tree mma_16x8x16_dt = Data_Tree("int");
+  // mma_16x8x16_dt.Nested_Data.push_back(Data_Tree("4"));
+  // mma_16x8x16_dt.is_array = true;
+  functions_return_data_type["mma_16x8x16"] = Data_Tree("any");
+  Function_Arg_DataTypes["mma_16x8x16"]["0"] = Data_Tree("any");
+  Function_Arg_DataTypes["mma_16x8x16"]["1"] = Data_Tree("any");
+  Function_Required_Arg_Count["mma_16x8x16"] = 2;
+  Function_Arg_Names["mma_16x8x16"] = {"0", "1"};
+  // syncthreads
+  functions_return_data_type["syncthreads"] = Data_Tree("void");
+  Function_Required_Arg_Count["syncthreads"] = 0;
 
   // // simd_load
   function_return_overwrite["simd_load"] = simd_load_ret;
@@ -497,6 +544,7 @@ void build_dicts() {
   Function_Arg_DataTypes["vec_movemask"]["1"] = Data_Tree("any");
   Function_Arg_Names["vec_movemask"] = {"0", "1"};
   Function_Required_Arg_Count["vec_movemask"] = 1;
+
 
   // vec_print
   functions_return_data_type["vec_print"] = Data_Tree("int");
