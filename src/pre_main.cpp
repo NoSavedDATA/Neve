@@ -194,6 +194,7 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     //     abort();
     // }
 
+    PtxModule.reset();
     auto TSM = llvm::orc::ThreadSafeModule(
         std::move(TheModule),
         std::move(TheContext)
@@ -495,21 +496,23 @@ void build_dicts() {
   functions_return_data_type["cp_wait_all"] = Data_Tree("void");
   Function_Required_Arg_Count["cp_wait_all"] = 0;
   // ldmatrix_x4
-  Data_Tree ldmatrix_x4_dt = Data_Tree("int");
-  ldmatrix_x4_dt.Nested_Data.push_back(Data_Tree("4"));
-  ldmatrix_x4_dt.is_array = true;
-  functions_return_data_type["ldmatrix_x4"] = ldmatrix_x4_dt;
+  // Data_Tree ldmatrix_x4_dt = Data_Tree("int");
+  // ldmatrix_x4_dt.Nested_Data.push_back(Data_Tree("4"));
+  // ldmatrix_x4_dt.is_array = true;
+  functions_return_data_type["ldmatrix_x4"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x4"]["0"] = Data_Tree("any");
-  Function_Required_Arg_Count["ldmatrix_x4"] = 1;
-  Function_Arg_Names["ldmatrix_x4"] = {"0"};
+  Function_Arg_DataTypes["ldmatrix_x4"]["1"] = Data_Tree("any");
+  Function_Required_Arg_Count["ldmatrix_x4"] = 2;
+  Function_Arg_Names["ldmatrix_x4"] = {"0", "1"};
   // ldmatrix_x2
-  Data_Tree ldmatrix_x2_dt = Data_Tree("int");
-  ldmatrix_x2_dt.Nested_Data.push_back(Data_Tree("2"));
-  ldmatrix_x2_dt.is_array = true;
-  functions_return_data_type["ldmatrix_x2"] = ldmatrix_x2_dt;
+  // Data_Tree ldmatrix_x2_dt = Data_Tree("int");
+  // ldmatrix_x2_dt.Nested_Data.push_back(Data_Tree("2"));
+  // ldmatrix_x2_dt.is_array = true;
+  functions_return_data_type["ldmatrix_x2"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x2"]["0"] = Data_Tree("any");
-  Function_Required_Arg_Count["ldmatrix_x2"] = 1;
-  Function_Arg_Names["ldmatrix_x2"] = {"0"};
+  Function_Arg_DataTypes["ldmatrix_x2"]["1"] = Data_Tree("any");
+  Function_Required_Arg_Count["ldmatrix_x2"] = 2;
+  Function_Arg_Names["ldmatrix_x2"] = {"0", "1"};
 
   // mma_16x8x16
   // Data_Tree mma_16x8x16_dt = Data_Tree("int");
@@ -518,8 +521,9 @@ void build_dicts() {
   functions_return_data_type["mma_16x8x16"] = Data_Tree("any");
   Function_Arg_DataTypes["mma_16x8x16"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["mma_16x8x16"]["1"] = Data_Tree("any");
-  Function_Required_Arg_Count["mma_16x8x16"] = 2;
-  Function_Arg_Names["mma_16x8x16"] = {"0", "1"};
+  Function_Arg_DataTypes["mma_16x8x16"]["2"] = Data_Tree("any");
+  Function_Required_Arg_Count["mma_16x8x16"] = 3;
+  Function_Arg_Names["mma_16x8x16"] = {"0", "1", "2"};
   // syncthreads
   functions_return_data_type["syncthreads"] = Data_Tree("void");
   Function_Required_Arg_Count["syncthreads"] = 0;

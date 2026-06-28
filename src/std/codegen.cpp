@@ -353,211 +353,171 @@ Value *shfl_sync(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
-    // Value *mask = ConstantInt::get(intTy, 0xFFFFFFFF);
-    // Value *width  = ConstantInt::get(intTy, 31);
+    Value *mask = ConstantInt::get(intTy, 0xFFFFFFFF);
+    Value *width  = ConstantInt::get(intTy, 31);
 
-    // Value *delta = Builder->CreateIntCast(ArgsV[1], intTy, false);
-    // Value *pred  = ConstantInt::get(Type::getInt1Ty(*TheContext), 1);
+    Value *delta = Builder->CreateIntCast(ArgsV[1], intTy, false);
+    Value *pred  = ConstantInt::get(Type::getInt1Ty(*TheContext), 1);
 
-    // Function *shfl =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_shfl_sync_bfly_f32);
-    //         // Intrinsic::nvvm_shfl_sync_down_f32);
+    Function *shfl =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_shfl_sync_bfly_f32);
+            // Intrinsic::nvvm_shfl_sync_down_f32);
 
-    // // shfl->print(llvm::errs());
+    // shfl->print(llvm::errs());
 
-    // Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
-    // return res;
-    return const_int(0);
+    Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
+    return res;
 }
 Value *cp_async16(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
 
-//     Value *smem_ptr = ArgsV[0];
-//     Value *gmem_ptr = ArgsV[1];
+    Value *smem_ptr = ArgsV[0];
+    Value *gmem_ptr = ArgsV[1];
 
-//     Function *cp =
-//         Intrinsic::getDeclaration(
-//             PtxModule.get(),
-//             Intrinsic::nvvm_cp_async_cg_shared_global_16);
+    Function *cp =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_cp_async_cg_shared_global_16);
 
 
-//     // smem_ptr = Builder->CreateAddrSpaceCast(
-//     //     smem_ptr,
-//     //     PointerType::get(*TheContext, 3));
+    // smem_ptr = Builder->CreateAddrSpaceCast(
+    //     smem_ptr,
+    //     PointerType::get(*TheContext, 3));
 
-//     gmem_ptr = Builder->CreateAddrSpaceCast(
-//         gmem_ptr,
-//         PointerType::get(*TheContext, 1)); // enforce global space
+    gmem_ptr = Builder->CreateAddrSpaceCast(
+        gmem_ptr,
+        PointerType::get(*TheContext, 1)); // enforce global space
 
-//     return Builder->CreateCall(cp, {smem_ptr, gmem_ptr});
-    return const_int(0);
+    return Builder->CreateCall(cp, {smem_ptr, gmem_ptr});
 }
 
 Value *cp_commit_group(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-    // Function *commit =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_cp_async_commit_group);
+    Function *commit =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_cp_async_commit_group);
 
-    // Builder->CreateCall(commit);
+    Builder->CreateCall(commit);
     return const_int(0);
 }
 
 Value *cp_wait_group(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-    // Function *wait =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_cp_async_wait_group);
+    Function *wait =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_cp_async_wait_group);
 
-    // Builder->CreateCall(wait, {ArgsV[0]});
-
+    Builder->CreateCall(wait, {ArgsV[0]});
     return const_int(0);
 }
 
 Value *cp_wait_all(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-    // Function *wait_all =
-    // Intrinsic::getDeclaration(
-    //     PtxModule.get(),
-    //     Intrinsic::nvvm_cp_async_wait_all);
+    Function *wait_all =
+    Intrinsic::getDeclaration(
+        PtxModule.get(),
+        Intrinsic::nvvm_cp_async_wait_all);
 
-    // Builder->CreateCall(wait_all);
+    Builder->CreateCall(wait_all);
     return const_int(0);
 }
 
 Value *ldmatrix_x4(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Function *ldmatrix =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_ldmatrix_sync_aligned_m8n8_x4_b16, 
+            {PointerType::get(*TheContext, 3)}
+            );
 
-    // Value *addr = ArgsV[0];
-    // Value *addr = Builder->CreatePtrToInt(ArgsV[0], intTy);
-    // addr = Builder->CreateTrunc(addr, intTy);
+    Value *ret = Builder->CreateCall(ldmatrix, {ArgsV[1]});
 
-    // std::string asmStr =
-    //     "{ldmatrix.sync.aligned.m8n8.x4.b16 "
-    //         "%0, %1, %2, %3, [%4];}";
-
-    // std::vector<Type*> outTypes = {
-    //     intTy, intTy, intTy, intTy
-    // };
-
-    // std::vector<Type*> inTypes = {
-    //     intTy->getPointerTo(3)   // shared memory
-    // };
-
-    // FunctionType *FTy =
-    //     FunctionType::get(
-    //         StructType::get(intTy, intTy, intTy, intTy),
-    //         { intTy->getPointerTo(3) },
-    //         false);
-    // InlineAsm *IA =
-    //     InlineAsm::get(
-    //         FTy,
-    //         asmStr,
-    //         "=r,=r,=r,=r,r",
-    //         true,   // has side effects
-    //         false);
-    // Value *res =
-    //     Builder->CreateCall(IA, {ArgsV[0]});
+    Value *gep_0 = Builder->CreateGEP(intTy, ArgsV[0], const_int(0));
+    Value *gep_1 = Builder->CreateGEP(intTy, ArgsV[0], const_int(1));
+    Value *gep_2 = Builder->CreateGEP(intTy, ArgsV[0], const_int(2));
+    Value *gep_3 = Builder->CreateGEP(intTy, ArgsV[0], const_int(3));
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {0}), gep_0);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {1}), gep_1);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {2}), gep_2);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {3}), gep_3);
+    return const_int(0);
+}
 
 
-    // Function *ldmatrix =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_ldmatrix_sync_aligned_m8n8_x4_trans_b16);
-    // ldmatrix->dump();
+Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Function *ldmatrix =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_ldmatrix_sync_aligned_m8n8_x2_b16, 
+            {PointerType::get(*TheContext, 3)}
+            );
 
-    // Value *addr = ArgsV[0];
-    // Value *v0 = Builder->CreateGEP(int16Ty, addr, const_int(0));
-    // Value *v1 = Builder->CreateGEP(int16Ty, addr, const_int(2));
-    // Value *v2 = Builder->CreateGEP(int16Ty, addr, const_int(4));
-    // Value *v3 = Builder->CreateGEP(int16Ty, addr, const_int(8));
-    // v0 = Builder->CreateLoad(intTy, v0);
-    // v1 = Builder->CreateLoad(intTy, v1);
-    // v2 = Builder->CreateLoad(intTy, v2);
-    // v3 = Builder->CreateLoad(intTy, v3);
+    Value *ret = Builder->CreateCall(ldmatrix, {ArgsV[1]});
 
-    // llvm::Type *structTy = StructType::get(intTy, intTy, intTy, intTy);
-    // Value *view_val = UndefValue::get(structTy);
-    // view_val = Builder->CreateInsertValue(view_val, v0, {0});
-    // view_val = Builder->CreateInsertValue(view_val, v1, {1});
-    // view_val = Builder->CreateInsertValue(view_val, v2, {2});
-    // view_val = Builder->CreateInsertValue(view_val, v3, {3});
-
-    // return view_val;
+    Value *gep_0 = Builder->CreateGEP(intTy, ArgsV[0], const_int(0));
+    Value *gep_1 = Builder->CreateGEP(intTy, ArgsV[0], const_int(1));
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {0}), gep_0);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {1}), gep_1);
     return const_int(0);
 }
 
 Value *mma_16x8x16(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-    // Function *mma =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_mma_m16n8k16_row_col_f16_f32);
-    // mma->dump();
-    // mma->getFunctionType()->dump();
+    Function *mma =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_mma_m16n8k16_row_col_bf16);
 
-    // Value *fragA = ArgsV[0];
-    // Value *fragB = ArgsV[1];
-    // Type *half2Ty = FixedVectorType::get(halfTy, 2);
 
-    // Value *A0 = Builder->CreateExtractValue(fragA, {0});
-    // Value *A1 = Builder->CreateExtractValue(fragA, {1});
-    // Value *A2 = Builder->CreateExtractValue(fragA, {2});
-    // Value *A3 = Builder->CreateExtractValue(fragA, {3});
 
-    // Value *B0 = Builder->CreateExtractValue(fragB, {0});
-    // Value *B1 = Builder->CreateExtractValue(fragB, {1});
+    Value *gepA_0 = Builder->CreateGEP(intTy, ArgsV[1], const_int(0));
+    Value *gepA_1 = Builder->CreateGEP(intTy, ArgsV[1], const_int(1));
+    Value *gepA_2 = Builder->CreateGEP(intTy, ArgsV[1], const_int(2));
+    Value *gepA_3 = Builder->CreateGEP(intTy, ArgsV[1], const_int(3));
+    Value *A0 = Builder->CreateLoad(intTy, gepA_0);
+    Value *A1 = Builder->CreateLoad(intTy, gepA_1);
+    Value *A2 = Builder->CreateLoad(intTy, gepA_2);
+    Value *A3 = Builder->CreateLoad(intTy, gepA_3);
 
-    // A0 = Builder->CreateBitCast(A0, half2Ty);
-    // A1 = Builder->CreateBitCast(A1, half2Ty);
-    // A2 = Builder->CreateBitCast(A2, half2Ty);
-    // A3 = Builder->CreateBitCast(A3, half2Ty);
+    Value *gepB_0 = Builder->CreateGEP(intTy, ArgsV[2], const_int(0));
+    Value *gepB_1 = Builder->CreateGEP(intTy, ArgsV[2], const_int(1));
+    Value *B0 = Builder->CreateLoad(intTy, gepB_0);
+    Value *B1 = Builder->CreateLoad(intTy, gepB_1);
 
-    // B0 = Builder->CreateBitCast(B0, half2Ty);
-    // B1 = Builder->CreateBitCast(B1, half2Ty);
+    Value *gepC_0 = Builder->CreateGEP(floatTy, ArgsV[0], const_int(0));
+    Value *gepC_1 = Builder->CreateGEP(floatTy, ArgsV[0], const_int(1));
+    Value *gepC_2 = Builder->CreateGEP(floatTy, ArgsV[0], const_int(2));
+    Value *gepC_3 = Builder->CreateGEP(floatTy, ArgsV[0], const_int(3));
+    Value *C0 = Builder->CreateLoad(floatTy, gepC_0);
+    Value *C1 = Builder->CreateLoad(floatTy, gepC_1);
+    Value *C2 = Builder->CreateLoad(floatTy, gepC_2);
+    Value *C3 = Builder->CreateLoad(floatTy, gepC_3);
 
-    // Value *C0 = const_float(0);
-    // Value *C1 = const_float(0);
-    // Value *C2 = const_float(0);
-    // Value *C3 = const_float(0);
+    Value *ret = Builder->CreateCall(mma, {
+        A0, A1, A2, A3,
+        B0, B1,
+        C0, C1, C2, C3
+    });
 
-    // Value *res = Builder->CreateCall(mma, {
-    //     A0, A1, A2, A3,
-    //     B0, B1,
-    //     C0, C1, C2, C3
-    // });
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {0}), gepC_0);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {1}), gepC_1);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {2}), gepC_2);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {3}), gepC_3);
 
-    // return res;
-    return const_int(0);
-}
-
-Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
-                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
-                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-
-    // Value *addr = ArgsV[0];
-    // Value *v0 = Builder->CreateGEP(int16Ty, addr, const_int(0));
-    // Value *v1 = Builder->CreateGEP(int16Ty, addr, const_int(2));
-    // v0 = Builder->CreateLoad(intTy, v0);
-    // v1 = Builder->CreateLoad(intTy, v1);
-
-    // llvm::Type *structTy = StructType::get(intTy, intTy);
-    // Value *view_val = UndefValue::get(structTy);
-    // view_val = Builder->CreateInsertValue(view_val, v0, {0});
-    // view_val = Builder->CreateInsertValue(view_val, v1, {1});
-
-    // return view_val;
     return const_int(0);
 }
 
@@ -565,13 +525,14 @@ Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
 Value *syncthreads(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
-    // Function *barrier =
-    //     Intrinsic::getDeclaration(
-    //         PtxModule.get(),
-    //         Intrinsic::nvvm_barrier0   // <-- __syncthreads
-    //     );
+    Function *Barrier =
+        Intrinsic::getOrInsertDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_barrier_cta_sync_all);
 
-    // Builder->CreateCall(barrier);
+    Builder->CreateCall(Barrier, {
+        const_int(0)
+    });
     return const_int(0);
 }
 

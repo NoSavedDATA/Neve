@@ -72,12 +72,11 @@ std::string EmitPtx(bool re_emit) {
 }
 
 void InitializeModule() {
-    std::cout << "INIT MODULE" << "\n";
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
   CurModule = TheModule.get();
-  // PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
+  PtxModule = std::make_unique<Module>("neve_gpu", *TheContext);
   if (IsJIT) { // As jit
       TheModule->setDataLayout(TheJIT->getDataLayout());
   }
@@ -97,25 +96,25 @@ void InitializeModule() {
     );
   }
 
-  // {
-  //   std::string Error;
-  //   auto Target = llvm::TargetRegistry::lookupTarget("nvptx64", Error);
+  {
+    std::string Error;
+    auto Target = llvm::TargetRegistry::lookupTarget("nvptx64", Error);
 
-  //   llvm::TargetOptions Opt;
-  //   auto RM = std::optional<llvm::Reloc::Model>();
+    llvm::TargetOptions Opt;
+    auto RM = std::optional<llvm::Reloc::Model>();
 
-  //   PtxTM = std::unique_ptr<llvm::TargetMachine>(
-  //       Target->createTargetMachine(
-  //           "nvptx64-nvidia-cuda",
-  //           "sm_89",          // or sm_70, sm_86, etc
-  //           "",
-  //           Opt,
-  //           RM
-  //       )
-  //   );
-  //   PtxModule->setDataLayout(PtxTM->createDataLayout());
-  //   PtxModule->setTargetTriple(llvm::Triple("nvptx64-nvidia-cuda"));
-  // }
+    PtxTM = std::unique_ptr<llvm::TargetMachine>(
+        Target->createTargetMachine(
+            "nvptx64-nvidia-cuda",
+            "sm_89",          // or sm_70, sm_86, etc
+            "",
+            Opt,
+            RM
+        )
+    );
+    PtxModule->setDataLayout(PtxTM->createDataLayout());
+    PtxModule->setTargetTriple(llvm::Triple("nvptx64-nvidia-cuda"));
+  }
 
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
@@ -136,14 +135,15 @@ void InitializeModule() {
   tuple_cache.clear();
 
   Generate_Struct_Types();
-  str_toTy = {{"char", int8Ty}, {"i8", int8Ty}, {"int", intTy}, {"i64", int64Ty}, {"i16", int16Ty},
+  str_toTy = {{"char", int8Ty}, {"i8", int8Ty}, {"int", intTy},
+              {"i64", int64Ty}, {"i16", int16Ty},
               {"bool", boolTy}, {"float_ptr", floatPtrTy}, {"void", voidTy},
               {"half", halfTy}, {"bf16", int16Ty},
               {"float", floatTy}, {"void", voidTy}, {"str", struct_types["DT_str"]}};
 
-  for (auto &pair : PriorityProtos) {
+  for (auto &pair : PriorityProtos)
       pair.second->codegen();
-  }
+
 
 
   Generate_LLVM_Functions();
@@ -785,8 +785,13 @@ void SetKernelVars(std::string function_name) {
     Value *bid  = Builder->CreateCall(ctaid_x);
     Value *bdim = Builder->CreateCall(ntid_x);
 
+    Value *warp  = Builder->CreateSDiv(tid, const_int(32));
+    Value *lane  = Builder->CreateSRem(tid, const_int(32));
+
     function_values[function_name]["tx"] = tid;
     function_values[function_name]["bx"] = bid;
+    function_values[function_name]["warp"] = warp;
+    function_values[function_name]["lane"] = lane;
 }
 
 
@@ -973,7 +978,7 @@ Function *FunctionAST::codegen() {
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (current_codegen_function=="__anon_expr")
+    // if (current_codegen_function=="wrapit")
     //     TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;

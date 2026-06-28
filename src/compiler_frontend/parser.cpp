@@ -170,8 +170,13 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
     else if (IdentifierStr=="smem") {
       data_type.is_smem=true;
       data_type.Nested_Data.push_back(Data_Tree(dt));
-    } else
+    } else {
+      if (root_type=="layout") {
+          std::cout << "ADD INT " << parser_struct.function_name << " " << IdentifierStr << "\n";
+          data_typeVars[parser_struct.function_name][IdentifierStr] = Data_Tree("int");
+      }
       data_type.Nested_Data.push_back(Data_Tree(dt));
+    }
 
     if(CurTok==',')
       getNextToken();

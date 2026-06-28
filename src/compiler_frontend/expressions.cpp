@@ -1065,6 +1065,8 @@ Data_Tree SolveTemplateOpDt(Parser_Struct parser_struct,
                 ret_dt.Nested_Data.push_back(
                         Data_Tree(correspondent)
                     );
+                std::cout << "OP : " << op << " / " << type << " - " << correspondent << "\n";
+                data_typeVars[op][type] = Data_Tree("int");
             }
         }
         return ret_dt;

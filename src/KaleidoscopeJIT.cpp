@@ -71,8 +71,12 @@ llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
 }
 
 llvm::Error KaleidoscopeJIT::genAST() {
-    for (auto &fn_ast : fn_vec)
-        fn_ast->codegen();
+
+    for (int i=fn_vec.size()-1;i>=0;--i) {
+
+        fn_vec[i]->codegen();
+    }
+
     fn_vec.clear();
     return llvm::Error::success();
 }

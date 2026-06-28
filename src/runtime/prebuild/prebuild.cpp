@@ -39,7 +39,7 @@ extern "C" int prebuild() {
   BinopPrecedence[tok_rshift] = 19;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
-  BinopPrecedence['%'] = 35;
+  BinopPrecedence['%'] = 38;
   BinopPrecedence['*'] = 39;
   BinopPrecedence['/'] = 40;
   BinopPrecedence[tok_int_div] = 40;

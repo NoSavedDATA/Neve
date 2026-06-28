@@ -2654,6 +2654,22 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         } else
             LogErrorC(parser_struct.line, "unkown buffer op " + Operation);
     }
+    else if (Elements=="buffer_int_i64"||Elements=="buffer_int_int") {
+        if(Op==tok_offby) {
+            if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
+                if (L_dt.is_buffer) {
+                    llvm::Type *lTy = get_type_from_data(L_dt);
+                    Value *ptr = Builder->CreateGEP(lTy, L, R);
+                    ret = ptr;
+                } else {
+                    llvm::Type *lTy = get_type_from_data(L_dt);
+                    Value *ptr = Builder->CreateGEP(lTy, L, {const_int(0), R});
+                    ret = ptr;
+                }
+            }
+        } else
+            LogErrorC(parser_struct.line, "unkown buffer op " + Operation);
+    }
     else if (Elements=="str_str") {
         switch (Op) {
             case tok_equal: {
@@ -4746,7 +4762,7 @@ Value *callgpu(Function *TheFunction, std::string fn,
     auto ptx = EmitPtx(re_emit_ptx);
     // PtxModule->print(llvm::errs(), nullptr);
 
-    std::cout << "" << ptx << "\n";
+    // std::cout << "" << ptx << "\n";
 
     // Encapsulate within void **args
     int nargs = args.size();

@@ -11,7 +11,8 @@
 
 std::random_device rd2; // it is already defined at cu_common.h
 std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
-Philox rng_philox(get_millisecond_time());
+// Philox rng_philox(get_millisecond_time());
+Philox rng_philox(42);
 
 
 

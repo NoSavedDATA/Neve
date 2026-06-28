@@ -33,6 +33,10 @@ operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby
 operation float[] layout_float_int_offby
 
+operation int[] buffer_int_int_offby
+operation int[] buffer_int_i64_offby
+operation int[] layout_int_int_offby
+
 operation bf16[] buffer_bf16_int_offby
 operation bf16[] buffer_bf16_i64_offby
 operation bf16[] layout_bf16_int_offby

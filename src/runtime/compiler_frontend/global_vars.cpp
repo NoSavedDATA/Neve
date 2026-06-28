@@ -99,7 +99,7 @@ std::vector<std::string> primary_data_tokens = {"vec", "int", "float", "void", "
 std::vector<std::string> constants = {"float_t", "char_t", "int_t", "i16_t", "i8_t", "i64_t", "array_t", "str_t", "half_t", "bf16_t"};
 
 
-std::vector<std::string> int_fn_values = {"tid", "smem_size", "tN", "tHW", "tx", "ty", "tz", "bx", "by", "bz"};
+std::vector<std::string> int_fn_values = {"tid", "warp", "lane", "smem_size", "tN", "tHW", "tx", "ty", "tz", "bx", "by", "bz"};
 
 std::vector<uint16_t> primary_data_types = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 18, 21};
 std::vector<uint16_t> compound_types = {6, 7, 8, 9, 12};
