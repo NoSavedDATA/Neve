@@ -454,6 +454,18 @@ void build_dicts() {
   Function_Arg_DataTypes["i64"]["1"] = Data_Tree("any");
   Function_Arg_Names["i64"] = {"0", "1"};
   Function_Required_Arg_Count["i64"] = 1;
+  // bf16
+  functions_return_data_type["bf16"] = Data_Tree("bf16");
+  Function_Arg_DataTypes["bf16"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["bf16"]["1"] = Data_Tree("any");
+  Function_Arg_Names["bf16"] = {"0", "1"};
+  Function_Required_Arg_Count["bf16"] = 1;
+  // to_float
+  functions_return_data_type["to_float"] = Data_Tree("float");
+  Function_Arg_DataTypes["to_float"]["0"] = Data_Tree("Scope_Struct");
+  Function_Arg_DataTypes["to_float"]["1"] = Data_Tree("any");
+  Function_Arg_Names["to_float"] = {"0", "1"};
+  Function_Required_Arg_Count["to_float"] = 1;
 
   // ctz
   functions_return_data_type["ctz"] = Data_Tree("int");
@@ -469,6 +481,12 @@ void build_dicts() {
   Function_Arg_DataTypes["swap_bit"]["2"] = Data_Tree("int");
   Function_Arg_Names["swap_bit"] = {"0", "1", "2"};
   Function_Required_Arg_Count["swap_bit"] = 2;
+
+  functions_return_data_type["printff"] = Data_Tree("int");
+  Function_Arg_DataTypes["printff"]["0"] = Data_Tree("any");
+  Function_Arg_DataTypes["printff"]["1"] = Data_Tree("any");
+  Function_Arg_Names["printff"] = {"0", "1"};
+  Function_Required_Arg_Count["printff"] = 2;
 
 
   // shfl_sync
@@ -513,6 +531,12 @@ void build_dicts() {
   Function_Arg_DataTypes["ldmatrix_x2"]["1"] = Data_Tree("any");
   Function_Required_Arg_Count["ldmatrix_x2"] = 2;
   Function_Arg_Names["ldmatrix_x2"] = {"0", "1"};
+
+  functions_return_data_type["ldmatrix_x2T"] = Data_Tree("any");
+  Function_Arg_DataTypes["ldmatrix_x2T"]["0"] = Data_Tree("any");
+  Function_Arg_DataTypes["ldmatrix_x2T"]["1"] = Data_Tree("any");
+  Function_Required_Arg_Count["ldmatrix_x2T"] = 2;
+  Function_Arg_Names["ldmatrix_x2T"] = {"0", "1"};
 
   // mma_16x8x16
   // Data_Tree mma_16x8x16_dt = Data_Tree("int");

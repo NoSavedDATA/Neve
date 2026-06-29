@@ -39,7 +39,6 @@ extern "C" int prebuild() {
   BinopPrecedence[tok_rshift] = 19;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
-  BinopPrecedence['%'] = 38;
   BinopPrecedence['*'] = 39;
   BinopPrecedence['/'] = 40;
   BinopPrecedence[tok_int_div] = 40;
@@ -47,6 +46,7 @@ extern "C" int prebuild() {
   BinopPrecedence[tok_mapit] = 41;
   BinopPrecedence[tok_scan] = 41;
   BinopPrecedence[tok_filter] = 41;
+  BinopPrecedence['%'] = 45;
   BinopPrecedence['^'] = 50;
   BinopPrecedence['@'] = 60;
 

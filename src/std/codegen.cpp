@@ -179,6 +179,49 @@ Value *i64(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
+
+Value *bf16(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+    // const std::string &type = Args[0]->GetDataTree().Type;
+    // if(type=="int") 
+    //     return float_to_bf16(Builder->CreateSIToFP(ArgsV[0], floatTy));
+    return const_int(0);
+}
+
+Value *to_float(Parser_Struct parser_struct,
+                     Function *TheFunction,
+                     std::string Callee,
+                     Data_Tree data_type,
+                     std::vector<Data_Tree> &args_type,
+                     Value *scope_struct,
+                     std::vector<std::unique_ptr<ExprAST>> &Args,
+                     std::vector<Value*> &ArgsV) {
+
+    IRBuilder<> &B = *Builder;
+    Value *v = ArgsV[0];
+
+
+    const std::string &type = Args[0]->GetDataTree().Type;
+
+    if (type == "bf16") {
+        // bf16 is uint16_t
+        Value *u32 = B.CreateZExt(v, intTy);
+
+        // restore IEEE float layout
+        Value *shifted = B.CreateShl(u32, B.getInt32(16));
+
+        // reinterpret bits as float
+        Value *f32 = B.CreateBitCast(shifted, floatTy);
+        return f32;
+    }
+
+    else
+        LogError(parser_struct.line,
+                 "Cannot cast " + type + " to float from bf16.");
+
+}
+
 Value *dsize(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
@@ -455,6 +498,14 @@ Value *ldmatrix_x4(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
+Value *printff(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
+    return callret("printf", {str, ArgsV[1]});
+}
+
+
 Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
@@ -462,6 +513,24 @@ Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
         Intrinsic::getDeclaration(
             PtxModule.get(),
             Intrinsic::nvvm_ldmatrix_sync_aligned_m8n8_x2_b16, 
+            {PointerType::get(*TheContext, 3)}
+            );
+
+    Value *ret = Builder->CreateCall(ldmatrix, {ArgsV[1]});
+
+    Value *gep_0 = Builder->CreateGEP(intTy, ArgsV[0], const_int(0));
+    Value *gep_1 = Builder->CreateGEP(intTy, ArgsV[0], const_int(1));
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {0}), gep_0);
+    Builder->CreateStore(Builder->CreateExtractValue(ret, {1}), gep_1);
+    return const_int(0);
+}
+Value *ldmatrix_x2T(Parser_Struct parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
+    Function *ldmatrix =
+        Intrinsic::getDeclaration(
+            PtxModule.get(),
+            Intrinsic::nvvm_ldmatrix_sync_aligned_m8n8_x2_trans_b16, 
             {PointerType::get(*TheContext, 3)}
             );
 
@@ -645,12 +714,81 @@ Value *printl(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
+Value *makePrintfBuffer(Value *arg, Type *Ty, std::string type) {
+    IRBuilder<> &B = *Builder;
+
+    AllocaInst *buf = B.CreateAlloca(B.getInt64Ty());
+
+    if (in_vec(type, int_types)) {
+        if (Ty->getIntegerBitWidth() < 64)
+            arg = B.CreateSExtOrTrunc(arg, B.getInt64Ty());
+
+        B.CreateStore(arg, buf);
+        return B.CreateBitCast(buf, int8PtrTy);
+    }
+
+    // float -> double
+    if (type=="float") {
+        Value *d = B.CreateFPExt(arg, B.getDoubleTy());
+        B.CreateStore(d, buf);
+        return B.CreateBitCast(buf, int8PtrTy);
+    }
+
+    if (type=="bf16") {
+        Value *u16 = arg;
+        Value *u32 = B.CreateZExt(u16, B.getInt32Ty());
+        Value *shifted = B.CreateShl(u32, B.getInt32(16));
+        Value *f32 = B.CreateBitCast(shifted, B.getFloatTy());
+        Value *f64 = B.CreateFPExt(f32, B.getDoubleTy());
+
+        B.CreateStore(f64, buf);
+        return B.CreateBitCast(buf, int8PtrTy);
+    }
+
+    return nullptr;
+}
+
+void print_gpu(Parser_Struct parser_struct, Function *TheFunction,
+         std::vector<Data_Tree> &args_type,
+         std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
+
+    for (int i = 0; i < ArgsV.size(); i++) {
+        Value *fmt = nullptr;
+        Value *bufPtr = nullptr;
+        std::string type = args_type[i].Type;
+        if (type=="layout"||args_type[i].is_buffer||args_type[i].is_array)
+            type = args_type[i].Nested_Data[0].Type;
+
+        Type *Ty = ArgsV[i]->getType();
+
+
+        if (in_vec(type, int_types))
+            fmt = global_str("%d\n");
+        else if (type == "float")
+            fmt = global_str("%f\n");
+        else if (type == "bf16")
+            fmt = global_str("%f\n");   // bf16 prints as float
+        else {
+            std::cout << "CUDA PRINT FOR " << type << " NOT YET IMPLEMENTED\n";
+            std::exit(0);
+        }
+        bufPtr = makePrintfBuffer(ArgsV[i], Ty, type);
+
+        call("vprintf", {fmt, bufPtr});
+    }
+
+}
+
 
 
 Value *print(Parser_Struct parser_struct, Function *TheFunction,
         std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
         Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-
+    if (parser_struct.gpu>0) {
+        print_gpu(parser_struct, TheFunction, args_type, Args, ArgsV);
+        return const_int(0);
+    }
+        
     Value *offset = const_int(0);
 
     Value *print_buffer = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 6);

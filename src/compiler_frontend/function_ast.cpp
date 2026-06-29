@@ -44,28 +44,27 @@ inline void RegisterData() {
 
 bool need_re_emit_ptx=false;
 std::string EmitPtx(bool re_emit) {
+    static std::string ptx;
 
-    static std::string ptx = "";
-    if (ptx==""||re_emit||need_re_emit_ptx) {
+    if (ptx.empty() || re_emit || need_re_emit_ptx) {
         need_re_emit_ptx = false;
+
         llvm::SmallString<0> Buffer;
         llvm::raw_svector_ostream OS(Buffer);
 
         llvm::legacy::PassManager PM;
-
         if (PtxTM->addPassesToEmitFile(
                 PM,
                 OS,
                 nullptr,
                 llvm::CodeGenFileType::AssemblyFile)) {
-            std::cout << "CANNOT EMIT PTX" << "\n";
-            std::exit(0);
+            std::cerr << "CANNOT EMIT PTX\n";
+            std::exit(1);
         }
+
         PM.run(*PtxModule);
 
-        // OS.flush();
-        std::string PTX(Buffer.str());
-        ptx = PTX;
+        ptx.assign(Buffer.data(), Buffer.size());
     }
 
     return ptx;
@@ -154,6 +153,23 @@ void InitializeModule() {
   //===----------------------------------------------------------------------===//
   // Scalar   Operations
   //===----------------------------------------------------------------------===//
+
+  //
+  TheModule->getOrInsertFunction("printf", FunctionType::get(
+      intTy,
+      {int8PtrTy},
+      true
+  ));
+  PtxModule->getOrInsertFunction("printf", FunctionType::get(
+      intTy,
+      {int8PtrTy},
+      true
+  ));
+  PtxModule->getOrInsertFunction("vprintf", FunctionType::get(
+      intTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  ));
 
   // 
   FunctionType *fmaxTy = FunctionType::get( //TODO: automatic type detection for max and min
@@ -693,12 +709,6 @@ void InitializeModule() {
   );
   TheModule->getOrInsertFunction("print", printTy);
 
-  FunctionType *printfTy = FunctionType::get(
-      intTy,
-      int8PtrTy, 
-      true 
-  );
-  TheModule->getOrInsertFunction("printf", printfTy);
   
 
 }

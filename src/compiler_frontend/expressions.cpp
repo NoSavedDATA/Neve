@@ -948,7 +948,6 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct parser_struct, std::string fn_
             fn_compiled_values.ints[name] = CompiledArgsVec.ints[last_int++];
         else
             std::cout << "unimplemented comptime pass " << type << "\n";
-        
     }
 
     return fn_compiled_values;

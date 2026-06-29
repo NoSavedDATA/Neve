@@ -46,11 +46,11 @@ std::unordered_map<std::string, int> Classes;
 std::map<size_t, std::vector<char *>> CharPool;
 
 
-std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"int", {"float", "i8", "i16", "i64"}},
+std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"int", {"bf16", "float", "i8", "i16", "i64"}},
                                                                     {"i64", {"int", "i8", "i16"}},
                                                                     {"i16", {"int", "i8", "i64"}},
                                                                     {"i8", {"int", "i16", "i64"}},
-                                                                    {"bf16", {"float"}},
+                                                                    {"bf16", {"float", "int", "i16"}},
                                                                     {"float", {"bf16"}},
                                                                     {"char", {"i8"}}};
 
@@ -86,7 +86,8 @@ uint16_t data_type_count=113;
 
 std::unordered_map<std::string, int> gpu_ffi = {{"shfl_sync", 1},
         {"cp_async16", 1}, {"cp_wait_group", 1}, {"cp_commit_group", 1},
-        {"ldmatrix_x4", 1}, {"ldmatrix_x2", 1}, {"mma_16x8x16", 1}};
+        {"ldmatrix_x4", 1}, {"ldmatrix_x2", 1}, {"mma_16x8x16", 1},
+        {"printff", 1}, {"ldmatrix_x2T", 1}};
 
 std::vector<std::string> data_tokens = {"int", "bool", "str", "str_vec", "float_vec",
                                         "tuple", "any", "float_ptr", "half",

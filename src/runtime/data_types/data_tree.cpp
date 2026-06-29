@@ -25,6 +25,12 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     return false;
 }
 
+bool Data_Tree::IsComposite() {
+    return (Nested_Data.size()>0||Type=="layout"||is_buffer||is_array);
+}
+bool Data_Tree::IsBuffered() {
+    return (Type=="layout"||is_buffer||is_array);
+}
 
 int CompareArrays(Data_Tree *L, Data_Tree R) {
 
@@ -123,9 +129,19 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     if(Type=="vec"&&other_tree.Type=="vec")
         return CompareVec(this, other_tree);
 
-    if(in_vec(Type, primary_data_tokens) && in_str(other_tree.Type, primary_data_tokens) &&\
+
+
+    if (IsBuffered()&&other_tree.IsBuffered())
+        return Type!=other_tree.Type;
+
+    if(in_vec(Type, primary_data_tokens) && !IsBuffered() \
+            && !other_tree.IsBuffered() && \
+            in_str(other_tree.Type, primary_data_tokens) &&\
          CheckIsEquivalent(Type, other_tree.Type))
         return 0;
+
+
+
     
 
     if(Type=="any"||other_tree.Type=="any")

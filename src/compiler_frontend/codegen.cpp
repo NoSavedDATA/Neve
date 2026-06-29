@@ -4402,6 +4402,8 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     if (inner_dt.Type=="layout") {
         llvm::Type *Ty = get_type_from_data(Data_Tree(inner_dt.Nested_Data[0].Type));
         Value *gep = Builder->CreateInBoundsGEP(Ty, loaded_var, idx); //&arr[0]
+        std::cout << "TYYYYYYYYYYYYYYYYYYYYYYYYYY" << "\n";
+        printTy(gep);
         return Builder->CreateLoad(Ty, gep);
     }
 

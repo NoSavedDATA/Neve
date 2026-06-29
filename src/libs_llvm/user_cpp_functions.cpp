@@ -67,6 +67,8 @@ void set_user_functions() {
 	llvm_callee["i16"] = i16;
 	llvm_callee["to_int"] = to_int;
 	llvm_callee["i64"] = i64;
+	llvm_callee["bf16"] = bf16;
+	llvm_callee["to_float"] = to_float;
 	llvm_callee["c_open"] = c_open;
 	llvm_callee["c_read"] = c_read;
 	llvm_callee["err"] = err;
@@ -84,9 +86,11 @@ void set_user_functions() {
 	llvm_callee["cp_wait_all"] = cp_wait_all;
 	llvm_callee["syncthreads"] = syncthreads;
 	llvm_callee["ldmatrix_x2"] = ldmatrix_x2;
+	llvm_callee["ldmatrix_x2T"] = ldmatrix_x2T;
 	llvm_callee["ldmatrix_x4"] = ldmatrix_x4;
 	llvm_callee["mma_16x8x16"] = mma_16x8x16;
 	llvm_callee["str_set"] = str_set;
+	llvm_callee["printff"] = printff;
 	llvm_callee["str_offset"] = str_offset;
 	llvm_callee["alloc"] = alloc;
 	llvm_callee["min"] = min;
