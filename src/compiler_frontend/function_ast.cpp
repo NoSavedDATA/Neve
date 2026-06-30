@@ -805,7 +805,7 @@ void SetKernelVars(std::string function_name) {
 }
 
 
-Function *FunctionAST::codegen_gpu(int idx) {
+Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair>> *dynamic_args) {
 
   auto &P = *Proto;
 
@@ -848,11 +848,16 @@ Function *FunctionAST::codegen_gpu(int idx) {
 
         if (Fn_Compiled_Values[fn_name].layouts.count(arg_name))
             data_typeVars[function_name][arg_name] = Fn_Compiled_Values[fn_name].layouts[arg_name]; 
-        
+  }
+  if (dynamic_args) {
+      for (auto &dynamic_arg : *dynamic_args) {
+        data_typeVars[function_name][dynamic_arg->name] = dynamic_arg->dt;
+      }
   }
 
   if (idx>=0)
-      parser_struct.cvalues = Fn_Compiled_Values[fn_name];
+      parser_struct->cvalues = Fn_Compiled_Values[fn_name];
+  
   
 
   SetKernelVars(function_name);
@@ -895,7 +900,7 @@ Function *FunctionAST::codegen() {
     return nullptr;
 
 
-  if (parser_struct.gpu>0)
+  if (parser_struct->gpu>0)
       return codegen_gpu();
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
@@ -944,8 +949,6 @@ Function *FunctionAST::codegen() {
   int i = 0;
   int args_count = P.Args.size();
   auto it = TheFunction->arg_begin();
-  Parser_Struct parser_struct;
-  parser_struct.function_name = current_codegen_function;
   for (int i=0; i<args_count; ++i, ++it) {
     llvm::Argument &Arg = *it;
 

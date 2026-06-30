@@ -452,7 +452,7 @@ bool LibParser::TryParseFnDataType() {
     // Try parse arguments as well
     if (LastChar=='$') {
         LastChar=_getCh();
-        Parser_Struct parser_struct;
+        Parser_Struct *parser_struct = new Parser_Struct();
         char PreCurTok = CurTok;
 
         
@@ -751,7 +751,7 @@ LLVMFunction::LLVMFunction(std::string Name, Data_Tree ReturnType, std::vector<D
 
 void LLVMFunction::HandleCreate(void *func) {
 
-    using CreateFn = Value*(*)(Parser_Struct, Function*, std::string, std::string, Data_Tree, Value*, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&);
+    using CreateFn = Value*(*)(Parser_Struct*, Function*, std::string, std::string, Data_Tree, Value*, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&);
  
     CreateFn fn = reinterpret_cast<CreateFn>(func);
 
@@ -762,7 +762,7 @@ void LLVMFunction::HandleStandard(void *func) {
     functions_return_data_type[Name] = ReturnType;
     native_methods.push_back(Name);
 
-    using CalleeFn = Value*(*)(Parser_Struct, Function *, std::string, Data_Tree, std::vector<Data_Tree>&, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&); 
+    using CalleeFn = Value*(*)(Parser_Struct*, Function *, std::string, Data_Tree, std::vector<Data_Tree>&, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&); 
     CalleeFn fn = reinterpret_cast<CalleeFn>(func);
     llvm_callee[Name] = fn;
 
@@ -772,13 +772,13 @@ void LLVMFunction::HandleOp(void *func) {
 
     Name = remove_substring(Name,"OP_");
 
-    using OpFn = Value*(*)(Parser_Struct, Function*, Data_Tree, Data_Tree, std::unique_ptr<ExprAST>&, std::unique_ptr<ExprAST>&, Value*, Value*, Value*);
+    using OpFn = Value*(*)(Parser_Struct*, Function*, Data_Tree, Data_Tree, std::unique_ptr<ExprAST>&, std::unique_ptr<ExprAST>&, Value*, Value*, Value*);
     OpFn fn = reinterpret_cast<OpFn>(func);
     llvm_data_ops[Name] = fn;
 }
 
 void LLVMFunction::HandleStoreIdx(void *func) {
-    using StoreIdxFn = Value*(*)(Parser_Struct, Function*, Data_Tree, Data_Tree, std::unique_ptr<ExprAST>&, std::unique_ptr<ExprAST>&, Value*, Value*, Value*, Value*);
+    using StoreIdxFn = Value*(*)(Parser_Struct*, Function*, Data_Tree, Data_Tree, std::unique_ptr<ExprAST>&, std::unique_ptr<ExprAST>&, Value*, Value*, Value*, Value*);
     StoreIdxFn fn = reinterpret_cast<StoreIdxFn>(func);
     llvm_store_idx[remove_substring(Name,"_Store_Idx")] = fn;
 }

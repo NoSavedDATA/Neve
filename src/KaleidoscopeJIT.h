@@ -46,19 +46,19 @@ extern std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunction
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
-  Parser_Struct parser_struct;
-  std::unique_ptr<PrototypeAST> Proto;
-  //std::vector<ExprAST> Body;
-  std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    FunctionAST(Parser_Struct, std::unique_ptr<PrototypeAST> Proto,
+    Parser_Struct *parser_struct;
+    std::unique_ptr<PrototypeAST> Proto;
+    //std::vector<ExprAST> Body;
+    std::vector<std::unique_ptr<ExprAST>> Body;
+    FunctionAST(Parser_Struct*, std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body);
   
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
   llvm::Function *codegen();
-  llvm::Function *codegen_gpu(int idx=-1); // idx for compile time
+  llvm::Function *codegen_gpu(int idx=-1, std::vector<std::unique_ptr<Arg_Pair>> *dyn=nullptr); // idx for compile time
 };
 
 

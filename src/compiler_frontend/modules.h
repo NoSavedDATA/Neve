@@ -40,26 +40,26 @@ extern std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr
 extern std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 extern std::unordered_map<std::string, llvm::Type*> tuple_cache;
 
-extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, std::string, std::string, Data_Tree,
+extern std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, std::string, std::string, Data_Tree,
                                                        Value*, Value*,
                                                        std::vector<std::unique_ptr<ExprAST>>&,
                                                        std::vector<Value*>&)>> struct_create_fn;
 
-extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, std::string,
+extern std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, std::string,
                                                        Data_Tree,
                                                        std::vector<Data_Tree>&,
                                                        Value*,
                                                        std::vector<std::unique_ptr<ExprAST>>&,
                                                        std::vector<Value*>&)>> llvm_callee;
 
-extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, 
+extern std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, 
                                                        Data_Tree, Data_Tree,
                                                        std::unique_ptr<ExprAST>&,
                                                        std::unique_ptr<ExprAST>&,
                                                        Value*,
                                                        Value*, Value*)>> llvm_data_ops;
 
-extern std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, 
+extern std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, 
                                                        Data_Tree, Data_Tree,
                                                        std::unique_ptr<ExprAST>&,
                                                        std::unique_ptr<ExprAST>&,
@@ -71,6 +71,13 @@ std::string EmitPtx(bool re_emit=false);
 
 
 
+inline int get_int(Value *V) {
+    if (auto *CI = llvm::dyn_cast<llvm::ConstantInt>(V)) {
+        return CI->getSExtValue();   // signed
+    }
+    LogError(-1, "Const int cast failed");
+    return -1;
+}
 
 inline Value *const_int8(int8_t val) {
     return ConstantInt::get(Type::getInt8Ty(*TheContext), val);

@@ -42,38 +42,38 @@ inline void v_ir(Value *v) {
     errs() << "\n";
 }
 
-Data_Tree min_ret_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree min_ret_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   return Args[0]->GetDataTree();
 }
-Data_Tree max_ret_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree max_ret_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   return Args[0]->GetDataTree();
 }
-Data_Tree array_clone_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree array_clone_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
   return dt;
 }
-Data_Tree array_pop_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree array_pop_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   return inner->GetDataTree().Nested_Data[0];
 }
-Data_Tree map_keys_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree map_keys_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
   return dt;
 }
-Data_Tree map_values_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree map_values_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[1]);
   return dt;
 }
-Data_Tree map_get_dt(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree map_get_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("tuple");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[1]);
   dt.Nested_Data.push_back(Data_Tree("bool"));
   return dt;
 }
 
-Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
+Value *DT_charv_Create(Parser_Struct * parser_struct, Function *TheFunction,
                       std::string name, std::string type, Data_Tree data_type,
                       Value *scope_struct, Value *initial_value,
                       std::vector<std::unique_ptr<ExprAST>> &Args,
@@ -85,7 +85,7 @@ Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
     llvm::Type *charTy = ArrayType::get(int8Ty, size);
     AllocaInst *charv = CreateEntryBlockAlloca(TheFunction, "charv", charTy);
 
-    function_allocas[parser_struct.function_name][name] = charv;
+    function_allocas[parser_struct->function_name][name] = charv;
     
     return Builder->CreateInBoundsGEP(
         charTy,
@@ -95,7 +95,7 @@ Value *DT_charv_Create(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *DT_vec_Create(Parser_Struct parser_struct, Function *TheFunction,
+Value *DT_vec_Create(Parser_Struct * parser_struct, Function *TheFunction,
                       std::string name, std::string type, Data_Tree data_type,
                       Value *scope_struct, Value *initial_value,
                       std::vector<std::unique_ptr<ExprAST>> &Args,
@@ -110,11 +110,11 @@ Value *DT_vec_Create(Parser_Struct parser_struct, Function *TheFunction,
         dt = Data_Tree(data_type);
         ty = get_type_from_data(dt);
     } else
-        LogError(parser_struct.line, "Vec expected type");
+        LogError(parser_struct->line, "Vec expected type");
     if (auto num_expr = dynamic_cast<IntExprAST*>(Args[1].get()))
             size = num_expr->Val;
     else
-        LogError(parser_struct.line, "Vec expected size");
+        LogError(parser_struct->line, "Vec expected size");
 
     llvm::Type *vecTy = VectorType::get(ty, size, false);
     Value *vec = llvm::UndefValue::get(vecTy);
@@ -122,65 +122,65 @@ Value *DT_vec_Create(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *print_bb(Parser_Struct parser_struct, Function *TheFunction,
+Value *print_bb(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     bb_name(Builder->GetInsertBlock());
     return const_int(0);
-}Value *print_Value(Parser_Struct parser_struct, Function *TheFunction,
+}Value *print_Value(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     v_ir(ArgsV[0]);
     return const_int(0);
 }
 
-Value *to_char(Parser_Struct parser_struct, Function *TheFunction,
+Value *to_char(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, int_types))
-        LogError(parser_struct.line, "Cannot cast " + type + " to i8.");
+        LogError(parser_struct->line, "Cannot cast " + type + " to i8.");
     return Builder->CreateIntCast(ArgsV[0], int8Ty, true); // true for signed extend
 }
-Value *i8(Parser_Struct parser_struct, Function *TheFunction,
+Value *i8(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"int", "i16", "i64"}))
-        LogError(parser_struct.line, "Cannot cast " + type + " to i8.");
+        LogError(parser_struct->line, "Cannot cast " + type + " to i8.");
     bool is_signed = type!="char";
     return Builder->CreateIntCast(ArgsV[0], int8Ty, is_signed); // true for signed extend
 }
-Value *i16(Parser_Struct parser_struct, Function *TheFunction,
+Value *i16(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"int", "i8", "i64", "char"}))
-        LogError(parser_struct.line, "Cannot cast " + type + " to i16.");
+        LogError(parser_struct->line, "Cannot cast " + type + " to i16.");
     bool is_signed = type!="char";
     return Builder->CreateIntCast(ArgsV[0], int16Ty, is_signed); // true for signed extend
 }
-Value *to_int(Parser_Struct parser_struct, Function *TheFunction,
+Value *to_int(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"i8", "i16", "i64", "char"}))
-        LogError(parser_struct.line, "Cannot cast " + type + " to int.");
+        LogError(parser_struct->line, "Cannot cast " + type + " to int.");
     bool is_signed = type!="char";
     return Builder->CreateIntCast(ArgsV[0], intTy, is_signed);
 }
-Value *i64(Parser_Struct parser_struct, Function *TheFunction,
+Value *i64(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     const std::string &type = Args[0]->GetDataTree().Type;
     if(!in_vec(type, {"int", "i16", "i8"}))
-        LogError(parser_struct.line, "Cannot cast " + type + " to i64.");
+        LogError(parser_struct->line, "Cannot cast " + type + " to i64.");
     return Builder->CreateIntCast(ArgsV[0], int64Ty, true); // true for signed extend
 }
 
 
 
-Value *bf16(Parser_Struct parser_struct, Function *TheFunction,
+Value *bf16(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     // const std::string &type = Args[0]->GetDataTree().Type;
@@ -189,7 +189,7 @@ Value *bf16(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *to_float(Parser_Struct parser_struct,
+Value *to_float(Parser_Struct * parser_struct,
                      Function *TheFunction,
                      std::string Callee,
                      Data_Tree data_type,
@@ -217,23 +217,23 @@ Value *to_float(Parser_Struct parser_struct,
     }
 
     else
-        LogError(parser_struct.line,
+        LogError(parser_struct->line,
                  "Cannot cast " + type + " to float from bf16.");
 
 }
 
-Value *dsize(Parser_Struct parser_struct, Function *TheFunction,
+Value *dsize(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     return callret("get_size", {scope_struct, ArgsV[0]});
 }
-Value *fexists(Parser_Struct parser_struct, Function *TheFunction,
+Value *fexists(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
     return callret("fexists_C", {scope_struct, str});
 }
-Value *c_open(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_open(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
@@ -248,7 +248,7 @@ Value *c_open(Parser_Struct parser_struct, Function *TheFunction,
     Builder->SetInsertPoint(ErrBB);
     Value *err_msg = callret("ConcatStr", {scope_struct, global_str("File "), str});
     err_msg = callret("ConcatStr", {scope_struct, err_msg, global_str(" not found.")});
-    call("LogErrorCall", {const_int(parser_struct.line), err_msg});
+    call("LogErrorCall", {const_int(parser_struct->line), err_msg});
     Builder->CreateUnreachable();
 
     Builder->SetInsertPoint(GoodBB);
@@ -256,7 +256,7 @@ Value *c_open(Parser_Struct parser_struct, Function *TheFunction,
     return callret("open", {str, const_int(0)});
 }
 
-Value *c_read(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_read(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *src = ArgsV[1];
@@ -266,18 +266,18 @@ Value *c_read(Parser_Struct parser_struct, Function *TheFunction,
     return callret("read", {ArgsV[0], src, ArgsV[2]});
 }
 
-Value *c_malloc(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_malloc(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     return callret("malloc", {ArgsV[0]});
 }
-Value *c_malloc32(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_malloc32(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *size = ArgsV[0];
     return callret("aligned_alloc", {const_int64(32), size});
 }
-Value *c_malloc64(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_malloc64(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *size = ArgsV[0];
@@ -285,7 +285,7 @@ Value *c_malloc64(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *c_malloc_str(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_malloc_str(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *view_val = UndefValue::get(struct_types["DT_str"]);
@@ -294,7 +294,7 @@ Value *c_malloc_str(Parser_Struct parser_struct, Function *TheFunction,
     return view_val;
 }
 
-Value *alloc(Parser_Struct parser_struct, Function *TheFunction,
+Value *alloc(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     
@@ -305,7 +305,7 @@ Value *alloc(Parser_Struct parser_struct, Function *TheFunction,
         type_id = const_uint16(data_name_to_type()[type]);
     }
     else {
-        LogErrorS(parser_struct.line, "alloc requires const string");
+        LogErrorS(parser_struct->line, "alloc requires const string");
         std::exit(0);
     }
 
@@ -319,20 +319,20 @@ Value *alloc(Parser_Struct parser_struct, Function *TheFunction,
     return ret;
 }
 
-Value *str_size(Parser_Struct parser_struct, Function *TheFunction,
+Value *str_size(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     return Builder->CreateExtractValue(ArgsV[0], {1});
 }
 
-Value *c_strlen(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_strlen(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
     return callret("strlen", {str});
 }
 
-Value *c_memcpy(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_memcpy(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
@@ -344,7 +344,7 @@ Value *c_memcpy(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *str_set(Parser_Struct parser_struct, Function *TheFunction,
+Value *str_set(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *last_c_gep = Builder->CreateInBoundsGEP(int8Ty, ArgsV[0], ArgsV[1]);
@@ -352,7 +352,7 @@ Value *str_set(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *str_offset(Parser_Struct parser_struct, Function *TheFunction,
+Value *str_offset(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *ptr_val = ArgsV[0];
@@ -364,7 +364,7 @@ Value *str_offset(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
-Value *c_memchr(Parser_Struct parser_struct, Function *TheFunction,
+Value *c_memchr(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *buf = ArgsV[0];
@@ -392,7 +392,7 @@ Value *c_memchr(Parser_Struct parser_struct, Function *TheFunction,
     return ret;
 }
 
-Value *shfl_sync(Parser_Struct parser_struct, Function *TheFunction,
+Value *shfl_sync(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
@@ -413,7 +413,7 @@ Value *shfl_sync(Parser_Struct parser_struct, Function *TheFunction,
     Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
     return res;
 }
-Value *cp_async16(Parser_Struct parser_struct, Function *TheFunction,
+Value *cp_async16(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
@@ -438,7 +438,7 @@ Value *cp_async16(Parser_Struct parser_struct, Function *TheFunction,
     return Builder->CreateCall(cp, {smem_ptr, gmem_ptr});
 }
 
-Value *cp_commit_group(Parser_Struct parser_struct, Function *TheFunction,
+Value *cp_commit_group(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *commit =
@@ -450,7 +450,7 @@ Value *cp_commit_group(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *cp_wait_group(Parser_Struct parser_struct, Function *TheFunction,
+Value *cp_wait_group(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *wait =
@@ -462,7 +462,7 @@ Value *cp_wait_group(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *cp_wait_all(Parser_Struct parser_struct, Function *TheFunction,
+Value *cp_wait_all(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *wait_all =
@@ -474,7 +474,7 @@ Value *cp_wait_all(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *ldmatrix_x4(Parser_Struct parser_struct, Function *TheFunction,
+Value *ldmatrix_x4(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *ldmatrix =
@@ -498,7 +498,7 @@ Value *ldmatrix_x4(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *printff(Parser_Struct parser_struct, Function *TheFunction,
+Value *printff(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Value *str = Builder->CreateExtractValue(ArgsV[0], {0});
@@ -506,7 +506,7 @@ Value *printff(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
+Value *ldmatrix_x2(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *ldmatrix =
@@ -524,7 +524,7 @@ Value *ldmatrix_x2(Parser_Struct parser_struct, Function *TheFunction,
     Builder->CreateStore(Builder->CreateExtractValue(ret, {1}), gep_1);
     return const_int(0);
 }
-Value *ldmatrix_x2T(Parser_Struct parser_struct, Function *TheFunction,
+Value *ldmatrix_x2T(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *ldmatrix =
@@ -543,7 +543,7 @@ Value *ldmatrix_x2T(Parser_Struct parser_struct, Function *TheFunction,
     return const_int(0);
 }
 
-Value *mma_16x8x16(Parser_Struct parser_struct, Function *TheFunction,
+Value *mma_16x8x16(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *mma =
@@ -591,7 +591,7 @@ Value *mma_16x8x16(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *syncthreads(Parser_Struct parser_struct, Function *TheFunction,
+Value *syncthreads(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     Function *Barrier =
@@ -606,7 +606,7 @@ Value *syncthreads(Parser_Struct parser_struct, Function *TheFunction,
 }
 
 
-Value *min(Parser_Struct parser_struct, Function *TheFunction,
+Value *min(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
@@ -623,12 +623,12 @@ Value *min(Parser_Struct parser_struct, Function *TheFunction,
     if (auto *F = TheModule->getFunction(fn))
         return callret(fn, {scope_struct, x, y});
 
-    LogErrorC(parser_struct.line, "Could not handle min op for: " + type);
+    LogErrorC(parser_struct->line, "Could not handle min op for: " + type);
 
     return const_int(0);
 }
 
-Value *max(Parser_Struct parser_struct, Function *TheFunction,
+Value *max(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
     std::string type = args_type[0].Type;
@@ -644,18 +644,18 @@ Value *max(Parser_Struct parser_struct, Function *TheFunction,
     if (auto *F = TheModule->getFunction(fn))
         return callret(fn, {scope_struct, x, y});
 
-    LogErrorC(parser_struct.line, "Could not handle max op for: " + type);
+    LogErrorC(parser_struct->line, "Could not handle max op for: " + type);
 
     return const_int(0);
 }
 
 
 
-Value *err(Parser_Struct parser_struct, Function *TheFunction,
+Value *err(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
-    call("LogErrorCall", {const_int(parser_struct.line), ArgsV[0]});
+    call("LogErrorCall", {const_int(parser_struct->line), ArgsV[0]});
     call("_quit_", {});
     return const_int(0);
 }
@@ -664,7 +664,7 @@ Value *err(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
-Value *printl(Parser_Struct parser_struct, Function *TheFunction,
+Value *printl(Parser_Struct * parser_struct, Function *TheFunction,
         std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
         Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
 
@@ -748,7 +748,7 @@ Value *makePrintfBuffer(Value *arg, Type *Ty, std::string type) {
     return nullptr;
 }
 
-void print_gpu(Parser_Struct parser_struct, Function *TheFunction,
+void print_gpu(Parser_Struct * parser_struct, Function *TheFunction,
          std::vector<Data_Tree> &args_type,
          std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
 
@@ -781,10 +781,10 @@ void print_gpu(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
-Value *print(Parser_Struct parser_struct, Function *TheFunction,
+Value *print(Parser_Struct * parser_struct, Function *TheFunction,
         std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
         Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-    if (parser_struct.gpu>0) {
+    if (parser_struct->gpu>0) {
         print_gpu(parser_struct, TheFunction, args_type, Args, ArgsV);
         return const_int(0);
     }

@@ -37,12 +37,11 @@ std::vector<std::string> prebuild_functions;
 std::unordered_map<std::string, llvm::Type*> str_toTy;
 std::unordered_map<std::string, Function *> async_fn;
 std::string current_codegen_function;
-std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
-std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
+std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
+std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
 
 std::vector<std::string> Global_Uniques;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
-
 
 std::vector<Value *> thread_pointers;
 
@@ -51,6 +50,7 @@ llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64Ty, *m25
 
 
 Value *stack_top_value, *cur_self=nullptr;
+
 
 
 llvm::Type *get_type_from_data(Data_Tree dt) {
@@ -549,11 +549,11 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
     ); 
 }
 
-bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct parser_struct) {
+bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0)
   {
-    LogErrorS(parser_struct.line, "Tried to attribute data of different types");
+    LogErrorS(parser_struct->line, "Tried to attribute data of different types");
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -566,21 +566,21 @@ bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Stru
 
 
 inline bool Check_ArgsV_Count(const std::string &Callee, const std::vector<Value *> &ArgsV,
-                              Parser_Struct parser_struct, int backend_args=1) {  
+                              Parser_Struct *parser_struct, int backend_args=1) {  
   Function *CalleeF;
   CalleeF = getFunction(Callee);
   
   if (!CalleeF)
   {
     std::string _error = "The referenced function "+ Callee +" was not yet declared.";
-    LogErrorV(parser_struct.line, _error);
+    LogErrorV(parser_struct->line, _error);
     return false;
   }
 
   if ((CalleeF->arg_size()) != ArgsV.size() && !in_str(Callee, vararg_methods))
   {
     std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-backend_args) + " arguments, got " + std::to_string(ArgsV.size()-backend_args);
-    LogErrorV(parser_struct.line, _error);
+    LogErrorV(parser_struct->line, _error);
     return false;
   }
 
@@ -588,12 +588,12 @@ inline bool Check_ArgsV_Count(const std::string &Callee, const std::vector<Value
 }
 
 inline bool Check_Required_Args_Count(const std::string &Callee, int sent_args,
-                              Parser_Struct parser_struct, int backend_args=1) {  
+                              Parser_Struct *parser_struct, int backend_args=1) {  
   if(Function_Required_Arg_Count.count(Callee)==0||in_str(Callee, vararg_methods))
     return true;
 
   if (sent_args<Function_Required_Arg_Count[Callee]) {
-      // LogErrorS(parser_struct.line, "Sent " + std::to_string(sent_args) + " into function " + Callee + ", but the function requires at least "+\
+      // LogErrorS(parser_struct->line, "Sent " + std::to_string(sent_args) + " into function " + Callee + ", but the function requires at least "+\
       //                               std::to_string(Function_Required_Arg_Count[Callee]) + " arguments.");
       return false;
   }
@@ -601,9 +601,9 @@ inline bool Check_Required_Args_Count(const std::string &Callee, int sent_args,
   return true;
 }
 
-// void Cache_Array(Parser_Struct parser_struct, Value *var) {
+// void Cache_Array(Parser_Struct *parser_struct, Value *var) {
 //     Value *vec_gep = Builder->CreateStructGEP(struct_types["array"], var, 3);
-//     function_vecs[parser_struct.function_name][var] = vec_gep;
+//     function_vecs[parser_struct->function_name][var] = vec_gep;
 // }
 
 inline Value *Load_Array(std::string &function_name, Value *var) {
@@ -617,7 +617,7 @@ inline Value *Load_Array(std::string &function_name, Value *var) {
     return Builder->CreateLoad(int8PtrTy, vec_gep);
 }
 
-inline void Check_Is_Array_Inbounds(Parser_Struct &parser_struct, Value *var, Value *idx) {
+inline void Check_Is_Array_Inbounds(Parser_Struct *parser_struct, Value *var, Value *idx) {
     // return;
     Value *vec_gep = Builder->CreateStructGEP(struct_types["array"], var, 0);
     Value *size = Builder->CreateLoad(intTy, vec_gep);
@@ -632,7 +632,7 @@ inline void Check_Is_Array_Inbounds(Parser_Struct &parser_struct, Value *var, Va
     Builder->CreateCondBr(in_bounds, okBB, bad_sizeBB);
 
     Builder->SetInsertPoint(bad_sizeBB);
-    call("array_bad_idx", {const_int(parser_struct.line), idx, size});
+    call("array_bad_idx", {const_int(parser_struct->line), idx, size});
     Builder->CreateUnreachable();
 
     Builder->SetInsertPoint(okBB);
@@ -666,7 +666,7 @@ inline Value *get_scope_obj(Value *scope_struct) {
     // return Builder->CreateLoad(int8PtrTy, cur_self);
 }
 
-void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const Parser_Struct &parser_struct) {
+void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const Parser_Struct *parser_struct) {
   return;
   
   Value *GC_ptr = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5, "GC_ptr_element");
@@ -701,7 +701,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
 
   Builder->SetInsertPoint(SweepThenBB);
 
-  Set_Stack_Top(scope_struct, parser_struct.function_name);
+  Set_Stack_Top(scope_struct, parser_struct->function_name);
   call("scope_struct_Sweep", {scope_struct});
   Builder->CreateBr(SweepContinueBB);
 
@@ -709,7 +709,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
 }
 
 
-void MakeWriteBarrier(Parser_Struct parser_struct, Function *TheFunction, Value *scope_struct,
+void MakeWriteBarrier(Parser_Struct *parser_struct, Function *TheFunction, Value *scope_struct,
                         Value *src, Value *ptr, Value *ref,
                         std::string type) {
     Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
@@ -761,7 +761,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
 
       
-    Data_Tree init_dt = data_typeVars[parser_struct.function_name][VarName]; 
+    Data_Tree init_dt = data_typeVars[parser_struct->function_name][VarName]; 
     Type = init_dt.Type;
 
 
@@ -774,7 +774,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
 
     if((in_vec(Type, primary_data_tokens)||Type=="layout")&&!(is_self||is_attr)) { 
-      StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
+      StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
       continue;
     }
 
@@ -784,22 +784,22 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
 
     if(is_self) {
-      int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
+      int object_ptr_offset = ClassVariables[parser_struct->class_name][VarName]; 
   
       Value *obj = get_scope_obj(scope_struct);
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
 
     } else if (is_attr) {
-      LogErrorS(parser_struct.line, "Creating attribute in a data expression is not supported.");
+      LogErrorS(parser_struct->line, "Creating attribute in a data expression is not supported.");
     }
     else {
       Value *unpacked_val = initial_value;
       if (Type=="str") {
             unpacked_val = Builder->CreateExtractValue(initial_value, {0});
       }
-      StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
-      if(parser_struct.gpu==0)
-          Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
+      StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
+      if(parser_struct->gpu==0)
+          Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, data_type, unpacked_val); 
     }
       
 
@@ -832,7 +832,7 @@ Value *TupleExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
     data_type.Print();
     
-    StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, data_type);
+    StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, data_type);
   }
 
   return ConstantFP::get(*TheContext, APFloat(0.0));
@@ -924,7 +924,7 @@ void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::stri
 }
 
 
-inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
+inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
                                                   std::vector<Value *> ArgsV,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::vector<Data_Tree> &ArgTypes,
@@ -989,14 +989,14 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
             does_op_create_memory = (does_op_create_memory||stmt->Op!=tok_offby);
 
         if (does_op_create_memory) {
-            Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct.function_name, arg);
-            Set_Stack_Top(scope_struct, parser_struct.function_name);
+            Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct->function_name, arg);
+            Set_Stack_Top(scope_struct, parser_struct->function_name);
         }
     }
 
 
     if (!ArgsV.back()) {
-      LogErrorS(parser_struct.line, "Failed to codegen argument of function " + fn_name);
+      LogErrorS(parser_struct->line, "Failed to codegen argument of function " + fn_name);
       return {};
     }
 
@@ -1016,7 +1016,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct,
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg) {
-            LogErrorS(parser_struct.line, "Standard argument followed by positional argument.");
+            LogErrorS(parser_struct->line, "Standard argument followed by positional argument.");
             return std::move(ArgsV);
           }
 
@@ -1100,7 +1100,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
             if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(VarNames[i].second.get())) {
                 AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, \
                                                 get_type_from_data(data_type));
-                function_allocas[parser_struct.function_name][VarName] = alloca;
+                function_allocas[parser_struct->function_name][VarName] = alloca;
                 continue;
             } 
         }
@@ -1119,7 +1119,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
             if (Type!=init_dt.Type&&in_vec(Type, int_types)&&in_vec(init_dt.Type, int_types))
                 initial_value = Builder->CreateIntCast(initial_value,
                                         get_type_from_data(data_type), true);
-            StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
+            StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
             continue;
         }
 
@@ -1178,21 +1178,21 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
         if(is_self) {
-            int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
+            int object_ptr_offset = ClassVariables[parser_struct->class_name][VarName]; 
             Value *obj = get_scope_obj(scope_struct);
             call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
         } else if (is_attr) {
-            LogErrorS(parser_struct.line, "Creating attribute in a data expression is not supported.");
+            LogErrorS(parser_struct->line, "Creating attribute in a data expression is not supported.");
         }
         else { 
             Value *unpacked_val = initial_value;
             if (Type=="str")
                 unpacked_val = Builder->CreateExtractValue(initial_value, {0});
 
-            if (parser_struct.gpu==0)
-                Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, data_type, unpacked_val); 
+            if (parser_struct->gpu==0)
+                Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, data_type, unpacked_val); 
 
-            StoreVal(TheFunction, parser_struct.function_name, VarName, initial_value, init_dt);
+            StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
         }
     }
     return const_float(0.0f);
@@ -1209,10 +1209,10 @@ Value *LibImportExprAST::codegen(Value *scope_struct) {
 
 
 Value *GCSafePointExprAST::codegen(Value *scope_struct) {
-    if (parser_struct.gpu>0)
+    if (parser_struct->gpu>0)
         return const_float(0.0f);
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    Set_Stack_Top(scope_struct, parser_struct.function_name);
+    Set_Stack_Top(scope_struct, parser_struct->function_name);
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
     return const_float(0.0f);
 }
@@ -1250,15 +1250,15 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
-    auto old_allocas = function_allocas[parser_struct.function_name];
-    auto old_values = function_values[parser_struct.function_name];
+    auto old_allocas = function_allocas[parser_struct->function_name];
+    auto old_values = function_values[parser_struct->function_name];
 
 
     Value *ThenV;
     for (auto &then_body : Then)
         ThenV = then_body->codegen(scope_struct);
     ThenPostBB = Builder->GetInsertBlock();
-    block_values[ThenPostBB] = function_values[parser_struct.function_name];
+    block_values[ThenPostBB] = function_values[parser_struct->function_name];
 
 
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
@@ -1266,7 +1266,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
         return nullptr;
     if (!ThenTerminated) {
         ThenPostBB = Builder->GetInsertBlock();
-        block_values[ThenPostBB] = function_values[parser_struct.function_name];
+        block_values[ThenPostBB] = function_values[parser_struct->function_name];
         Builder->CreateBr(MergeBB);
     }
 
@@ -1274,8 +1274,8 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), ElseBB);
     Builder->SetInsertPoint(ElseBB);
 
-    function_values[parser_struct.function_name] = old_values;
-    function_allocas[parser_struct.function_name] = old_allocas;
+    function_values[parser_struct->function_name] = old_values;
+    function_allocas[parser_struct->function_name] = old_allocas;
 
     Value *ElseV;
     for (auto &else_body : Else)
@@ -1283,7 +1283,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     ElsePostBB = Builder->GetInsertBlock();
 
     if(Else.size()>0)
-        block_values[ElsePostBB] = function_values[parser_struct.function_name];
+        block_values[ElsePostBB] = function_values[parser_struct->function_name];
     else {
         ElseV = const_int(0);
         block_values[ElsePostBB] = old_values;
@@ -1311,12 +1311,12 @@ Value *IfExprAST::codegen(Value *scope_struct) {
                 PHINode *phi = Builder->CreatePHI(value->getType(), 2);
                 phi->addIncoming(then_values[name], ThenPostBB);
                 phi->addIncoming(else_values[name], ElsePostBB);
-                function_values[parser_struct.function_name][name] = phi;
+                function_values[parser_struct->function_name][name] = phi;
             }
         } else if (!ThenTerminated)
-            function_values[parser_struct.function_name][name] = then_values[name];
+            function_values[parser_struct->function_name][name] = then_values[name];
         else if (!ElseTerminated)
-            function_values[parser_struct.function_name][name] = else_values[name];
+            function_values[parser_struct->function_name][name] = else_values[name];
         else {}
     }
     return const_float(0.0f);
@@ -1351,7 +1351,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
-    auto old_values = function_values[parser_struct.function_name];
+    auto old_values = function_values[parser_struct->function_name];
 
 
     Value *ThenV;
@@ -1360,15 +1360,15 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
             ThenV = if_stmt->codegen_from_loop(scope_struct,
                     ThenBB, IncBB, LoopAfter, break_values_snapshot, BreakBB, ContinueBB);
         else if (auto *break_stmt = dynamic_cast<BreakExprAST*>(then_body.get())) {
-            break_values_snapshot = function_values[parser_struct.function_name];
+            break_values_snapshot = function_values[parser_struct->function_name];
             auto bb = Builder->GetInsertBlock();
-            block_values[bb] = function_values[parser_struct.function_name];
+            block_values[bb] = function_values[parser_struct->function_name];
             BreakBB.push_back(bb);
             Builder->CreateBr(LoopAfter);
         }
         else if (auto *stmt = dynamic_cast<ContinueExprAST*>(then_body.get())) {
             auto bb = Builder->GetInsertBlock();
-            block_values[bb] = function_values[parser_struct.function_name];
+            block_values[bb] = function_values[parser_struct->function_name];
             ContinueBB.push_back(bb);
             Builder->CreateBr(IncBB);
         }
@@ -1376,7 +1376,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
             ThenV = then_body->codegen(scope_struct);
     }
     ThenPostBB = Builder->GetInsertBlock();
-    block_values[ThenPostBB] = function_values[parser_struct.function_name];
+    block_values[ThenPostBB] = function_values[parser_struct->function_name];
 
 
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
@@ -1390,14 +1390,14 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->SetInsertPoint(ElseBB);
 
 
-    function_values[parser_struct.function_name] = old_values;
+    function_values[parser_struct->function_name] = old_values;
     Value *ElseV;
     for (auto &else_body : Else)
         ElseV = else_body->codegen(scope_struct);
     ElsePostBB = Builder->GetInsertBlock();
 
     if(Else.size()>0)
-        block_values[ElsePostBB] = function_values[parser_struct.function_name];
+        block_values[ElsePostBB] = function_values[parser_struct->function_name];
     else {
         ElseV = const_int(0);
         block_values[ElsePostBB] = old_values;
@@ -1425,12 +1425,12 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
                 PHINode *phi = Builder->CreatePHI(value->getType(), 2);
                 phi->addIncoming(then_values[name], ThenPostBB);
                 phi->addIncoming(else_values[name], ElsePostBB);
-                function_values[parser_struct.function_name][name] = phi;
+                function_values[parser_struct->function_name][name] = phi;
             }
         } else if (!ThenTerminated)
-            function_values[parser_struct.function_name][name] = then_values[name];
+            function_values[parser_struct->function_name][name] = then_values[name];
         else if (!ElseTerminated)
-            function_values[parser_struct.function_name][name] = else_values[name];
+            function_values[parser_struct->function_name][name] = else_values[name];
         else {}
     }
 
@@ -1474,7 +1474,7 @@ Value *ContinueExprAST::codegen(Value *scope_struct) {
 }
 
 
-void SetBreakPHIS(Parser_Struct parser_struct, std::vector<std::string> &assigned_vars, 
+void SetBreakPHIS(Parser_Struct *parser_struct, std::vector<std::string> &assigned_vars, 
             std::map<std::string, Value*> &old_values,
             std::map<std::string, PHINode*> &function_phi_values,
             std::vector<BasicBlock *> &BreakBB, BasicBlock *LoopPredecessor) {
@@ -1493,7 +1493,7 @@ void SetBreakPHIS(Parser_Struct parser_struct, std::vector<std::string> &assigne
                 phi_val->addIncoming(function_phi_values[name], LoopPredecessor);
                 phi_val->addIncoming(pair.second, bb);
 
-                function_values[parser_struct.function_name][name] = phi_val;
+                function_values[parser_struct->function_name][name] = phi_val;
             }
         }
     }
@@ -1573,8 +1573,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for.after");
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
-    auto old_allocas = function_allocas[parser_struct.function_name];
-    block_values[PreheaderBB] = function_values[parser_struct.function_name];
+    auto old_allocas = function_allocas[parser_struct->function_name];
+    block_values[PreheaderBB] = function_values[parser_struct->function_name];
 
     Builder->CreateBr(CondBB);
     Builder->SetInsertPoint(CondBB);
@@ -1584,7 +1584,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     Get_Recursive_Assign_Statements(Body, assigned_vars);
 
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct.function_name];
+    auto old_function_values = function_values[parser_struct->function_name];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (name!=VarName && old_function_values.count(name)>0) {
@@ -1593,14 +1593,14 @@ Value *ForExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 2, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct.function_name][name] = phi_val;
+            function_values[parser_struct->function_name][name] = phi_val;
         }
     }
 
     // Control var phi
     PHINode *LoopVar = Builder->CreatePHI(StartVal->getType(), 2, VarName.c_str());
     LoopVar->addIncoming(StartVal, PreheaderBB);
-    function_values[parser_struct.function_name][VarName] = LoopVar;
+    function_values[parser_struct->function_name][VarName] = LoopVar;
 
 
 
@@ -1634,7 +1634,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     std::vector<BasicBlock *> BreakBB, ContinueBB;
 
     Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
-    block_values[Builder->GetInsertBlock()] = function_values[parser_struct.function_name];
+    block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
 
     Builder->CreateBr(IncBB);
     TheFunction->insert(TheFunction->end(), IncBB);
@@ -1650,9 +1650,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
     LoopVar->addIncoming(NextVal, CurBB);
     for (auto &name : changed_vars) {
-        Value *val = function_values[parser_struct.function_name][name];
+        Value *val = function_values[parser_struct->function_name][name];
         function_phi_values[name]->addIncoming(val, CurBB);
-        function_values[parser_struct.function_name][name] = function_phi_values[name];
+        function_values[parser_struct->function_name][name] = function_phi_values[name];
     }
     Builder->CreateBr(CondBB);
 
@@ -1666,7 +1666,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values,
                  BreakBB, CondBB);
 
-    function_allocas[parser_struct.function_name] = old_allocas;
+    function_allocas[parser_struct->function_name] = old_allocas;
     // verifyFunction(*TheFunction);
     // CurModule->print(llvm::errs(), nullptr);
 
@@ -1690,7 +1690,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     Value *CurIdx = const_int(0);
 
 
-    function_values[parser_struct.function_name][VarName] = CurIdx;
+    function_values[parser_struct->function_name][VarName] = CurIdx;
 
 
     Value *vec = Vec->codegen(scope_struct);
@@ -1710,7 +1710,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
 
-    block_values[PreheaderBB] = function_values[parser_struct.function_name];
+    block_values[PreheaderBB] = function_values[parser_struct->function_name];
 
     // Insert an explicit fall through from the current block to the LoopBB.
     Builder->CreateBr(CondBB); 
@@ -1721,7 +1721,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct.function_name];
+    auto old_function_values = function_values[parser_struct->function_name];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (name!=VarName && old_function_values.count(name)>0) {
@@ -1730,13 +1730,13 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 2, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct.function_name][name] = phi_val;
+            function_values[parser_struct->function_name][name] = phi_val;
         }
     }
     // Control var phi
     PHINode *LoopVar = Builder->CreatePHI(CurIdx->getType(), 2, VarName.c_str());
     LoopVar->addIncoming(CurIdx, PreheaderBB);
-    function_values[parser_struct.function_name][VarName] = LoopVar;
+    function_values[parser_struct->function_name][VarName] = LoopVar;
 
 
 
@@ -1784,12 +1784,12 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     }
     if((vec_type=="list"||vec_type=="tuple")&&(Type=="float"||Type=="int"))
         vec_value = callret("to_"+Type, {scope_struct, vec_value});
-    function_values[parser_struct.function_name][VarName] = vec_value;
+    function_values[parser_struct->function_name][VarName] = vec_value;
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
     Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
-    block_values[Builder->GetInsertBlock()] = function_values[parser_struct.function_name];
+    block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
 
 
     Builder->CreateBr(IncBB);
@@ -1801,8 +1801,8 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     LoopVar->addIncoming(NextVal, CurBB);
     for (auto &name : changed_vars) {
-        function_phi_values[name]->addIncoming(function_values[parser_struct.function_name][name], CurBB);
-        function_values[parser_struct.function_name][name] = function_phi_values[name];
+        function_phi_values[name]->addIncoming(function_values[parser_struct->function_name][name], CurBB);
+        function_values[parser_struct->function_name][name] = function_phi_values[name];
     }
 
 
@@ -1834,7 +1834,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
-    block_values[PreheaderBB] = function_values[parser_struct.function_name];
+    block_values[PreheaderBB] = function_values[parser_struct->function_name];
 
     // Jump to the condition block
     Builder->CreateBr(CondBB);
@@ -1845,7 +1845,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
     Get_Recursive_Assign_Statements(Body, assigned_vars);
 
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct.function_name];
+    auto old_function_values = function_values[parser_struct->function_name];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (old_function_values.count(name)>0) {
@@ -1854,7 +1854,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 0, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct.function_name][name] = phi_val;
+            function_values[parser_struct->function_name][name] = phi_val;
         }
     }
 
@@ -1874,15 +1874,15 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
             break_values_snapshot,
             BreakBB, ContinueBB);
     BasicBlock *CurBB = Builder->GetInsertBlock(); // handles branching
-    block_values[CurBB] = function_values[parser_struct.function_name];
+    block_values[CurBB] = function_values[parser_struct->function_name];
 
     for (auto &name : changed_vars) {
         PHINode *phi = function_phi_values[name];
-        Value *val = function_values[parser_struct.function_name][name]; 
+        Value *val = function_values[parser_struct->function_name][name]; 
         phi->addIncoming(val, CurBB);
         for (auto &bb : ContinueBB)
             phi->addIncoming(block_values[bb][name], bb);
-        function_values[parser_struct.function_name][name] = phi;
+        function_values[parser_struct->function_name][name] = phi;
     }
 
     Builder->CreateBr(CondBB);
@@ -1930,19 +1930,19 @@ bool CheckIs_CastInt_to_FloatChannel(std::string Operation, Data_Tree LTree) {
 
 
 
-bool CheckIsSenderChannel(std::string Elements, Parser_Struct parser_struct, std::string LName) {
+bool CheckIsSenderChannel(std::string Elements, Parser_Struct *parser_struct, std::string LName) {
 
     if(begins_with(Elements, "channel")) {
-        if(ChannelDirections[parser_struct.function_name].count(LName)>0) {
-            if(((int)ChannelDirections[parser_struct.function_name][LName])==(int)ch_sender) {
-                LogErrorS(parser_struct.line, "1 Tried to attribute data to a sender only channel." + parser_struct.function_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct.function_name].count(LName)) + "; " + std::to_string(ChannelDirections[parser_struct.function_name][LName]) );
+        if(ChannelDirections[parser_struct->function_name].count(LName)>0) {
+            if(((int)ChannelDirections[parser_struct->function_name][LName])==(int)ch_sender) {
+                LogErrorS(parser_struct->line, "1 Tried to attribute data to a sender only channel." + parser_struct->function_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct->function_name].count(LName)) + "; " + std::to_string(ChannelDirections[parser_struct->function_name][LName]) );
                 return false;
             }
         }
         else {
-            if(ChannelDirections[parser_struct.class_name].count(LName)>0) {
-                if((int)ChannelDirections[parser_struct.class_name][LName]==(int)ch_sender) {
-                    LogErrorS(parser_struct.line, "2 Tried to attribute data to a sender only channel. " + parser_struct.class_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct.class_name].count(LName)));
+            if(ChannelDirections[parser_struct->class_name].count(LName)>0) {
+                if((int)ChannelDirections[parser_struct->class_name][LName]==(int)ch_sender) {
+                    LogErrorS(parser_struct->line, "2 Tried to attribute data to a sender only channel. " + parser_struct->class_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct->class_name].count(LName)));
                     return false;
                 }
             }
@@ -1979,7 +1979,7 @@ Value *strviewcmp(Value *ctx, Value *a, Value *b) {
 
 
 
-void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::string Operation, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
+void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std::string Operation, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
                  Value *R, Data_Tree L_dt, Data_Tree R_dt) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     std::string LType = L_dt.Type;
@@ -1997,7 +1997,7 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
 
             Function *F = CurModule->getFunction(copy_fn);
             if (!F) {
-                LogErrorV(parser_struct.line, "Tried to use channel operation for " + \
+                LogErrorV(parser_struct->line, "Tried to use channel operation for " + \
                         LType + ", but this data type has no Copy implementation.");
                 return;
             }
@@ -2047,15 +2047,15 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
 
             Function *F = CurModule->getFunction(store_trigger);
             if (F) {
-                Value *old_val = LoadVal(parser_struct.function_name, Lname, ldt);
+                Value *old_val = LoadVal(parser_struct->function_name, Lname, ldt);
                 call(store_trigger, {scope_struct, old_val, Val_indexed});
             }
 
 
-            StoreVal(TheFunction, parser_struct.function_name, Lname, Val_indexed, ldt);
+            StoreVal(TheFunction, parser_struct->function_name, Lname, Val_indexed, ldt);
 
             if (!in_vec(list_LType, primary_data_tokens))
-                Set_Pointer_Stack(scope_struct, parser_struct.function_name, Lname, Val_indexed);
+                Set_Pointer_Stack(scope_struct, parser_struct->function_name, Lname, Val_indexed);
         }
         return; 
     }
@@ -2337,7 +2337,7 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             if (elem_type=="float"&&RType=="int")
                 Val = Builder->CreateSIToFP(Val, floatTy);
 
-            Value *vec = Load_Array(parser_struct.function_name, vec_ptr);
+            Value *vec = Load_Array(parser_struct->function_name, vec_ptr);
 
             llvm::Type *idxTy;
             if (elem_type=="int")
@@ -2406,8 +2406,8 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
             // Store trigger behavior for supported types (i.e, function <DT>_StoreTrigger exists)
             Function *F = CurModule->getFunction(store_trigger);
 
-            if (F && function_values[parser_struct.function_name].count(Lname)>0) {
-                Value *old_val = LoadVal(parser_struct.function_name, Lname, L_dt);
+            if (F && function_values[parser_struct->function_name].count(Lname)>0) {
+                Value *old_val = LoadVal(parser_struct->function_name, Lname, L_dt);
                 Val = callret(store_trigger, {scope_struct, old_val, Val});
             }
 
@@ -2415,10 +2415,10 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
                 Value *unpacked_val = Val;
                 if (RType=="str")
                     unpacked_val = Builder->CreateExtractValue(Val, {0});
-                Set_Pointer_Stack(scope_struct, parser_struct.function_name, Lname, unpacked_val);
+                Set_Pointer_Stack(scope_struct, parser_struct->function_name, Lname, unpacked_val);
             }
 
-            StoreVal(TheFunction, parser_struct.function_name, Lname, Val, L_dt);
+            StoreVal(TheFunction, parser_struct->function_name, Lname, Val, L_dt);
 
         } else { // self|attr 
             Value *src = LHSV->Inner->codegen(scope_struct);
@@ -2442,62 +2442,96 @@ void BinaryStore(Parser_Struct parser_struct, Value *scope_struct, int Op, std::
     seen_var_attr=false;
 }
 
-Data_Tree SolveComptimeValues(Data_Tree dt, Parser_Struct parser_struct) {
+Data_Tree SolveComptimeValues(Data_Tree dt, Parser_Struct *parser_struct) {
     Data_Tree ret_dt = Data_Tree(dt.Type);
 
     if (dt.Type=="layout") {
         ret_dt.Nested_Data.push_back(dt.Nested_Data[0]);
         for(int i=1; i<dt.Nested_Data.size();++i) {
             std::string type = dt.Nested_Data[i].Type;
-            if (type=="smem")
-                ret_dt.Nested_Data.push_back(Data_Tree("smem"));
-            else if (is_number(type))
-                ret_dt.Nested_Data.push_back(Data_Tree(type));
-            else {
-                if (parser_struct.cvalues.ints.count(type)==0)
-                    LogErrorC(parser_struct.line, "Int comptime "+type+" not found.");
-                ret_dt.Nested_Data.push_back(Data_Tree(std::to_string(parser_struct.cvalues.ints[type])));
-            }
+            if (parser_struct->cvalues.ints.count(type)>0)
+                type = std::to_string(parser_struct->cvalues.ints[type]);
+
+            ret_dt.Nested_Data.push_back(Data_Tree(type));
         }
     }
     return ret_dt;
 }
 
 
-inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs, Data_Tree &arg_dt, Data_Tree &sent_dt) {
+
+inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs,
+        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
+        Data_Tree &arg_dt, Data_Tree &sent_dt,
+        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
+        Parser_Struct *parser_struct) {
     
     std::string key = arg_dt.Type;
     if (!in_vec(key, data_tokens)&&!in_vec(key, compound_tokens)&&key!="layout") {
     
         std::string sent_type = sent_dt.Type;
         if (is_number(sent_type)) {
+            std::cout << "KEY " << key <<  " GET  " << sent_type <<  "\n";
             CompiledArgs.ints[key] = std::stoi(sent_type);
+        } else {
+            bool has=false;
+            for (auto &arg : dynamic_args) {
+                if (arg->name==key) {
+                    has=true;
+                    break;
+                }
+            }
+            if(!has) {
+                std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct, sent_type, 1, false);
+                nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
+                auto arg_pair = std::make_unique<Arg_Pair>(data_typeVars[parser_struct->function_name][sent_type],
+                                         key, std::move(nameable));
+                dynamic_args.push_back(std::move(arg_pair));
+            }
+
         }
     }
     
     for (int i=0; i<arg_dt.Nested_Data.size(); ++i)
-        BuildTemplateArgTree(CompiledArgs, arg_dt.Nested_Data[i], sent_dt.Nested_Data[i]);
+        BuildTemplateArgTree(CompiledArgs, dynamic_args, arg_dt.Nested_Data[i], sent_dt.Nested_Data[i], LHS, RHS, parser_struct);
 }
 
 
-inline void BuildSpecializedArgs(FnCompiledValues &CompiledArgs, Data_Tree &L_dt, Data_Tree &R_dt, std::vector<Data_Tree> &ProtoTypes, int arg_offset) {
-    BuildTemplateArgTree(CompiledArgs, ProtoTypes[arg_offset],   L_dt);
-    BuildTemplateArgTree(CompiledArgs, ProtoTypes[arg_offset+1], R_dt);
+inline void BuildSpecializedArgs(FnCompiledValues &CompiledArgs, 
+        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
+        Data_Tree &L_dt, Data_Tree &R_dt,
+        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
+        std::vector<Data_Tree> &ProtoTypes, int arg_offset,
+        Parser_Struct *parser_struct) {
+    BuildTemplateArgTree(CompiledArgs, dynamic_args, ProtoTypes[arg_offset],
+                                L_dt, LHS, RHS, parser_struct);
+    BuildTemplateArgTree(CompiledArgs, dynamic_args, ProtoTypes[arg_offset+1],
+                                R_dt, LHS, RHS, parser_struct);
 }
 
-std::string SpecializeOperation(std::string fn, Parser_Struct parser_struct, Data_Tree L_dt, Data_Tree R_dt) {
+std::string SpecializeOperation(std::string fn, Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
+        Data_Tree L_dt, Data_Tree R_dt,
+        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS) {
     std::string fn_name = fn;
 
+    std::cout << "\n";
+    std::cout << "SPECIALIZE " << "\n";
+    L_dt.Print();
+    R_dt.Print();
 
     L_dt = SolveComptimeValues(L_dt, parser_struct);
     R_dt = SolveComptimeValues(R_dt, parser_struct);
+    L_dt.Print();
+    R_dt.Print();
+    std::cout << "\n";
 
     if (FunctionProtos.count(fn)==0)
-        LogErrorC(parser_struct.line, "Could not find operation " + fn);
+        LogErrorC(parser_struct->line, "Could not find operation " + fn);
     auto proto = FunctionProtos[fn].get();
     std::vector<std::string> Args = proto->Args;
 
-    int arg_offset = (parser_struct.gpu==0) ? 1 : 0;
+    int arg_offset = (parser_struct->gpu==0) ? 1 : 0;
 
     FnCompiledValues CompiledArgs;
     if (L_dt.Type=="layout")
@@ -2505,16 +2539,16 @@ std::string SpecializeOperation(std::string fn, Parser_Struct parser_struct, Dat
     if (R_dt.Type=="layout")
         CompiledArgs.layouts[Args[arg_offset+1]] = R_dt;
     
-    BuildSpecializedArgs(CompiledArgs, L_dt, R_dt, proto->Types, arg_offset);
-
+    BuildSpecializedArgs(CompiledArgs, dynamic_args, L_dt, R_dt, LHS, RHS, proto->Types, arg_offset, parser_struct);
 
 
     int idx=0;
     if (Fn_Compiled_Version[fn].count(CompiledArgs)==0) {
         FunctionAST *FnAst;
-        if (parser_struct.gpu>0) {
+        if (parser_struct->gpu>0) {
             need_re_emit_ptx = true;
             FnAst = GpuFunctions[fn].get();
+            proto = FnAst->Proto.get();
         }
         else
             std::cout << "Uninmplemented non-gpu template fn logic (" << fn << ")\n";
@@ -2523,8 +2557,8 @@ std::string SpecializeOperation(std::string fn, Parser_Struct parser_struct, Dat
         fn+=std::to_string(idx);
         Fn_Compiled_Values[fn] = CompiledArgs;
 
-        Function *F= proto->codegen();
-        FnAst->codegen_gpu(idx);
+        Function *F= proto->codegen(&dynamic_args);
+        FnAst->codegen_gpu(idx, &dynamic_args);
     }
 
     return fn;
@@ -2610,7 +2644,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             view_val = Builder->CreateInsertValue(view_val, const_int(0), {1});
             ret = view_val;
         } else
-            LogErrorC(parser_struct.line, "unkown charv op " + Operation);
+            LogErrorC(parser_struct->line, "unkown charv op " + Operation);
 
     }
     else if (Elements=="buffer_i8_i64"||Elements=="buffer_i8_int") {
@@ -2635,7 +2669,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = view_val;
             }
         } else
-            LogErrorC(parser_struct.line, "Unkown buffer op " + Operation);
+            LogErrorC(parser_struct->line, "Unkown buffer op " + Operation);
 
     }
     else if (Elements=="buffer_float_i64"||Elements=="buffer_float_int") {
@@ -2652,7 +2686,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 }
             }
         } else
-            LogErrorC(parser_struct.line, "unkown buffer op " + Operation);
+            LogErrorC(parser_struct->line, "unkown buffer op " + Operation);
     }
     else if (Elements=="buffer_int_i64"||Elements=="buffer_int_int") {
         if(Op==tok_offby) {
@@ -2668,7 +2702,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 }
             }
         } else
-            LogErrorC(parser_struct.line, "unkown buffer op " + Operation);
+            LogErrorC(parser_struct->line, "unkown buffer op " + Operation);
     }
     else if (Elements=="str_str") {
         switch (Op) {
@@ -2719,8 +2753,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 break;
             }
             default:
-                std::string called_op = SpecializeOperation(Operation, parser_struct, L_dt, R_dt);
-                ret = callret(called_op, {L, R}); 
+                std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
+                std::string called_op = SpecializeOperation(Operation, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
+                std::vector<Value *> Args = {L, R};
+                for (auto &dyn : dynamic_args)
+                    Args.push_back(dyn->expr->codegen(scope_struct));
+                ret = callret(called_op, Args); 
                 break;
         }       
     } else if (Elements=="vec_vec") {
@@ -2756,7 +2794,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = simd_highereq(LHS, RHS, L, R);
                 break;
             default:
-                LogError(parser_struct.line, "Unimplemented vec op " + Operation);
+                LogError(parser_struct->line, "Unimplemented vec op " + Operation);
                 std::exit(0);
         }
     }
@@ -2775,7 +2813,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = simd_or(LHS, RHS, L, R);
                 break;
             default:
-                LogError(parser_struct.line, "Unimplemented vec op " + Operation);
+                LogError(parser_struct->line, "Unimplemented vec op " + Operation);
                 std::exit(0);
         }
     }
@@ -2803,7 +2841,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateFRem(L, R, "remtmp");
                 break;
             case tok_int_div:
-                ret = LogErrorV(parser_struct.line, "GOTCHA");
+                ret = LogErrorV(parser_struct->line, "GOTCHA");
                 break;
             case '<':
                 ret = Builder->CreateFCmpULT(L, R, "cmptmp");
@@ -2824,7 +2862,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateFCmpUGE(L, R, "cmptmp");  // greater or equal
                 break;
             default:
-                LogError(parser_struct.line, "Unimplemented float op " + Operation);
+                LogError(parser_struct->line, "Unimplemented float op " + Operation);
                 std::exit(0);
         }
 
@@ -2886,7 +2924,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateLShr(L, R);
                 break;
             default:
-                LogError(parser_struct.line, "Unimplemented int op " + Operation);
+                LogError(parser_struct->line, "Unimplemented int op " + Operation);
                 std::exit(0);
         }
     } 
@@ -2895,12 +2933,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                                         L_dt, R_dt, LHS, RHS, scope_struct, L, R);
     else {
         std::string called_op = Operation;
-        if (L_dt.IsTemplate()||R_dt.IsTemplate())
-            called_op = SpecializeOperation(Operation, parser_struct, L_dt, R_dt);
-        if (parser_struct.gpu==0)
-            ret = callret(called_op, {scope_struct, L, R}); 
-        else
-            ret = callret(called_op, {L, R}); 
+        std::vector<Value *> Args = {L, R};
+        if (parser_struct->gpu==0)
+            Args.insert(Args.begin(), scope_struct);
+        if (L_dt.IsTemplate()||R_dt.IsTemplate()) {
+            std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
+            called_op = SpecializeOperation(Operation, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
+            for (auto &dyn : dynamic_args)
+                Args.push_back(dyn->expr->codegen(scope_struct));
+        }
+        ret = callret(called_op, {L, R}); 
     }
 
 
@@ -2979,7 +3021,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
                 return OperandV = Builder->CreateICmpEQ(OperandV, nullPtr);
             }
             else
-                LogErrorS(parser_struct.line, "Cannot use not with type: " + operand_type);
+                LogErrorS(parser_struct->line, "Cannot use not with type: " + operand_type);
         } 
         return Builder->CreateNot(OperandV, "logicalnot");
     }
@@ -2990,7 +3032,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
     Function *F = getFunction(std::string("unary") + std::to_string(Opcode));
     if (!F) {
-        auto err = LogErrorV(parser_struct.line,"Unknown unary operator.");
+        auto err = LogErrorV(parser_struct->line,"Unknown unary operator.");
         std::cout << "" << Opcode << "/" << ReverseToken(Opcode) << ".\n";
         return err;
     }
@@ -3011,8 +3053,8 @@ Value *ChannelExprAST::codegen(Value *scope_struct) {
                                 const_int(buffer_size)});
 
 
-    StoreVal(TheFunction, parser_struct.function_name, Name, initial_value, Data_Tree("channel"));
-    Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, Name, Data_Tree("channel"), initial_value);
+    StoreVal(TheFunction, parser_struct->function_name, Name, initial_value, Data_Tree("channel"));
+    Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, Name, Data_Tree("channel"), initial_value);
 
     return const_float(0);
 }
@@ -3069,7 +3111,7 @@ Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
 
 Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, \
         Value *scope_struct, \
-        Parser_Struct parser_struct, std::string async_suffix,\
+        Parser_Struct *parser_struct, std::string async_suffix,\
         Value *AsyncsCount) {
 
 
@@ -3097,15 +3139,15 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
     std::vector<std::string> previous_scope_value_types;
     std::vector<std::string> previous_scope_value_names;
-    for (auto &pair : function_values[parser_struct.function_name]) {
+    for (auto &pair : function_values[parser_struct->function_name]) {
         if(pair.first=="QQ_stack_top"||in_vec(pair.first, int_fn_values))
             continue;
 
         std::string type;
-        if (Object_toClass[parser_struct.function_name].count(pair.first)>0)
+        if (Object_toClass[parser_struct->function_name].count(pair.first)>0)
             type = "void";
         else {   
-            Data_Tree dt = data_typeVars[parser_struct.function_name][pair.first];
+            Data_Tree dt = data_typeVars[parser_struct->function_name][pair.first];
             type = UnmangleVec(dt);
             if(!in_vec(type, primary_data_tokens)||dt.is_array||dt.is_buffer)
                 type="void";
@@ -3142,7 +3184,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
-    std::string async_scope = parser_struct.function_name + async_suffix;
+    std::string async_scope = parser_struct->function_name + async_suffix;
     for(int i=0; i<previous_scope_value_names.size(); ++i) {
         std::string type = previous_scope_value_types[i];
         std::string var_name = previous_scope_value_names[i];
@@ -3157,7 +3199,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
-    block_values[BB] = function_values[parser_struct.function_name];
+    block_values[BB] = function_values[parser_struct->function_name];
     for (auto &body : asyncBody)
         V = body->codegen(scope_struct_typed);
 
@@ -3198,7 +3240,7 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct.function_name];
+    block_values[CurrentBB] = function_values[parser_struct->function_name];
 
     PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
@@ -3239,7 +3281,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct.function_name];
+    block_values[CurrentBB] = function_values[parser_struct->function_name];
 
     Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
@@ -3284,7 +3326,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", count);
 
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct.function_name];
+    block_values[CurrentBB] = function_values[parser_struct->function_name];
 
 
 
@@ -3689,7 +3731,7 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
         if (key_type!="str")
         {
-            LogErrorS(parser_struct.line, "Dictionary key must be of type string");
+            LogErrorS(parser_struct->line, "Dictionary key must be of type string");
             return const_float(0);
         } 
         Value *key = Keys[i]->codegen(scope_struct);
@@ -3753,9 +3795,9 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                                         const_int16(data_name_to_type()[ClassName])});
             else
                 ptr = Init->codegen(scope_struct);
-            Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, Data_Tree(ClassName), ptr);
+            Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, Data_Tree(ClassName), ptr);
 
-            StoreVal(TheFunction, parser_struct.function_name, VarName, ptr, Data_Tree("ClassName"));
+            StoreVal(TheFunction, parser_struct->function_name, VarName, ptr, Data_Tree("ClassName"));
 
 
             if (HasInit[i]) { // callee init
@@ -3801,7 +3843,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
                 ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args[i], ArgTypes, scope_struct, \
                         Callee, false, arg_type_check_offset); 
-                Set_Stack_Top(scope_struct, parser_struct.function_name);
+                Set_Stack_Top(scope_struct, parser_struct->function_name);
                 call(Callee, ArgsV);
             }
         }      
@@ -3904,10 +3946,10 @@ std::string mangle_cargs_proto(std::string fn_name, bool inc) {
 }
 
 
-Function *PrototypeAST::codegen() {
+Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_args) {
     if (!ShallCodegen)
         return nullptr;
-    // Make the function type:  float(float,float) etc.
+
 
     std::vector<llvm::Type *> types;
     for (auto &type : Types) {
@@ -3917,6 +3959,23 @@ Function *PrototypeAST::codegen() {
         types.push_back(Ty);
     }
 
+    if (dynamic_args) {
+        std::unordered_map<std::string, int> seen;
+        for (auto &arg : *dynamic_args) {
+            std::string arg_name = arg->name;
+            if (seen.count(arg_name)>0)
+                continue;
+            seen[arg_name] = 1;
+            Args.push_back(arg_name);
+
+            Data_Tree type = arg->dt;
+            llvm::Type *Ty = get_type_from_data(type);
+            if (type.is_buffer)
+                Ty = Ty->getPointerTo();
+            types.push_back(Ty);
+            
+        }
+    }
 
     llvm::Type *retTy = get_type_from_data(ReturnType);
     FunctionType *FT = FunctionType::get(retTy, types, false); 
@@ -3924,13 +3983,13 @@ Function *PrototypeAST::codegen() {
     std::string fn_name = Name;
     if (has_compiled_args) {
         fn_name = mangle_cargs_proto(fn_name, true);
-        // std::cout << "COMP NEW PROTO " << fn_name << "|" << (parser_struct.gpu>0) << "\n";
+        // std::cout << "COMP NEW PROTO " << fn_name << "|" << (parser_struct->gpu>0) << "\n";
     }
 
-    auto linkage = (parser_struct.gpu==2) ?\
+    auto linkage = (parser_struct->gpu==2) ?\
                      Function::InternalLinkage : Function::ExternalLinkage;
 
-    auto llvm_module = (parser_struct.gpu>0) ? PtxModule.get() : TheModule.get();
+    auto llvm_module = (parser_struct->gpu>0) ? PtxModule.get() : TheModule.get();
     Function *F = Function::Create(FT, linkage, fn_name, llvm_module);
 
     // Set names for all arguments.
@@ -3956,7 +4015,7 @@ Function *PrototypeAST::codegen() {
         // Arg.addAttr(Attribute::NonNull);
     }
 
-    if (parser_struct.gpu==1) {
+    if (parser_struct->gpu==1) {
         llvm::Metadata *MDVals[] = {
             llvm::ValueAsMetadata::get(F),
             llvm::MDString::get(*TheContext, "kernel"),
@@ -3972,7 +4031,7 @@ Function *PrototypeAST::codegen() {
         F->setCallingConv(llvm::CallingConv::PTX_Kernel);
         F->addFnAttr(Attribute::NoInline);
     }
-    if (parser_struct.gpu==2) {
+    if (parser_struct->gpu==2) {
         F->setCallingConv(llvm::CallingConv::C);
         F->addFnAttr(Attribute::AlwaysInline);
         F->setDSOLocal(true);
@@ -3985,9 +4044,9 @@ Function *PrototypeAST::codegen() {
 
 
 Value *ReduceExprAST::codegen(Value *scope_struct) {
-    std::string gpu_str = (parser_struct.gpu>0)  ? "gpu_" : "";
+    std::string gpu_str = (parser_struct->gpu>0)  ? "gpu_" : "";
     std::string callee = fn + "_" + gpu_str + functional_type + "_" + op_map[Op];
-    if(parser_struct.gpu==0)
+    if(parser_struct->gpu==0)
         return callret(callee, {scope_struct, LHS->codegen(scope_struct)});
     return callret(callee, {LHS->codegen(scope_struct)});
 }
@@ -4009,9 +4068,9 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
 
-    auto linkage = (parser_struct.gpu==2) ? Function::InternalLinkage : Function::ExternalLinkage;
+    auto linkage = (parser_struct->gpu==2) ? Function::InternalLinkage : Function::ExternalLinkage;
 
-    auto llvm_module = (parser_struct.gpu>0) ? PtxModule.get() : TheModule.get();
+    auto llvm_module = (parser_struct->gpu>0) ? PtxModule.get() : TheModule.get();
     Function *F = Function::Create(FT, linkage, lambda_fn, llvm_module);
     unsigned Idx = 0;
     for (auto &Arg : F->args()) {
@@ -4024,7 +4083,7 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
     }
 
     F->addFnAttr(Attribute::AlwaysInline);
-    if (parser_struct.gpu==2) {
+    if (parser_struct->gpu==2) {
         F->setCallingConv(llvm::CallingConv::C);
         F->setDSOLocal(true);
     }
@@ -4072,7 +4131,7 @@ Value *MapitExprAST::codegen(Value *scope_struct) {
     Lambda->codegen(scope_struct);
 
 
-    if(parser_struct.gpu==0)
+    if(parser_struct->gpu==0)
         return callret(fn, {scope_struct, LHS->codegen(scope_struct), getFunction(Lambda->lambda_fn)});
     else 
         return callret(fn, {LHS->codegen(scope_struct), getFunction(Lambda->lambda_fn)});
@@ -4081,10 +4140,10 @@ Value *MapitExprAST::codegen(Value *scope_struct) {
 
 
 
-inline Value *get_smem_offset(Parser_Struct parser_struct, bool &had) {
-    if (function_values[parser_struct.function_name].count("smem_offset")>0) {
+inline Value *get_smem_offset(Parser_Struct *parser_struct, bool &had) {
+    if (function_values[parser_struct->function_name].count("smem_offset")>0) {
         had = true;
-        return function_values[parser_struct.function_name]["smem_offset"];
+        return function_values[parser_struct->function_name]["smem_offset"];
     }
     return const_int(0);
 }
@@ -4108,14 +4167,57 @@ GlobalVariable *get_smem() {
 }
 
 
+std::vector<Value *> LayoutExprAST::GetStrides(Value *ctx) {
+    std::vector<Value *> Strides;
+    Value *acc = const_int(1), *cur_val;
+    bool from_dynamic=false;
+
+
+    for (int i=CArgs.size()-1; i>=0; --i) {
+        auto &carg = CArgs[i];
+        std::string type = carg->dt.Type; 
+        std::string str = carg->name; 
+        auto &expr = carg->expr; 
+
+
+        Strides.insert(Strides.begin(), acc);
+
+        if (type=="int") {
+            cur_val = const_int(std::stoi(str));
+        }
+        else if (type=="str") {
+            if (parser_struct->cvalues.ints.count(str)==0)
+                LogErrorC(parser_struct->line, "Compile time value \"" + str + "\" not found in layout expr");
+            cur_val = const_int(parser_struct->cvalues.ints[str]);
+        }
+        else if (auto stmt = dynamic_cast<Nameable*>(expr.get())) {
+            std::string name = stmt->Name;
+            std::cout << "EXPR " << name << "\n";
+
+            if (parser_struct->cvalues.ints.count(name)==0)  {
+                cur_val = expr->codegen(ctx);
+                from_dynamic = true;
+            } else
+                cur_val = const_int(parser_struct->cvalues.ints[name]);
+            
+        } else {
+            std::cout << "cast failed"  << "\n";
+            LogErrorC(parser_struct->line, "layout get strides does not support nested type " + type);
+        }
+
+        if (!from_dynamic)
+            acc = const_int(get_int(acc) * get_int(cur_val));
+        else
+            acc = Builder->CreateMul(acc, cur_val);
+    }
+    return std::move(Strides);
+}
+
 Value *LayoutExprAST::codegen(Value *scope_struct) {
 
     llvm::Type *ty = get_type_from_data(dt.Nested_Data[0]);
 
-    std::vector<int> strides = GetStrides();
-    for (auto &stride : strides)
-        std::cout << "" << stride << ",";
-    std::cout << "\n";
+    std::vector<Value*> strides = GetStrides(scope_struct);
 
     if (!smem) {
         Value *ptr = Args[0]->codegen(scope_struct);
@@ -4123,28 +4225,25 @@ Value *LayoutExprAST::codegen(Value *scope_struct) {
         Value *offset = const_int(0);
         for (int i=0; i<strides.size(); ++i) {
             offset = Builder->CreateAdd(offset, 
-                            Builder->CreateMul(const_int(strides[i]),
+                            Builder->CreateMul(strides[i],
                                                Args[i+1]->codegen(scope_struct))
                         );
         }
 
         return Builder->CreateGEP(ty, ptr, offset);
     } else {
+        //smem
         bool had = false;
         Value *prev_smem = get_smem_offset(parser_struct, had);
         Value *size = const_int(DimsProd());
         size = Builder->CreateMul(size, const_int(4));
-
-        // uint32_t T_size =
-        // static_cast<uint32_t>(
-        //     PtxModule->getDataLayout().getTypeAllocSize(ty));
 
         llvm::Type *smemTy = ArrayType::get(int8Ty, 0);
         Value *base_smem = get_smem();
 
         Value *smem_gep = Builder->CreateGEP(smemTy, base_smem, {const_int(0), prev_smem});
         Value *new_smem = (had) ? Builder->CreateAdd(prev_smem, size) : size;
-        function_values[parser_struct.function_name]["smem_offset"] = new_smem;
+        function_values[parser_struct->function_name]["smem_offset"] = new_smem;
         return Builder->CreateBitCast(
             smem_gep,
             PointerType::get(ty, 3));
@@ -4214,11 +4313,11 @@ Value *NameableLLVMIRCall::codegen(Value *scope_struct) {
 
 
     if (Callee=="pow"&&target_args_size!=2) {
-        LogErrorS(parser_struct.line, "Function pow expected 2 arguments, but got " + std::to_string(target_args_size));
+        LogErrorS(parser_struct->line, "Function pow expected 2 arguments, but got " + std::to_string(target_args_size));
         return const_float(0);
     }
     if (Callee=="sqrt"&&target_args_size!=1) {
-        LogErrorS(parser_struct.line, "Function sqrt expected 1 argument, but got " + std::to_string(target_args_size));
+        LogErrorS(parser_struct->line, "Function sqrt expected 1 argument, but got " + std::to_string(target_args_size));
         return const_float(0);
     }
 
@@ -4284,37 +4383,38 @@ Value *Nameable::codegen(Value *scope_struct) {
     if(Depth==1) {
         if(IsUnique)
             return RecoverUniqueGlobal(scope_struct, Name);
-        if(Name=="self")
+        if(Name=="self") {
             return get_scope_obj(scope_struct);
+        }
         // buffers
-        if (function_allocas[parser_struct.function_name].count(Name)>0)
-            return function_allocas[parser_struct.function_name][Name]; 
-        if (function_values[parser_struct.function_name].count(Name)>0)
-            return function_values[parser_struct.function_name][Name];
+        if (function_allocas[parser_struct->function_name].count(Name)>0)
+            return function_allocas[parser_struct->function_name][Name]; 
+        if (function_values[parser_struct->function_name].count(Name)>0)
+            return function_values[parser_struct->function_name][Name];
         if (Name=="tid") {
             Value *tid_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 1);
             Value *tid = Builder->CreateSub(Builder->CreateLoad(intTy, tid_gep), const_int(1));
-            function_values[parser_struct.function_name]["tid"] = tid;
+            function_values[parser_struct->function_name]["tid"] = tid;
             return tid;
         }
         if (Name=="tN") {
             Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 7);
             Value *tN = Builder->CreateLoad(intTy, tN_gep);
-            function_values[parser_struct.function_name]["tN"] = tN;
+            function_values[parser_struct->function_name]["tN"] = tN;
             return tN;
         }
         if (Name=="tHW") {
             Value *tHW = callret("tHW_fn", {scope_struct});
-            function_values[parser_struct.function_name]["tHW"] = tHW;
+            function_values[parser_struct->function_name]["tHW"] = tHW;
             return tHW;
         }
         if (Name=="smem_size") {
             Value *smem_size = callret("smem_size_fn", {scope_struct});
-            function_values[parser_struct.function_name]["smem_size"] = smem_size;
+            function_values[parser_struct->function_name]["smem_size"] = smem_size;
             return smem_size;
         }
-        if (parser_struct.cvalues.ints.count(Name)>0)
-            return const_int(parser_struct.cvalues.ints[Name]);
+        if (parser_struct->cvalues.ints.count(Name)>0)
+            return const_int(parser_struct->cvalues.ints[Name]);
         return getFunctionCheck(Name);
     }
 
@@ -4378,7 +4478,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
             if(compound_type=="list")
                 type = "any";
             else
-                return LogErrorV(parser_struct.line, "Missing " + compound_type + " nested type.");
+                return LogErrorV(parser_struct->line, "Missing " + compound_type + " nested type.");
         } else
             type = inner_dt.Nested_Data[0].Type;
     }
@@ -4402,8 +4502,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     if (inner_dt.Type=="layout") {
         llvm::Type *Ty = get_type_from_data(Data_Tree(inner_dt.Nested_Data[0].Type));
         Value *gep = Builder->CreateInBoundsGEP(Ty, loaded_var, idx); //&arr[0]
-        std::cout << "TYYYYYYYYYYYYYYYYYYYYYYYYYY" << "\n";
-        printTy(gep);
         return Builder->CreateLoad(Ty, gep);
     }
 
@@ -4436,7 +4534,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         if (query->getType()==intTy&&key_type=="float")
             query = Builder->CreateSIToFP(query, floatTy);
         else if(Idx->GetDataTree().Type!=key_type)
-            return LogErrorV(parser_struct.line, "Querying " + key_type + " map with " + Idx->GetDataTree().Type);
+            return LogErrorV(parser_struct->line, "Querying " + key_type + " map with " + Idx->GetDataTree().Type);
 
 
         Value *capacity_gep = Builder->CreateStructGEP(st, loaded_var, 1);
@@ -4569,7 +4667,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
         // v[i]
         Check_Is_Array_Inbounds(parser_struct, loaded_var, idx);
-        Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+        Value *vec = Load_Array(parser_struct->function_name, loaded_var);
         Value *element = Builder->CreateGEP(elemTy, vec, idx);
         return Builder->CreateLoad(elemTy, element, "elem"); 
     }
@@ -4578,7 +4676,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     if (TheModule->getFunction(idx_fn))
         return callret(idx_fn, {scope_struct, loaded_var, idx});
 
-    LogError(parser_struct.line, "Could not handle idx expression for " + compound_type);
+    LogError(parser_struct->line, "Could not handle idx expression for " + compound_type);
 }
 
 
@@ -4588,7 +4686,7 @@ Value *PositionalArgExprAST::codegen(Value *scope_struct) {
 
 
 inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> &Args,
-        int target_args_size, Parser_Struct parser_struct) {
+        int target_args_size, Parser_Struct *parser_struct) {
     Function *CalleeF;
     CalleeF = getFunction(Callee);
 
@@ -4597,7 +4695,7 @@ inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_
     if (!CalleeF)
     {
         std::string _error = "The referenced function "+ Callee +" was not yet declared.";
-        LogErrorV(parser_struct.line, _error);
+        LogErrorV(parser_struct->line, _error);
         return false;
     }
 
@@ -4606,7 +4704,7 @@ inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_
     {
         // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
         std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-        LogErrorV(parser_struct.line, _error);
+        LogErrorV(parser_struct->line, _error);
         return false;
     }
     return true;
@@ -4633,7 +4731,7 @@ Value *NameableAppend::codegen(Value *scope_struct) {
 
         StructType *st = struct_types["scope_struct"];
         llvm::Type *elemTy;
-        Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+        Value *vec = Load_Array(parser_struct->function_name, loaded_var);
 
         if (!in_vec(elem_type, primary_data_tokens)) {
             Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
@@ -4689,7 +4787,7 @@ Value *NameableAppend::codegen(Value *scope_struct) {
         //bad size (thus double array size)
         Builder->SetInsertPoint(bad_sizeBB);
         call("array_double_size", {scope_struct, loaded_var}); 
-        vec = Load_Array(parser_struct.function_name, loaded_var);
+        vec = Load_Array(parser_struct->function_name, loaded_var);
         elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
         Builder->CreateStore(appended_val, elem_gep);
         next_vsize = Builder->CreateAdd(vsize, const_int(1));
@@ -4699,7 +4797,7 @@ Value *NameableAppend::codegen(Value *scope_struct) {
 
         //post
         Builder->SetInsertPoint(postBB); 
-        // std::cout << "append post: " << parser_struct.function_name  << " " << postBB << "\n";
+        // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
     } else {
         // std::vector<Value *> ArgsV = {scope_struct, loaded_var};
         std::vector<Value *> ArgsV = {scope_struct, loaded_var, Args[0]->codegen(scope_struct)};
@@ -4723,19 +4821,13 @@ Value *getValAddress(Function *TheFunction, Value *val, Data_Tree dt, int i) {
         return val;
 
     // Needs stack address encapsulation for a register value
-    llvm::Type *Ty = get_type_from_data(dt);
 
-    Value *alloca = CreateEntryBlockAlloca(TheFunction, "args_"+std::to_string(i),
-            Ty);
+    Value *alloca = CreateEntryBlockAlloca(TheFunction,
+                        "args_"+std::to_string(i),
+                        get_type_from_data(dt));
     Builder->CreateStore(val, alloca);
-
-    Value *address = Builder->CreateInBoundsGEP(
-        Ty,
-        alloca,
-        {const_int(0), const_int(0)}
-    );
     
-    return address;
+    return Builder->CreatePointerCast(alloca, int8PtrTy);
 }
 
 
@@ -4808,7 +4900,7 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
             fn_name, false, 0);
 
     if(kernel_fn.count(fn_name)==0)
-        LogErrorC(parser_struct.line, "Kernel " + fn_name + " not found.");
+        LogErrorC(parser_struct->line, "Kernel " + fn_name + " not found.");
     
 
     Value *grid = Grid->codegen(scope_struct);
@@ -4859,7 +4951,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     StructType *st = struct_types["scope_struct"];
     llvm::Type *elemTy;
-    Value *vec = Load_Array(parser_struct.function_name, loaded_var);
+    Value *vec = Load_Array(parser_struct->function_name, loaded_var);
 
     if (!in_vec(elem_type, primary_data_tokens)) {
         Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
@@ -4915,7 +5007,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
     //bad size (thus double array size)
     Builder->SetInsertPoint(bad_sizeBB);
     call("array_double_size", {scope_struct, loaded_var}); 
-    vec = Load_Array(parser_struct.function_name, loaded_var);
+    vec = Load_Array(parser_struct->function_name, loaded_var);
     elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
     Builder->CreateStore(appended_val, elem_gep);
     next_vsize = Builder->CreateAdd(vsize, const_int(1));
@@ -4925,7 +5017,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     //post
     Builder->SetInsertPoint(postBB); 
-    // std::cout << "append post: " << parser_struct.function_name  << " " << postBB << "\n";
+    // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
 
     return const_int(0);
 }
@@ -4950,18 +5042,18 @@ Value *NameableCall::codegen(Value *scope_struct) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
 
-        previous_stack_top = Load_Stack_Top(parser_struct.function_name);
-        // if (!in_vec(parser_struct.function_name, {"BPE_train", "BPE_get_buff", "BPE_get_masks"})) {
+        previous_stack_top = Load_Stack_Top(parser_struct->function_name);
+        // if (!in_vec(parser_struct->function_name, {"BPE_train", "BPE_get_buff", "BPE_get_masks"})) {
         //     p2t("----------------");
-        //     Value *stack_top_value = function_values[parser_struct.function_name]["QQ_stack_top"];
-        //     Value *offset =const_int(fn_stack_offset[parser_struct.function_name]);
-        //     p2t("load as " + parser_struct.function_name + " to " + Callee);
+        //     Value *stack_top_value = function_values[parser_struct->function_name]["QQ_stack_top"];
+        //     Value *offset =const_int(fn_stack_offset[parser_struct->function_name]);
+        //     p2t("load as " + parser_struct->function_name + " to " + Callee);
         //     call("print_int", {previous_stack_top});
         //     call("print_int", {stack_top_value});
         //     call("print_int", {offset});
         //     p2t("----------------");
         // }
-        Set_Stack_Top(scope_struct, parser_struct.function_name);
+        Set_Stack_Top(scope_struct, parser_struct->function_name);
     }
 
     std::vector<Value*> ArgsV = {scope_struct};
@@ -4996,7 +5088,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
                 Builder->CreateCondBr(Builder->CreateICmpEQ(obj_ptr, nullPtr), GotNullBB, AfterBB);  
 
                 Builder->SetInsertPoint(GotNullBB);
-                call("LogErrorCall", {const_int(parser_struct.line), global_str("Could not call " + Callee + ", got a nullptr as object")});
+                call("LogErrorCall", {const_int(parser_struct->line), global_str("Could not call " + Callee + ", got a nullptr as object")});
                 Builder->CreateUnreachable();
 
                 Builder->SetInsertPoint(AfterBB);
@@ -5057,7 +5149,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if (has_obj_overwrite) // Retrieve previous object
     set_scope_obj(scope_struct, previous_obj);
   if (may_allocate)
-      Set_Stack_Top(scope_struct, parser_struct.function_name);
+      Set_Stack_Top(scope_struct, parser_struct->function_name);
   
 
   // if(ReturnType=="")

@@ -8,19 +8,19 @@
 std::map<std::string, StructType*> struct_types;
 std::unordered_map<std::string, int> struct_type_size;
 
-std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, std::string, std::string, Data_Tree, Value*, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&)>> struct_create_fn;
+std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, std::string, std::string, Data_Tree, Value*, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&)>> struct_create_fn;
 
-std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function *, std::string, Data_Tree, std::vector<Data_Tree>&, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&)>> llvm_callee;
+std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function *, std::string, Data_Tree, std::vector<Data_Tree>&, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&)>> llvm_callee;
 
 
-std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, 
+std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, 
                                                        Data_Tree, Data_Tree,
                                                        std::unique_ptr<ExprAST>&,
                                                        std::unique_ptr<ExprAST>&,
                                                        Value*,
                                                        Value*, Value*)>> llvm_data_ops;
 
-std::unordered_map<std::string, std::function<Value*(Parser_Struct, Function*, 
+std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, 
                                                        Data_Tree, Data_Tree,
                                                        std::unique_ptr<ExprAST>&,
                                                        std::unique_ptr<ExprAST>&,

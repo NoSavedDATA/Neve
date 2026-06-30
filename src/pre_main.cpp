@@ -106,7 +106,7 @@ std::vector<char *> glob_str_files;
 //===----------------------------------------------------------------------===//
 
 void HandleExtern() {
-  Parser_Struct parser_struct;
+  Parser_Struct *parser_struct = new Parser_Struct();
   if (auto ProtoAST = ParseExtern(parser_struct)) {
     if (auto *FnIR = ProtoAST->codegen()) {
       fprintf(stderr, "Read extern: ");
@@ -121,17 +121,17 @@ void HandleExtern() {
 }
 
 void HandleProto() {
-  Parser_Struct parser_struct;
+  Parser_Struct *parser_struct = new Parser_Struct();
   ParseProtoExpr(parser_struct, "");
 }
 void HandleOp() {
-  Parser_Struct parser_struct;
+  Parser_Struct *parser_struct = new Parser_Struct();
   ParseOpExpr(parser_struct, "");
 }
 
 void HandleDefinition() {
   
-  Parser_Struct parser_struct;
+  Parser_Struct *parser_struct = new Parser_Struct();
   if (auto FnAST = ParseDefinition(parser_struct)) {
 
     FunctionProtos[FnAST->getProto().getName()] =
@@ -150,8 +150,8 @@ void HandleDefinition() {
 
 
 void HandleGpuDef() {
-  Parser_Struct parser_struct;
-  parser_struct.gpu=(CurTok==tok_kernel) ? 1 : 2;
+  Parser_Struct *parser_struct = new Parser_Struct();
+  parser_struct->gpu=(CurTok==tok_kernel) ? 1 : 2;
 
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
@@ -171,14 +171,14 @@ void HandleGpuDef() {
 }
 
 void HandleImport() {
-    Parser_Struct parser_struct;
-    parser_struct.line = tokenizer->Line;
+    Parser_Struct *parser_struct = new Parser_Struct();
+    parser_struct->line = tokenizer->Line;
     ParseImport(parser_struct);
 }
 
 void HandleClass() {
-    Parser_Struct parser_struct;
-    parser_struct.line = tokenizer->Line;
+    Parser_Struct *parser_struct = new Parser_Struct();
+    parser_struct->line = tokenizer->Line;
     ParseClass(parser_struct);
 }
 
@@ -214,8 +214,8 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 
 void HandleTopLevelExpression() {
   
-  Parser_Struct parser_struct;
-  parser_struct.function_name = "__anon_expr";
+  Parser_Struct *parser_struct = new Parser_Struct();
+  parser_struct->function_name = "__anon_expr";
 
   if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr(parser_struct)) {
     CodegenTopLevelExpression(std::ref(FnAST));	

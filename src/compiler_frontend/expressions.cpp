@@ -111,96 +111,6 @@ bool ExprAST::GetIsList() {
   return isList;
 }
 
-void ExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-}
-void BinaryExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    LHS->SetCValues(parser_struct);
-    RHS->SetCValues(parser_struct);
-}
-void UnkVarExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Notes)
-        expr->SetCValues(parser_struct);
-    for (auto &pair : VarNames) {
-        pair.second->SetCValues(parser_struct);
-    }
-}
-void DataExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Notes)
-        expr->SetCValues(parser_struct);
-    for (auto &pair : VarNames) {
-        pair.second->SetCValues(parser_struct);
-    }
-}
-void IfExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Then)
-        expr->SetCValues(parser_struct);
-    for (auto &expr : Else)
-        expr->SetCValues(parser_struct);
-}
-void ForExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    Start->SetCValues(parser_struct);
-    End->SetCValues(parser_struct);
-    Step->SetCValues(parser_struct);
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void ForEachExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    Vec->SetCValues(parser_struct);
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void WhileExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void AsyncsExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void AsyncExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void SpawnExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Body)
-        expr->SetCValues(parser_struct);
-}
-void FinishExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Bodies)
-        expr->SetCValues(parser_struct);
-}
-void LockExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    for (auto &expr : Bodies)
-        expr->SetCValues(parser_struct);
-}
-void UnaryExprAST::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    Operand->SetCValues(parser_struct);
-}
-void Nameable::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    if (Inner)
-        Inner->SetCValues(parser_struct);
-}
-void NameableIdx::SetCValues(Parser_Struct parser_struct) {
-    this->parser_struct.cvalues = parser_struct.cvalues;
-    if (Inner)
-        Inner->SetCValues(parser_struct);
-    Idx->SetCValues(parser_struct);
-}
 
 bool ExprAST::GetNeedGCSafePoint() {
     return false;
@@ -216,15 +126,51 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
 // }
  
 
+void ExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void ForExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void ForEachExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void WhileExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void AsyncExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void AsyncsExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+void SpawnExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body)
+        expr->parser_struct->cvalues = parser_struct->cvalues;
+}
+
+void AsyncFnPriorExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->cvalues = parser_struct->cvalues;
+}
 
 
-
-
-
-
-
-
-inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
+inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
                                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                                   std::string fn_name,
                                                   bool is_nsk_fn, int sent_args, int arg_offset=1) {
@@ -233,7 +179,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
   if (Function_Required_Arg_Count.count(fn_name)>0) {
       if (sent_args<Function_Required_Arg_Count[fn_name] && !is_vararg)
-          LogErrorS(parser_struct.line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
+          LogErrorS(parser_struct->line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
   }
 
   // -- Required Arguments -- //
@@ -248,11 +194,11 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
 
     if(Function_Arg_Names.count(fn_name)==0) {
-        LogErrorS(parser_struct.line, "Function " + fn_name + " does not require arguments.");
+        LogErrorS(parser_struct->line, "Function " + fn_name + " does not require arguments.");
         return;
     }
     if(tgt_arg>=Function_Arg_Names[fn_name].size()) {
-        LogErrorS(parser_struct.line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(Function_Arg_Names[fn_name].size()));
+        LogErrorS(parser_struct->line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(Function_Arg_Names[fn_name].size()));
         return;
     }
 
@@ -264,7 +210,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
 
         int differences = expected_data_type.Compare(data_type);
         if (differences>0) { 
-          LogErrorS(parser_struct.line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ".");
+          LogErrorS(parser_struct->line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ".");
           std::cout << "Expected\n   ";
           expected_data_type.Print();
           std::cout << "\nPassed\n   ";
@@ -284,7 +230,7 @@ inline void Semantic_Arguments_Check(Parser_Struct parser_struct,
       for (; i<Args.size(); ++i) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg)
-            LogErrorS(parser_struct.line, "Standard argument followed by positional argument.");
+            LogErrorS(parser_struct->line, "Standard argument followed by positional argument.");
       }
   }
 }
@@ -308,7 +254,7 @@ Data_Tree ConstExprAST::GetDataTree(bool from_assignment) {
     return Data_Tree("int");
 }
 
-ConstExprAST::ConstExprAST(Parser_Struct parser_struct, std::string str) : str(str) {
+ConstExprAST::ConstExprAST(Parser_Struct *parser_struct, std::string str) : str(str) {
     this->parser_struct = parser_struct;
 } 
 
@@ -400,7 +346,7 @@ NewVecExprAST::NewVecExprAST(
 NewDictExprAST::NewDictExprAST(
     std::vector<std::unique_ptr<ExprAST>> Keys,
     std::vector<std::unique_ptr<ExprAST>> Values,
-    std::string Type, Parser_Struct parser_struct)
+    std::string Type, Parser_Struct *parser_struct)
     : Keys(std::move(Keys)), Values(std::move(Values)), Type(Type)
 {
   this->SetType(Type);
@@ -417,7 +363,7 @@ void ObjectExprAST::Checks() {
 }
 
 ObjectExprAST::ObjectExprAST(
-    Parser_Struct parser_struct,
+    Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::vector<bool> HasInit,
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
@@ -464,7 +410,7 @@ EmptyStrExprAST::EmptyStrExprAST() {
   height=0;
 }
 
-NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
+NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct *parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
                                         :  Idx(std::move(Idx)) {
   this->parser_struct = parser_struct;
   this->Inner_Expr = std::move(Inner_Expr);
@@ -481,13 +427,13 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
 
 
 
-NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
+NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct *parser_struct,
   std::vector<std::unique_ptr<ExprAST>> Args)
   : Inner_Expr(std::move(Inner_Expr)), Callee(Callee), Args(std::move(Args)) {
 }
 
 
-NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct parser_struct, std::string type, Data_Tree data_type)
+NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct *parser_struct, std::string type, Data_Tree data_type)
       : Inner_Expr(std::move(Inner_Expr)) {
   this->SetType(type);
 
@@ -508,23 +454,19 @@ void UnkVarExprAST::Checks() {
       dt = dt.Nested_Data[0];
     }
         
-    // if (Object_toClass[parser_struct.function_name].count(VarName)>0\
-    //   ||data_typeVars[parser_struct.function_name].count(VarName)>0) {
-    //     LogErrorS(parser_struct.line, "Redefinition of " + VarName);
+    // if (Object_toClass[parser_struct->function_name].count(VarName)>0\
+    //   ||data_typeVars[parser_struct->function_name].count(VarName)>0) {
+    //     LogErrorS(parser_struct->line, "Redefinition of " + VarName);
     //     continue;
     // }
 
-    if (dt.Type=="layout") {
-        std::cout << "UnkVar " << VarName << " got" << "\n";
-        dt.Print();
-    }
 
-    data_typeVars[parser_struct.function_name][VarName] = dt;
+    data_typeVars[parser_struct->function_name][VarName] = dt;
   }
 }
 
 UnkVarExprAST::UnkVarExprAST(
-  Parser_Struct parser_struct,
+  Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   std::vector<std::unique_ptr<ExprAST>> Notes)
@@ -539,7 +481,7 @@ bool UnkVarExprAST::GetNeedGCSafePoint() {
 
 
 TupleExprAST::TupleExprAST(
-  Parser_Struct parser_struct,
+  Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
@@ -556,12 +498,12 @@ TupleExprAST::TupleExprAST(
     if(this->Type=="tuple")
       Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
     
-    data_typeVars[parser_struct.function_name][VarName] = data_type;
+    data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
 }
 
 ListExprAST::ListExprAST(
-  Parser_Struct parser_struct,
+  Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
@@ -576,12 +518,12 @@ ListExprAST::ListExprAST(
     
     Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
     
-    data_typeVars[parser_struct.function_name][VarName] = data_type;
+    data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
 }
 
 DictExprAST::DictExprAST(
-  Parser_Struct parser_struct,
+  Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
@@ -597,7 +539,7 @@ DictExprAST::DictExprAST(
     
     Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
     
-    data_typeVars[parser_struct.function_name][VarName] = data_type;
+    data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
 }
 
@@ -616,14 +558,14 @@ void DataExprAST::Checks() {
     Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct);
 
     // if (!HasNotes&&\
-    //     (Object_toClass[parser_struct.function_name].count(VarName)>0||\
-    //      data_typeVars[parser_struct.function_name].count(VarName)>0)) {
-    //     LogErrorS(parser_struct.line, "Redefinition of " +  VarName);
+    //     (Object_toClass[parser_struct->function_name].count(VarName)>0||\
+    //      data_typeVars[parser_struct->function_name].count(VarName)>0)) {
+    //     LogErrorS(parser_struct->line, "Redefinition of " +  VarName);
     //     continue;
     // }
 
-    data_typeVars[parser_struct.function_name][VarName] = data_type;
-    typeVars[parser_struct.function_name][IdentifierStr] = data_type.Type;
+    data_typeVars[parser_struct->function_name][VarName] = data_type;
+    typeVars[parser_struct->function_name][IdentifierStr] = data_type.Type;
 
 
     create_fn = this->Type;
@@ -642,7 +584,7 @@ void DataExprAST::Checks() {
 }
   
 DataExprAST::DataExprAST(
-  Parser_Struct parser_struct,
+  Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type, Data_Tree data_type, bool HasNotes, bool IsStruct,
   std::vector<std::unique_ptr<ExprAST>> Notes)
@@ -654,11 +596,11 @@ DataExprAST::DataExprAST(
   if(data_type.Type=="charv") {      
       int size;
       if(this->Notes.size()<1)
-            LogErrorS(parser_struct.line, "charv requires size argument");
+            LogErrorS(parser_struct->line, "charv requires size argument");
       if (auto num_expr = dynamic_cast<IntExprAST*>(this->Notes[0].get()))
             size = num_expr->Val;
       else
-            LogErrorS(parser_struct.line, "charv size must be int");
+            LogErrorS(parser_struct->line, "charv size must be int");
 
       data_type.Nested_Data.push_back(Data_Tree(std::to_string(size)));
   }
@@ -680,7 +622,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
     if (functions_return_data_type.count(Callee)==0) {
         Callee = DataName + "___init__";
         if (Classes.count(DataName)==0)
-            LogErrorS(parser_struct.line, "New not implemented for data type " + DataName);
+            LogErrorS(parser_struct->line, "New not implemented for data type " + DataName);
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
         return data_type;
@@ -692,7 +634,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
     return new_dt;
 }
 
-NewExprAST::NewExprAST(Parser_Struct parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
+NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
             : DataName(DataName), Args(std::move(Args)) {
     this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
@@ -703,7 +645,7 @@ bool NewExprAST::GetNeedGCSafePoint() {
     return true;
 }
 
-LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
+LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct *parser_struct)
   : LibName(LibName), IsDefault(IsDefault) {
 
   this->parser_struct = parser_struct;
@@ -748,7 +690,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 
 
     if(!(has_nv||has_so_lib))
-      LogErrorS(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .nv or lib.so file.");
+      LogErrorS(parser_struct->line, "Failed to import library: " + LibName + ".\n\t    Could not find .nv or lib.so file.");
     else
       imported_libs.push_back(LibName);
   }
@@ -798,7 +740,7 @@ Data_Tree ReduceExprAST::GetDataTree(bool from_assignment) {
 }
   
   
-ReduceExprAST::ReduceExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS,
+ReduceExprAST::ReduceExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS,
                              char Op, std::string functional_type)
             : LHS(std::move(LHS)),
               Op(Op), functional_type(functional_type) {
@@ -808,7 +750,7 @@ ReduceExprAST::ReduceExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAS
   
   
   
-LambdaExprAST::LambdaExprAST(Parser_Struct parser_struct, std::string lambda_fn, std::vector<std::string> Args)
+LambdaExprAST::LambdaExprAST(Parser_Struct *parser_struct, std::string lambda_fn, std::vector<std::string> Args)
     : lambda_fn(lambda_fn), Args(std::move(Args)) {
     this->parser_struct = parser_struct;
 }
@@ -819,7 +761,7 @@ Data_Tree MapitExprAST::GetDataTree(bool from_assignment) {
     return LHS->GetDataTree();
 }
 
-MapitExprAST::MapitExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
+MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
     : LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
     this->parser_struct = parser_struct;
 
@@ -828,7 +770,7 @@ MapitExprAST::MapitExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST>
     
 
     int first_idx;
-    if (parser_struct.gpu>0)
+    if (parser_struct->gpu>0)
         first_idx = 0;
     else {
         first_idx = 1;
@@ -851,7 +793,7 @@ MapitExprAST::MapitExprAST(Parser_Struct parser_struct, std::unique_ptr<ExprAST>
         data_typeVars[scope][this->Lambda->Args[first_idx]] = dt.Nested_Data[1];
     }
     
-    std::string gpu_str = (parser_struct.gpu>0) ? "_gpu" : "";
+    std::string gpu_str = (parser_struct->gpu>0) ? "_gpu" : "";
     fn+=gpu_str+"_mapit";
 }
   
@@ -861,11 +803,9 @@ Data_Tree LayoutExprAST::GetDataTree(bool) {
     dt = Data_Tree("layout");
     dt.Nested_Data.push_back(Data_Tree(data_type_to_name()[type]));
     for (int i=0; i<CArgs.size(); ++i) {
-        // if (auto stmt = dynamic_cast<IntExprAST>(CArgs[i].get())) {
-        //     std::cout << "As INT" << "\n";
-        //     dt.Nested_Data.push_back(Data_Tree(std::to_string(stmt->Val)));
-        // }
-        dt.Nested_Data.push_back(Data_Tree(CArgs[i].name));
+        auto &expr = CArgs[i]->expr;
+        std::string name = (expr) ? CArgs[i]->expr->Name : CArgs[i]->name;
+        dt.Nested_Data.push_back(Data_Tree(name));
     }
     return dt;
 }
@@ -875,53 +815,40 @@ int LayoutExprAST::DimsProd() {
 
     int prod=1;
     for (int i=CArgs.size()-1; i>=0; --i) {
-        auto carg = CArgs[i];
-        std::string type = carg.dt.Type; 
-        std::string str = carg.name; 
+        auto &carg = CArgs[i];
+        std::string type = carg->dt.Type; 
+        std::string str = carg->name; 
+        auto &expr = carg->expr; 
 
 
         if (type=="int")
             prod *= std::stoi(str);
-        else if (type=="string") {
-
-            if (parser_struct.cvalues.ints.count(str)==0)
-                LogErrorC(parser_struct.line, "Compile time value \"" + str + "\" not found in layout expr");
+        else if (auto stmt = dynamic_cast<Nameable*>(expr.get())) {
+            std::string name = expr->Name;
+            if (parser_struct->cvalues.ints.count(name)==0)
+                LogErrorC(parser_struct->line, "(dims prod) compile time value \"" + name + "\" not found in layout expr");
             
-            prod *= parser_struct.cvalues.ints[str];
+            prod *= parser_struct->cvalues.ints[name];
+
+        }
+        else if (type=="str") {
+            if (parser_struct->cvalues.ints.count(str)==0)
+                LogErrorC(parser_struct->line, "Compile time value \"" + str + "\" not found in layout expr");
+            
+            prod *= parser_struct->cvalues.ints[str];
         } else
-            LogErrorC(parser_struct.line, "layout does not support nested type " + type);
+            LogErrorC(parser_struct->line, "layout does not support nested type " + type);
     }
+    std::cout << "dims prod" << "\n";
+    for (auto &p : parser_struct->cvalues.ints)
+        std::cout << "" << p.first << "\n";
     return prod;
 
 }
 
-std::vector<int> LayoutExprAST::GetStrides() {
-    std::vector<int> Strides;
-    int acc=1;
 
-    for (int i=CArgs.size()-1; i>=0; --i) {
-        auto carg = CArgs[i];
-        std::string type = carg.dt.Type; 
-        std::string str = carg.name; 
-
-
-        Strides.insert(Strides.begin(), acc);
-        if (type=="int")
-            acc *= std::stoi(str);
-        else if (type=="string") {
-
-            if (parser_struct.cvalues.ints.count(str)==0)
-                LogErrorC(parser_struct.line, "Compile time value \"" + str + "\" not found in layout expr");
-            
-            acc *= parser_struct.cvalues.ints[str];
-        } else
-            LogErrorC(parser_struct.line, "layout does not support nested type " + type);
-    }
-    return std::move(Strides);
-}
-
-LayoutExprAST::LayoutExprAST(Parser_Struct parser_struct, uint16_t type,
-        std::vector<CompiledArgs> CArgs, std::vector<std::unique_ptr<ExprAST>> Args, bool smem) 
+LayoutExprAST::LayoutExprAST(Parser_Struct *parser_struct, uint16_t type,
+        std::vector<std::unique_ptr<CompiledArgs>> CArgs, std::vector<std::unique_ptr<ExprAST>> Args, bool smem) 
     : type(type), CArgs(std::move(CArgs)),
       Args(std::move(Args)), smem(smem) {
     this->parser_struct = parser_struct;
@@ -929,7 +856,7 @@ LayoutExprAST::LayoutExprAST(Parser_Struct parser_struct, uint16_t type,
 }
 
 
-FnCompiledValues HandleCompiledArgs(Parser_Struct parser_struct, std::string fn_name, FnCompiledValuesVec CompiledArgsVec) {
+FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct, std::string fn_name, FnCompiledValuesVec CompiledArgsVec) {
 
     FnCompiledValues fn_compiled_values; 
     if (Fn_Compiled_Args.count(fn_name)==0) {
@@ -937,13 +864,13 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct parser_struct, std::string fn_
         return fn_compiled_values;
     }
 
-    std::vector<CompiledArgs> compiled_args = Fn_Compiled_Args[fn_name];
+    auto compiled_args = &Fn_Compiled_Args[fn_name];
     
     int last_int=0, last_float=0, last_string=0;
     
-    for (auto &arg : compiled_args) {
-        std::string type = arg.dt.Type;
-        std::string name = arg.name;
+    for (auto &arg : *compiled_args) {
+        std::string type = arg->dt.Type;
+        std::string name = arg->name;
         if (type=="int")
             fn_compiled_values.ints[name] = CompiledArgsVec.ints[last_int++];
         else
@@ -957,7 +884,7 @@ void LaunchExprAST::Checks() {
     Semantic_Arguments_Check(parser_struct, Args, fn_name, false, Args.size(), 0);
 }
 
-LaunchExprAST::LaunchExprAST(Parser_Struct, std::unique_ptr<ExprAST> Grid,
+LaunchExprAST::LaunchExprAST(Parser_Struct*, std::unique_ptr<ExprAST> Grid,
         std::unique_ptr<ExprAST> Block,
         std::unique_ptr<ExprAST> Smem,
         std::unique_ptr<ExprAST> Stream,
@@ -995,7 +922,7 @@ Data_Tree UnaryExprAST::GetDataTree(bool from_assignment) {
 
 
   /// UnaryExprAST - Expression class for a unary operator.
-UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
+UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct *parser_struct)
     : Opcode(Opcode), Operand(std::move(Operand)) {
   this->parser_struct = parser_struct;
 }
@@ -1021,7 +948,7 @@ inline void correspondTemplateType(Data_Tree &arg_dt, Data_Tree &sent_dt,
     }
 }
 
-inline void buildTemplateOpCorrespondence(Parser_Struct parser_struct,
+inline void buildTemplateOpCorrespondence(Parser_Struct *parser_struct,
         std::string op, Data_Tree &dt, Data_Tree &L_dt, Data_Tree &R_dt,
         std::map<std::string, std::string> &ret_map) {
 
@@ -1039,8 +966,9 @@ inline void buildTemplateOpCorrespondence(Parser_Struct parser_struct,
     }
 }
 
-Data_Tree SolveTemplateOpDt(Parser_Struct parser_struct,
+Data_Tree SolveTemplateOpDt(Parser_Struct *parser_struct,
         std::string op, Data_Tree dt, Data_Tree L_dt, Data_Tree R_dt) {
+
 
     std::map<std::string, std::string> ret_map;
     
@@ -1060,11 +988,10 @@ Data_Tree SolveTemplateOpDt(Parser_Struct parser_struct,
             else {
                 std::string correspondent = ret_map[type];
                 if (!is_number(correspondent))
-                    correspondent = std::to_string(parser_struct.cvalues.ints[correspondent]);
+                    correspondent = std::to_string(parser_struct->cvalues.ints[correspondent]);
                 ret_dt.Nested_Data.push_back(
                         Data_Tree(correspondent)
                     );
-                std::cout << "OP : " << op << " / " << type << " - " << correspondent << "\n";
                 data_typeVars[op][type] = Data_Tree("int");
             }
         }
@@ -1088,7 +1015,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     RType = "channel";
 
   if ((LType=="list"||RType=="list") && Op!='=')
-    LogErrorS(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
+    LogErrorS(parser_struct->line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
 
   if (LType=="char")
       LType = "i8";
@@ -1124,12 +1051,12 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     RType = "buffer_"+RType;
   if (L_dt.Type=="layout") {
     if (L_dt.Nested_Data.size()==0)
-        LogErrorC(parser_struct.line, "Op " + operation + " with unspecialized layout");
+        LogErrorC(parser_struct->line, "Op " + operation + " with unspecialized layout");
     LType = "layout_"+L_dt.Nested_Data[0].Type;
   }
   if (R_dt.Type=="layout") {
     if (R_dt.Nested_Data.size()==0)
-        LogErrorC(parser_struct.line, "Op " + operation + " with unspecialized layout");
+        LogErrorC(parser_struct->line, "Op " + operation + " with unspecialized layout");
     RType = "layout_"+R_dt.Nested_Data[0].Type;
   }
 
@@ -1192,15 +1119,15 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     type = elements_type_return[Elements];
   else {
       if (Op!='=')
-          LogErrorS(parser_struct.line, "Operation function " + Operation + " not found.");
+          LogErrorS(parser_struct->line, "Operation function " + Operation + " not found.");
   }
 
   return Data_Tree(type);
 }
 
-bool IsPositionalArg(Parser_Struct parser_struct, std::string name) {
-    if (ArgsInit.count(parser_struct.parse_fn)>0) {
-        if (ArgsInit[parser_struct.parse_fn].count(name)> 0)
+bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
+    if (ArgsInit.count(parser_struct->parse_fn)>0) {
+        if (ArgsInit[parser_struct->parse_fn].count(name)> 0)
             return true;
     }
     return false;
@@ -1229,17 +1156,17 @@ void BinaryExprAST::Checks() {
 
     // ch <-
     if(Op==tok_arrow) {
-      if(ChannelDirections[parser_struct.function_name].count(this->RHS->GetName())==0)
-        LogErrorS(parser_struct.line, "Could not find channel " + this->RHS->GetName());
-      if(ChannelDirections[parser_struct.function_name][this->RHS->GetName()]==ch_receiver)
-        LogErrorS(parser_struct.line, "Trying to unpack data from a receiver only channel.");
+      if(ChannelDirections[parser_struct->function_name].count(this->RHS->GetName())==0)
+        LogErrorS(parser_struct->line, "Could not find channel " + this->RHS->GetName());
+      if(ChannelDirections[parser_struct->function_name][this->RHS->GetName()]==ch_receiver)
+        LogErrorS(parser_struct->line, "Trying to unpack data from a receiver only channel.");
       
       // todo: test this
       // if (!in_str(LType, primary_data_tokens) && !is_high_lvl_obj) {
       //     std::string copy_fn = LType + "_Copy";
       //     Function *F = TheModule->getFunction(copy_fn);
       //     if (!F) 
-      //         return LogErrorV(parser_struct.line, "Tried to use channel operation for " + \
+      //         return LogErrorV(parser_struct->line, "Tried to use channel operation for " + \
       //                                               LType + ", but this data type has no Copy implementation.");
       // }
     }
@@ -1263,7 +1190,7 @@ void BinaryExprAST::Checks() {
 
             if (!(query_type=="int"&&key_type=="float")&&\
                   query_type!=key_type)
-                    LogErrorS(parser_struct.line, "Querying " + key_type + " map with " + LHSV->Idx->GetDataTree().Type);
+                    LogErrorS(parser_struct->line, "Querying " + key_type + " map with " + LHSV->Idx->GetDataTree().Type);
         }
 
         // arr[x] = y
@@ -1275,8 +1202,8 @@ void BinaryExprAST::Checks() {
     else if(!this->LHS->GetSelf()&&!this->LHS->GetIsAttribute()) {
       Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
 
-      if (data_typeVars[parser_struct.function_name].count(Lname)==0)
-          LogErrorS(parser_struct.line, "Variable " + Lname + " not yet declared");
+      if (data_typeVars[parser_struct->function_name].count(Lname)==0)
+          LogErrorS(parser_struct->line, "Variable " + Lname + " not yet declared");
       
     } else
         Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
@@ -1295,7 +1222,7 @@ void BinaryExprAST::Checks() {
 
 
 BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct)
+              std::unique_ptr<ExprAST> RHS, Parser_Struct *parser_struct)
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
   this->parser_struct = parser_struct;
 }
@@ -1319,7 +1246,7 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
 
 void RetExprAST::Checks() {
-    return_expected_type = functions_return_data_type[parser_struct.function_name];
+    return_expected_type = functions_return_data_type[parser_struct->function_name];
 
     if (this->Vars.size()==1) {
         returning_type = this->Vars[0]->GetDataTree();
@@ -1330,7 +1257,7 @@ void RetExprAST::Checks() {
 }
 
 
-RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct parser_struct)
+RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct *parser_struct)
     : Vars(std::move(Vars)) {
     this->parser_struct = parser_struct;
 }
@@ -1338,7 +1265,7 @@ RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct
   
 fn_descriptor::fn_descriptor(const std::string &Name, const std::string &Return) : Name(Name), Return(Return) {}
 
-ClassExprAST::ClassExprAST(Parser_Struct parser_struct, const std::string &Name, const std::vector<fn_descriptor> &Functions)
+ClassExprAST::ClassExprAST(Parser_Struct *parser_struct, const std::string &Name, const std::vector<fn_descriptor> &Functions)
   : Name(Name), Functions(Functions) {
     this->parser_struct = parser_struct;
 }
@@ -1385,27 +1312,27 @@ ClassExprAST::ClassExprAST(Parser_Struct parser_struct, const std::string &Name,
 //   return j;
 // }
   
-GCSafePointExprAST::GCSafePointExprAST(Parser_Struct parser_struct) {
+GCSafePointExprAST::GCSafePointExprAST(Parser_Struct *parser_struct) {
   this->parser_struct = parser_struct;
 }
   
 void ForExprAST::Checks() {
-  typeVars[parser_struct.function_name][VarName] = Start->GetDataTree().Type;
-  data_typeVars[parser_struct.function_name][VarName] = Start->GetDataTree();
+  typeVars[parser_struct->function_name][VarName] = Start->GetDataTree().Type;
+  data_typeVars[parser_struct->function_name][VarName] = Start->GetDataTree();
 }
 
 void ForEachExprAST::Checks() {
   data_type = Vec->GetDataTree();
   if(data_type.Nested_Data.size()==0) {
-    LogError(parser_struct.line, "Using a non-compound data type at a \"for in\" expression.");
+    LogError(parser_struct->line, "Using a non-compound data type at a \"for in\" expression.");
     data_type.Print();
   }
-  data_typeVars[parser_struct.function_name][VarName] = data_type.Nested_Data[0];
+  data_typeVars[parser_struct->function_name][VarName] = data_type.Nested_Data[0];
   Type = data_type.Nested_Data[0].Type;
 }
   
   /// IfExprAST - Expression class for if/then/else.
-IfExprAST::IfExprAST(Parser_Struct parser_struct,
+IfExprAST::IfExprAST(Parser_Struct *parser_struct,
           std::unique_ptr<ExprAST> Cond,
           std::vector<std::unique_ptr<ExprAST>> Then,
           std::vector<std::unique_ptr<ExprAST>> Else)
@@ -1417,7 +1344,7 @@ IfExprAST::IfExprAST(Parser_Struct parser_struct,
 /// ForExprAST - Expression class for for.
 ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
           std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
       Step(std::move(Step)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
@@ -1427,17 +1354,17 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
 /// ForExprAST - Expression class for for.
 ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
     : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
     this->data_type = data_type;
-    typeVars[parser_struct.function_name][VarName] = "foreach_control_var";
+    typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
 }
 
 
   
   /// WhileExprAST - Expression class for while.
-WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
   : Cond(std::move(Cond)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
 }
@@ -1458,7 +1385,7 @@ Data_Tree IndexExprAST::GetDataTree(bool from_assignment) {
 
 ExitCheckExprAST::ExitCheckExprAST() {}
 
-ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type,
+ChannelExprAST::ChannelExprAST(Parser_Struct *parser_struct, Data_Tree data_type,
                                std::string Name, bool isSelf) {
   this->parser_struct = parser_struct;
   this->data_type = data_type;
@@ -1466,7 +1393,7 @@ ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type,
   this->isSelf = isSelf;
 }
 
-SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)) {
+SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct) : Body(std::move(Body)) {
   this->parser_struct = parser_struct;
 }
 
@@ -1474,40 +1401,40 @@ SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_St
 AsyncFnPriorExprAST::AsyncFnPriorExprAST() {}
   
 void AsyncExprAST::Checks() {
-  std::string async_scope = parser_struct.function_name + "_async";
-  for (auto pair : typeVars[parser_struct.function_name])
+  std::string async_scope = parser_struct->function_name + "_async";
+  for (auto pair : typeVars[parser_struct->function_name])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct.function_name])
+  for (auto pair : data_typeVars[parser_struct->function_name])
     data_typeVars[async_scope][pair.first] = pair.second;
 }
 
 void SpawnExprAST::Checks() {
-  std::string async_scope = parser_struct.function_name + "_spawn";
-  for (auto pair : typeVars[parser_struct.function_name])
+  std::string async_scope = parser_struct->function_name + "_spawn";
+  for (auto pair : typeVars[parser_struct->function_name])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct.function_name])
+  for (auto pair : data_typeVars[parser_struct->function_name])
     data_typeVars[async_scope][pair.first] = pair.second;
 }
 
 void AsyncsExprAST::Checks() {
-  std::string async_scope = parser_struct.function_name + "_asyncs";
-  for (auto pair : typeVars[parser_struct.function_name])
+  std::string async_scope = parser_struct->function_name + "_asyncs";
+  for (auto pair : typeVars[parser_struct->function_name])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct.function_name])
+  for (auto pair : data_typeVars[parser_struct->function_name])
     data_typeVars[async_scope][pair.first] = pair.second;
 
   std::string type = this->Count->GetDataTree().Type;
   if (!in_vec(type, int_types))
-    LogErrorC(parser_struct.line, "asyncs count must be int. Got " + type);
+    LogErrorC(parser_struct->line, "asyncs count must be int. Got " + type);
 }
 
   /// AsyncExprAST - Expression class for async.
-AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
   : Body(std::move(Body)) {
     this->parser_struct = parser_struct;
 }
   
-AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct parser_struct)
+AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct *parser_struct)
   : Body(std::move(Body)), Count(std::move(Count)) {
     this->parser_struct = parser_struct;
 }
@@ -1554,7 +1481,7 @@ MainExprAST::MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
   
   
   
-PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name, Data_Tree ReturnType, const std::string &Class,
+PrototypeAST::PrototypeAST(Parser_Struct *parser_struct, const std::string &Name, Data_Tree ReturnType, const std::string &Class,
               const std::string &Method,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
@@ -1579,7 +1506,7 @@ PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name,
 
     int initialized_args = (ArgsInit.count(Name)>0) ? ArgsInit[Name].size() : 0;
     
-    int ctx_offset = (parser_struct.gpu>0) ? 0 : 1;
+    int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
     Function_Arg_Names[Name] = std::move(arg_names);
     Function_Required_Arg_Count[Name] = arg_count-ctx_offset-initialized_args; // Desconsider scope_struct
     native_fn.push_back(Name);
@@ -1589,7 +1516,7 @@ PrototypeAST::PrototypeAST(Parser_Struct parser_struct, const std::string &Name,
     // std::cout << "proto " << Name << " has " << arg_count-1 << " args\n";
 
     has_compiled_args = Fn_Compiled_Args.count(Name)>0;
-    parser_struct.has_compiled_args = has_compiled_args;
+    parser_struct->has_compiled_args = has_compiled_args;
 }
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -1618,14 +1545,14 @@ void ViewExprAST::Checks() {
     std::string R_Type = this->RHS->GetDataTree().Type;
     if(R_Type!="int") {
         if (!in_vec(R_Type, int_types))
-            LogErrorS(parser_struct.line, "Tried to set view size as " + R_Type);
+            LogErrorS(parser_struct->line, "Tried to set view size as " + R_Type);
         else
             has_R_cast=true;
     }
 }
 
 ViewExprAST::ViewExprAST(std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct) \
+                std::unique_ptr<ExprAST> RHS, Parser_Struct *parser_struct) \
             : LHS(std::move(LHS)), RHS(std::move(RHS)) {
     this->parser_struct = parser_struct;
 }
@@ -1687,11 +1614,11 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
       int idx = expr->Val;
       if (idx>=inner_dt.Nested_Data.size())
-        LogErrorS(parser_struct.line, "Tuple index out of range. Index at: " + std::to_string(idx) + ", but the tuple size is " + std::to_string(inner_dt.Nested_Data.size()));
+        LogErrorS(parser_struct->line, "Tuple index out of range. Index at: " + std::to_string(idx) + ", but the tuple size is " + std::to_string(inner_dt.Nested_Data.size()));
 
       return Data_Tree(inner_dt.Nested_Data[idx].Type);
     } else
-      LogErrorS(parser_struct.line, "Can only index tuple with a constant integer.");
+      LogErrorS(parser_struct->line, "Can only index tuple with a constant integer.");
   } 
 
   if(compound_type=="list" && inner_dt.Nested_Data.size()==0)
@@ -1712,7 +1639,7 @@ Data_Tree NameableLLVMIRCall::GetDataTree(bool from_assignment) {
   return Data_Tree("unk");
 }
 
-NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
+NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
   this->Inner = std::move(Inner);
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
@@ -1841,11 +1768,11 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
   
   if(Depth==1) {
     if(Name=="self")
-        data_type = Data_Tree(parser_struct.class_name);
+        data_type = Data_Tree(parser_struct->class_name);
     else if(in_vec(Name, primary_data_tokens))
         data_type = Data_Tree(Name);
-    else if(data_typeVars[parser_struct.function_name].find(Name)!=data_typeVars[parser_struct.function_name].end()) {
-        data_type = data_typeVars[parser_struct.function_name][Name];
+    else if(data_typeVars[parser_struct->function_name].find(Name)!=data_typeVars[parser_struct->function_name].end()) {
+        data_type = data_typeVars[parser_struct->function_name][Name];
         return data_type;
     }
     else if(functions_return_data_type.count(Name)>0||function_return_overwrite.count(Name)>0) {
@@ -1857,13 +1784,13 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     else if (IsPositionalArg(parser_struct, Name)) {
         data_type = Data_Tree("any");
         return data_type;
-    } else if (parser_struct.cvalues.ints.count(Name)>0)
+    } else if (parser_struct->cvalues.ints.count(Name)>0)
         return Data_Tree("int");
     else {
 
-        std::cout << "parser_struct: " << parser_struct.cvalues.ints.size() << "\n";
+        std::cout << "parser_struct: " << parser_struct->cvalues.ints.size() << "\n";
 
-        LogErrorS(parser_struct.line, "Could not find variable " + Name + " on scope " + parser_struct.function_name + ".");
+        LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->function_name + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }
     return data_type;
@@ -1876,7 +1803,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
   else if (Name=="tid"||Name=="tN")
       data_type = Data_Tree("int");
   else {
-    LogErrorS(parser_struct.line, "Could not find variable " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));
+    LogErrorS(Line, "Could not find attribute " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));
     data_type = Data_Tree("any");
   }
   return data_type;
@@ -1884,28 +1811,31 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
 
 
 
-Nameable::Nameable(Parser_Struct parser_struct) {
+Nameable::Nameable(Parser_Struct *parser_struct) {
   this->parser_struct = parser_struct;
+  this->Line = parser_struct->line;
 }
 
-Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth) : Depth(Depth) {
+Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth) : Depth(Depth) {
   this->parser_struct = parser_struct;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
+  this->Line = parser_struct->line;
 }
 
-Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth, bool IsUnique) : Depth(Depth), IsUnique(IsUnique) {
+Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bool IsUnique) : Depth(Depth), IsUnique(IsUnique) {
   this->parser_struct = parser_struct;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
+  this->Line = parser_struct->line;
   if (IsUnique && !in_vec(Name, Global_Uniques))
       Global_Uniques.push_back(Name);
 }
 
 
-NameableIdx::NameableIdx(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
+NameableIdx::NameableIdx(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
   this->Inner = std::move(Inner); 
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
@@ -1917,7 +1847,7 @@ void Nameable::AddNested(std::unique_ptr<Nameable> Inner) {
   this->isSelf = this->isSelf||this->Inner->isSelf;
 }
 
-NameableRoot::NameableRoot(Parser_Struct parser_struct) : Nameable(parser_struct) {
+NameableRoot::NameableRoot(Parser_Struct *parser_struct) : Nameable(parser_struct) {
   Depth = 0;
   Name = "";
 }
@@ -1938,11 +1868,11 @@ void NameableAppend::Checks() {
         
         if(!(elem_type=="float"&&appended_type=="int") && appended_type!=elem_type&&\
                 elem_type!="Function")
-            LogErrorS(parser_struct.line, "Tried to append " + appended_type + " into a " + elem_type + " array.");
+            LogErrorS(parser_struct->line, "Tried to append " + appended_type + " into a " + elem_type + " array.");
     }
 }
 
-NameableAppend::NameableAppend(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args)
+NameableAppend::NameableAppend(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args)
     : Nameable(parser_struct), Args(std::move(Args))
 {
     AddNested(std::move(Inner));
@@ -2016,7 +1946,7 @@ void NameableCall::Checks() {
           &&!this->isSelf&&!is_first_citizen) {
     // std::cout << "" << Callee << "|" << std::to_string(!in_vec(Callee, template_fn)) << "\n";
     // std::cout << "" << this->isSelf << "\n";
-      LogErrorS(parser_struct.line, "Function " + Callee + " not yet implemented.");
+      LogErrorS(parser_struct->line, "Function " + Callee + " not yet implemented.");
       return;
   }
     
@@ -2062,7 +1992,7 @@ void NameableCall::Checks() {
     Callee = mangle_cargs_proto(Callee);
 }
 
-NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
+NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
   this->Inner = std::move(Inner);
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
@@ -2083,7 +2013,7 @@ bool NameableCall::GetNeedGCSafePoint() {
 
 
 
-PositionalArgExprAST::PositionalArgExprAST(Parser_Struct parser_struct, const std::string & ArgName, std::unique_ptr<ExprAST> Inner)
+PositionalArgExprAST::PositionalArgExprAST(Parser_Struct *parser_struct, const std::string & ArgName, std::unique_ptr<ExprAST> Inner)
     : ArgName(ArgName), Inner(std::move(Inner)) {
   this->parser_struct = parser_struct;
 }

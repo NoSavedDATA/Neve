@@ -1,7 +1,7 @@
 #include "../nsk_cpp_llvm.h"
 
 
-Value *ctz(Parser_Struct parser_struct, Function *TheFunction,
+Value *ctz(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     auto *ty = get_type_from_data(args_type[0]);
@@ -18,7 +18,7 @@ Value *ctz(Parser_Struct parser_struct, Function *TheFunction,
     return Builder->CreateCall(ctz, {v, zero_undef});
 }
 
-Value *swap_bit(Parser_Struct parser_struct, Function *TheFunction,
+Value *swap_bit(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     auto *ty = get_type_from_data(args_type[0]);
@@ -32,11 +32,11 @@ Value *swap_bit(Parser_Struct parser_struct, Function *TheFunction,
     // toggle bit
     return Builder->CreateXor(v, mask);
 }
-Data_Tree swap_bit_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree swap_bit_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
     return Args[0]->GetDataTree();
 }
 
-Data_Tree simd_load_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree simd_load_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   Data_Tree dt = Data_Tree("vec");
   auto stmt_1 = dynamic_cast<IntExprAST*>(Args[1].get());
   auto stmt_2 = dynamic_cast<IntExprAST*>(Args[2].get());
@@ -45,7 +45,7 @@ Data_Tree simd_load_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr
   return dt;
 }
 
-Data_Tree vec_make_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree vec_make_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   Data_Tree dt = Data_Tree("vec");
   auto stmt_2 = dynamic_cast<IntExprAST*>(Args[1].get());
   dt.Nested_Data.push_back(Args[0]->GetDataTree());
@@ -53,12 +53,12 @@ Data_Tree vec_make_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr<
   return dt;
 }
 
-Data_Tree vec_shuffle_ret(Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+Data_Tree vec_shuffle_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   return Args[0]->GetDataTree();
 }
 
 // __m256i chunk = _mm256_loadu_si256((__m256i*)ptr);
-Value *simd_load(Parser_Struct parser_struct, Function *TheFunction,
+Value *simd_load(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     llvm::Type *ty = get_type_from_data(data_type);
@@ -72,7 +72,7 @@ Value *simd_load(Parser_Struct parser_struct, Function *TheFunction,
     return L;
 }
 
-Value *simd_store(Parser_Struct parser_struct, Function *TheFunction,
+Value *simd_store(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     llvm::Type *ty = get_type_from_data(data_type);
@@ -89,7 +89,7 @@ Value *simd_store(Parser_Struct parser_struct, Function *TheFunction,
 
 
 
-Value *vec_make(Parser_Struct parser_struct, Function *TheFunction,
+Value *vec_make(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     int size;
@@ -97,14 +97,14 @@ Value *vec_make(Parser_Struct parser_struct, Function *TheFunction,
     if (auto num_expr = dynamic_cast<IntExprAST*>(Args[1].get()))
             size = num_expr->Val;
     else
-        LogError(parser_struct.line, "Vec expected size");
+        LogError(parser_struct->line, "Vec expected size");
     
     Value *ret = Builder->CreateVectorSplat(size, ArgsV[0]);
     // TheModule->print(llvm::errs(), nullptr);
     return ret;
 }
 
-Value *vec_shuffle(Parser_Struct parser_struct,
+Value *vec_shuffle(Parser_Struct * parser_struct,
                    Function *TheFunction,
                    std::string Callee,
                    Data_Tree data_type,
@@ -120,7 +120,7 @@ Value *vec_shuffle(Parser_Struct parser_struct,
         dyn_cast<FixedVectorType>(lut->getType());
 
     if (!vecTy)
-        LogError(parser_struct.line,
+        LogError(parser_struct->line,
                  "vec_shuffle expected vector");
 
     int lanes = vecTy->getNumElements();
@@ -157,7 +157,7 @@ Value *vec_shuffle(Parser_Struct parser_struct,
 }
 
 
-Value *vec_movemask(Parser_Struct parser_struct, Function *TheFunction,
+Value *vec_movemask(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
     auto *vecTy = llvm::FixedVectorType::get(Builder->getInt8Ty(), 32);
@@ -217,7 +217,7 @@ extern "C" int print_vec_float(float *v, int size) {
     return 0;
 }
 
-Value *vec_print(Parser_Struct parser_struct, Function *TheFunction,
+Value *vec_print(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
 

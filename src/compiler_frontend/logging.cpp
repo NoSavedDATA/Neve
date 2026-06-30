@@ -79,6 +79,7 @@ std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
   if (Str!=" ")
     std::cout << "\033[31m Error: \033[0m " << Str << "\n\n";
   
+  std::exit(0);
   
   return nullptr;
 }
@@ -96,6 +97,7 @@ std::unique_ptr<ExprAST> LogError(int line, std::string Str) {
   while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
     getNextToken();
   
+  std::exit(0);
   return nullptr;
 }
 
