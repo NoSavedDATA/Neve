@@ -788,7 +788,7 @@ Value *print(Parser_Struct * parser_struct, Function *TheFunction,
         print_gpu(parser_struct, TheFunction, args_type, Args, ArgsV);
         return const_int(0);
     }
-        
+    
     Value *offset = const_int(0);
 
     Value *print_buffer = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 6);

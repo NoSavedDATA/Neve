@@ -909,9 +909,16 @@ Function *FunctionAST::codegen() {
 
     
 
+  if (begins_with(Proto->getName(),"bar"))
+      std::cout << "CODEGEN FN " << Proto->getName() << "\n";
+  int idx = P.CArgs.version;
   FunctionProtos[Proto->getName()] = std::move(Proto);
   // FunctionProtos[Proto->getName()] = Proto.get();
   std::string function_name = P.getName();
+  parser_struct->function_name = function_name;
+
+  if (begins_with(function_name,"bar"))
+      std::cout << "CODEGEN FN " << function_name << "\n";
 
 
   Function *TheFunction = getFunction(function_name);
@@ -978,8 +985,14 @@ Function *FunctionAST::codegen() {
     fn_stack_offset[current_codegen_function] = 0;
   }
 
-  for (auto &body : Body)
+  for (auto &body : Body) {
+    if (idx>=0) {// is comp specialization
+        body->SetCValues(parser_struct);
+    }
+
     RetVal = body->codegen(scope_struct);
+  }
+
   cur_self = nullptr;
 
   if (RetVal) {
@@ -991,7 +1004,7 @@ Function *FunctionAST::codegen() {
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (current_codegen_function=="wrapit")
+    // if (current_codegen_function=="bar_1")
     //     TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;

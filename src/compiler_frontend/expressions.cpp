@@ -130,45 +130,55 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
  
 
 void ExprAST::SetCValues(Parser_Struct *parser_struct) {
+    if (!this->parser_struct)
+        return;
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
 void ForExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
-    for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+    for (auto &expr : Body) 
+        expr->SetCValues(parser_struct);
 }
 
 void ForEachExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+        expr->SetCValues(parser_struct);
 }
 
 void WhileExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+        expr->SetCValues(parser_struct);
 }
 
 void AsyncExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+        expr->SetCValues(parser_struct);
 }
 
 void AsyncsExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+        expr->SetCValues(parser_struct);
 }
 void SpawnExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
-        expr->parser_struct->cvalues = parser_struct->cvalues;
+        expr->SetCValues(parser_struct);
 }
 
 void AsyncFnPriorExprAST::SetCValues(Parser_Struct *parser_struct) {
+    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
@@ -236,6 +246,51 @@ bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r) {
 }
 
 
+
+PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
+              const std::string &BaseName,
+              const std::string &fn,
+              CallArgsTy CArgs)
+      : BaseName(BaseName), Name(fn), CArgs(CArgs) {
+    this->parser_struct = parser_struct;
+
+    FnVersion[BaseName].push_back(CArgs);
+
+    int size = CArgs.args.size();
+
+    std::cout << fn << "/" << this->Name << ": " << size << " -- " << CArgs.dts.size() << "\n";
+    
+    for (int i=0; i<size; ++i) {
+        std::string arg_name = CArgs.args[i];
+        Data_Tree dt = CArgs.dts[i];
+        data_typeVars[fn][arg_name] = dt;
+        std::cout << fn << "/" << arg_name << "\n";
+        dt.Print();
+        this->Args.push_back(arg_name);
+        this->Types.push_back(dt);
+    }
+    ReturnType = CArgs.template_ret;
+    
+    functions_return_data_type[fn] = CArgs.template_ret;
+    native_fn.push_back(fn);
+
+    int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
+    if (parser_struct->gpu==0) {
+        this->Types.insert(this->Types.begin(), Data_Tree("Scope_Struct"));
+        this->Args.insert(this->Args.begin(), "scope_struct");
+    }
+
+    int required_args = this->Args.size()-ctx_offset;
+    Function_Required_Arg_Count[fn] = required_args; // Desconsider scope_struct
+    Function_Arg_Count[fn] = required_args;
+    Function_Arg_Names[fn] = this->Args;
+    
+
+    // has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
+    // parser_struct->has_compiled_args = has_compiled_args;
+
+}
+
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
     std::cout << "gen template for " << fn << "\n";
 
@@ -247,14 +302,41 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy
         std::cout << "template args" << "\n";
         print_dt_vec(templ.dts);
 
-        {
-            int idx = (FnLastVersion.count(fn)>0) ? FnLastVersion[fn] : 0;
+        if (CompareDTs(CArgs.dts, templ.dts)) {
+            std::string base_name = fn;
+            int idx;
+            if (FnLastVersion.count(fn)==0) {
+                idx = 0;
+                FnLastVersion[fn] = 1;
+            } else
+                idx = FnLastVersion[fn]++;
+            fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
             CArgs.version = idx;
-            CArgs.version_str = fn+"_"+std::to_string(idx);
-            FnVersion[fn].push_back(CArgs);
+            CArgs.version_str = fn;
+            FnVersion[base_name].push_back(CArgs);
             std::cout << "add template " << fn << "\n";
+
+            
+            CArgs.args = templ.args;
+            CArgs.template_ret = templ.template_ret;
+            
+            std::cout << "1"<< "\n";
+            auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
+                            CArgs);
+            std::cout << "2"<< "\n";
+
+            auto &fn_ast = Template_FnAST[base_name];
+            std::cout << "3"<< "\n";
+            fn_ast->Proto = std::move(proto);
+            std::cout << "4"<< "\n";
+            BasicBlock *CurBB = Builder->GetInsertBlock();
+            std::cout << "5"<< "\n";
+            fn_ast->codegen();
+            Builder->SetInsertPoint(CurBB);
+            std::cout << "6"<< "\n";
             
             found = true;
+            return fn;
         }
     }
 
@@ -1611,10 +1693,13 @@ TemplateAST::TemplateAST(Parser_Struct *parser_struct,
     : parser_struct(parser_struct), Name(Name), ReturnType(ReturnType),
       Args(std::move(Args)), Types(std::move(Types)){
     
+    std::cout << "TEMPLATE HAS " << this->Args.size() << "\n";
     CArgs = CallArgsTy(this->Types);
     CArgs.template_ast = this;
     CArgs.template_ret = ReturnType;
+    CArgs.args = this->Args;
     FnTemplates[Name].push_back(CArgs);
+    std::cout << "ppost " << FnTemplates[Name][0].args.size() << "\n";
 }
 
   
@@ -1641,7 +1726,9 @@ void PrototypeAST::SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits) {
     }
 }
   
-PrototypeAST::PrototypeAST(Parser_Struct *parser_struct, const std::string &Name, Data_Tree ReturnType, const std::string &Class,
+PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
+              const std::string &Name,
+              Data_Tree ReturnType, const std::string &Class,
               const std::string &Method,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
@@ -1925,6 +2012,8 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         return data_type;
     } else if (parser_struct->cvalues.ints.count(Name)>0)
         return Data_Tree("int");
+    else if (FnTemplates.count(Name)>0)
+        return Data_Tree("generic_fn");
     else {
 
         std::cout << "parser_struct: " << parser_struct->cvalues.ints.size() << "\n";
@@ -2058,14 +2147,14 @@ void NameableCall::Checks() {
 
 
 
-  // check if exists
-  if (functions_return_data_type.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
-        &&method_return_overwrite.count(Callee)==0&&\
-          Callee!="array_append"\
-          &&!this->isSelf&&!is_first_citizen) {
-      LogErrorS(parser_struct->line, "Function " + Callee + " not yet implemented.");
-      return;
-  }
+  // // check if exists
+  // if (functions_return_data_type.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
+  //       &&method_return_overwrite.count(Callee)==0&&\
+  //         Callee!="array_append"\
+  //         &&!this->isSelf&&!is_first_citizen) {
+  //     LogErrorS(parser_struct->line, "Function " + Callee + " not yet implemented.");
+  //     return;
+  // }
     
 
   // vararg
@@ -2115,15 +2204,13 @@ void NameableCall::Checks() {
 
 
   if (needs_version) {
-
-      std::cout << "" << FnLastVersion.count(Callee) << "\n";
       bool found = true;
       Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
 
       if (!found) {
           std::cout << "not found, try template" << "\n";
           if (FnTemplates.count(Callee)>0)
-            GenTemplate(parser_struct, Callee, CArgs, found);
+            Callee = GenTemplate(parser_struct, Callee, CArgs, found);
 
           if (!found) {
               if (FnLastVersion.count(Callee)==0) {

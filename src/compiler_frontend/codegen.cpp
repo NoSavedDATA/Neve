@@ -4004,7 +4004,7 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
             ArgName = std::to_string(Idx++); // proto case
         else
             ArgName = Args[Idx++];           // def case
-        // std::cout << "add arg " << ArgName << " to " << Name << "\n";
+                                             //
         Arg.setName(ArgName);
 
         // if (!Arg.getType()->isPointerTy()) {

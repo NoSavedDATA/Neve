@@ -148,7 +148,7 @@ std::string Extract_List_Prefix(const std::string& input) {
 }
 
 
-Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct *parser_struct, bool is_template=false) {
+Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct *parser_struct, bool is_generic=false) {
 
   Data_Tree data_type = Data_Tree(root_type);
 
@@ -192,27 +192,35 @@ Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct *parser_struct, b
         dt = std::to_string((int)NumVal);
     }
 
+    bool is_generic_type=false;
     if(CurTok!=tok_data&&CurTok!=tok_struct\
-            &&Classes.count(dt)==0&&root_type!="layout"&&!is_template) {
-      LogErrorBreakLine(parser_struct->line, root_type + " requires a data type, got: " + ReverseToken(CurTok));
-      return data_type;
+            &&Classes.count(dt)==0&&root_type!="layout") {
+      if (is_generic)
+          is_generic_type=true;
+      else {
+          LogErrorBreakLine(parser_struct->line, root_type + " requires a data type, got: " + ReverseToken(CurTok));
+          return data_type;
+      }
     }
 
-    getNextToken();
+    getNextToken(); // eat identifier
 
+    Data_Tree nested_dt;
     
     if(CurTok=='<'||CurTok=='[') 
-      data_type.Nested_Data.push_back(Parse_Data_Type(dt, parser_struct));
+        nested_dt = Parse_Data_Type(dt, parser_struct);
     else if (IdentifierStr=="smem") {
       data_type.is_smem=true;
-      data_type.Nested_Data.push_back(Data_Tree(dt));
+      nested_dt = Data_Tree(dt);
     } else {
       if (root_type=="layout") {
           // std::cout << "ADD INT " << parser_struct->function_name << " " << IdentifierStr << "\n";
           data_typeVars[parser_struct->function_name][IdentifierStr] = Data_Tree("int");
       }
-      data_type.Nested_Data.push_back(Data_Tree(dt));
+      nested_dt = Data_Tree(dt);
     }
+    nested_dt.is_generic = is_generic_type;
+    data_type.Nested_Data.push_back(nested_dt);
 
     if(CurTok==',')
       getNextToken();
@@ -2274,9 +2282,9 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct *parser_struct, std::stri
 void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree ret_dt) {
   getNextToken(); // eat <
 
-  std::vector<std::string> template_args;
+  std::vector<std::string> generic_args;
   while(true) {
-      template_args.push_back(IdentifierStr);
+      generic_args.push_back(IdentifierStr);
       getNextToken();
       if (CurTok=='>')
           break;
@@ -2299,6 +2307,7 @@ void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree 
   std::vector<std::unique_ptr<ExprAST>> Inits;
   while(true) {
     Data_Tree dt = Data_Tree(IdentifierStr);
+    dt.is_generic = in_vec(IdentifierStr, generic_args);
     getNextToken(); // arg name
     if (in_vec(CurTok, {'[', '<'}))
         Parse_Data_Type(IdentifierStr, parser_struct, true);
@@ -2315,6 +2324,13 @@ void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree 
       LogErrorBreakLine(parser_struct->line, "Template args expected , or ). Got token " + ReverseToken(CurTok));
   }
   getNextToken(); // eat )
+
+std::cout << "-------post template proto:   " << CurTok << "/" << ReverseToken(CurTok) << "\n";
+
+  // if (CurTok!=tok_space)
+  //   LogError(parser_struct->line, "Post generic prototype parsing requires a line break.");
+  // getNextToken();
+std::cout << "-------post template proto:   " << CurTok << "/" << ReverseToken(CurTok) << "\n";
 
   new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames), std::move(Types));
 }
@@ -2427,11 +2443,14 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
                                             BinaryPrecedence);
   if (CurTok=='<') {
       ParseTemplateProto(parser_struct, FnName, return_data_type);
-      return std::make_unique<PrototypeAST>(parser_struct, FnName,
-                                            return_type, _class, method, std::move(ArgNames),
+      auto proto = std::make_unique<PrototypeAST>(parser_struct, "",
+                                            return_type, "", "", std::move(ArgNames),
                                             std::move(Types),
                                             Kind != 0,
                                             BinaryPrecedence);
+      proto->is_generic = true;
+      proto->Name = FnName;
+      return std::move(proto);
   }
 
 

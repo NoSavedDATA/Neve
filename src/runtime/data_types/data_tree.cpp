@@ -136,6 +136,8 @@ bool CheckChannel(const Data_Tree *L_ptr, Data_Tree R) {
 int Data_Tree::Compare(Data_Tree other_tree) const {    
     int comparisons = 0;
 
+    if(is_generic||other_tree.is_generic)
+        return 0;
 
     if(Type=="void"||other_tree.Type=="void")
         return 0;

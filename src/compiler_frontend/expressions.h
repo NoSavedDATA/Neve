@@ -92,6 +92,7 @@ struct CallArgsTy {
     std::vector<int64_t> i64s;
     std::vector<float> floats;
     std::vector<std::string> strings;
+    std::vector<std::string> args;
     std::string version_str = "";
     int version = -1;
     TemplateAST *template_ast=nullptr;
@@ -1054,13 +1055,13 @@ public:
 };
 
 class PrototypeAST {  
+    public:
     std::string BaseName, Name, Class, Method;
     int version=0;
   
     unsigned Precedence; // Precedence if a binary op.
   
-    public:
-      bool IsOperator, has_compiled_args=false;
+      bool IsOperator, has_compiled_args=false, is_generic=false;
       Parser_Struct *parser_struct;
       Data_Tree ReturnType;
       CallArgsTy CArgs;
@@ -1072,6 +1073,11 @@ class PrototypeAST {
                   std::vector<std::string> Args,
                   std::vector<Data_Tree> Types,
                   bool IsOperator = false, unsigned Prec = 0, bool overwrite=false);
+
+      PrototypeAST(Parser_Struct *,
+                  const std::string &,
+                  const std::string &,
+                  CallArgsTy);
   
     Function *codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_args=nullptr);
     const std::string &getName() const; 

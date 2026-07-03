@@ -80,6 +80,7 @@ LCG rng(generate_custom_seed());
 
 
 std::vector<std::unique_ptr<FunctionAST>> AllFunctions;
+std::unordered_map<std::string, std::unique_ptr<FunctionAST>> Template_FnAST;
 std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 // Vars
@@ -100,17 +101,22 @@ std::vector<char *> glob_str_files;
 
 
 
-void register_call_args_ty() {
-
-    for (auto &fn_args : Function_Arg_DataTypes) {
-        std::vector<Data_Tree> dts;
-        for (auto &arg : fn_args.second) {
-            Data_Tree dt = arg.second;
-            dts.push_back(dt);
-        }
-        auto CArgs = CallArgsTy();
-        SetFnVersion(fn_args.first, dts);
+void register_version(std::string fn) {
+    std::vector<Data_Tree> dts;
+    for (auto &arg : Function_Arg_DataTypes[fn]) {
+        Data_Tree dt = arg.second;
+        dts.push_back(dt);
     }
+    SetFnVersion(fn, dts);
+}
+
+void register_call_args_ty() {
+    for (auto &fn : functions_return_data_type)
+        register_version(fn.first);
+    for (auto &fn : function_return_overwrite)
+        register_version(fn.first);
+    for (auto &fn : method_return_overwrite) 
+        register_version(fn.first);
 }
 
 
@@ -146,7 +152,10 @@ void HandleDefinition() {
   
   Parser_Struct *parser_struct = new Parser_Struct();
   if (auto FnAST = ParseDefinition(parser_struct)) {
-
+    if (FnAST->getProto().is_generic) {
+        Template_FnAST[FnAST->getProto().getName()] = std::move(FnAST);
+        return;
+    }
 
     FunctionProtos[FnAST->getProto().getName()] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
