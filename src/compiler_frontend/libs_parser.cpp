@@ -163,6 +163,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         }
     }
     
+    std::vector<Data_Tree> dts;
 
     for(int i=0; i<ArgTypes.size(); ++i) {
         if (!begins_with(Name, "initialize__"))
@@ -182,12 +183,10 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
             Function_Arg_Names[Name].push_back(ArgNames[i]);
             Function_Arg_Types[Name][ArgNames[i]] = type;
 
-            if(ends_with(type, "_vec")) {
-                Data_Tree vec_dt = Data_Tree("vec");
-                vec_dt.Nested_Data.push_back(Data_Tree(remove_suffix(type, "_vec")));
-                Function_Arg_DataTypes[Name][ArgNames[i]] = vec_dt;
-            } else 
-                Function_Arg_DataTypes[Name][ArgNames[i]] = Data_Tree(type);
+            Data_Tree dt = Data_Tree(type);
+            Function_Arg_DataTypes[Name][ArgNames[i]] = dt;
+            dts.push_back(dt);
+
         }
         
 
@@ -204,10 +203,8 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
             arg_types_str.push_back("void_ptr");
         }
     }
+    SetFnVersion(Name, dts);
 
-
-    if (Name=="_glob_b_")
-        fn_return_type_str = "str_vec";
     Lib_Functions_Return[Name] = fn_return_type_str; // for llvm return type (so_libs.cpp)
     Lib_Functions_Args[Name] = std::move(arg_types_str);
     Function_Arg_Count[Name] = ArgTypes.size()-1; // ignoring scope struct
@@ -805,14 +802,18 @@ void LLVMFunction::Process(void *func) {
     Function_Arg_Names[Name].push_back("0");
     Function_Arg_DataTypes[Name]["0"] = Data_Tree("Scope_Struct");
 
+    std::vector<Data_Tree> dts;
     int i=0;
     for (auto &arg_type : ArgTypes) {
         std::string arg_name = ArgNames[i++];
 
         Function_Arg_Names[Name].push_back(arg_name);
         Function_Arg_DataTypes[Name][arg_name] = arg_type;
+        dts.push_back(arg_type);
     }
     Function_Required_Arg_Count[Name] = ArgTypes.size();
+
+    SetFnVersion(Name, dts);
 }
 
 void LibParser::ParseLLVMFunction() { 

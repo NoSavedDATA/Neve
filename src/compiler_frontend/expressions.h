@@ -11,6 +11,7 @@ using namespace llvm;
 
 struct CompiledArgs;
 struct Arg_Pair;
+class TemplateAST;
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
 //===----------------------------------------------------------------------===//
@@ -80,6 +81,55 @@ class ExprAST {
     virtual bool GetNeedGCSafePoint();
     // virtual nlohmann::json toJSON();
 };
+
+
+struct CallArgsTy {
+    std::vector<Data_Tree> dts;
+    bool has=false;
+    std::vector<int8_t> i8s;
+    std::vector<int16_t> i16s;
+    std::vector<int> ints;
+    std::vector<int64_t> i64s;
+    std::vector<float> floats;
+    std::vector<std::string> strings;
+    std::string version_str = "";
+    int version = -1;
+    TemplateAST *template_ast=nullptr;
+    Data_Tree template_ret;
+
+    CallArgsTy(std::vector<Data_Tree> dts);
+    CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *stmt=nullptr);
+};
+
+struct ArgsHasher {
+    std::size_t operator()(const CallArgsTy& v) const {
+        size_t hash = 0;
+        
+        for (auto &dt : v.dts)
+            hash += dt.Hash();
+        
+        if (!v.has)
+            return hash;
+        return hash;
+    }
+};
+
+struct ArgsEqual {
+    bool operator()(const CallArgsTy& a,
+                    const CallArgsTy& b) const {
+        if (a.dts.size()!=b.dts.size()||a.has!=b.has)
+            return false;
+        for (int i=0;i<a.dts.size();++i) {
+            if (a.dts[i].Compare(b.dts[i])>0)
+                return false;
+        }
+
+        if (!a.has)
+            return true;
+        return false;
+    }
+};
+
 
 
 struct DimSlice {
@@ -507,12 +557,15 @@ class NameableCall : public Nameable {
   public:
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
   int arg_type_check_offset=1; 
+  size_t hash=0;
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, ReturnType="";
-  FnCompiledValuesVec CompiledArgsVec;
-  FnCompiledValues CompiledArgs;
+  std::vector<Data_Tree> Types;
+  CallArgsTy CompiledArgsVec;
+  // FnCompiledValues CompiledArgs;
+  CallArgsTy CArgs;
 
-  NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec);
+  NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy);
 
 
   Value *codegen(Value *scope_struct) override;
@@ -534,20 +587,6 @@ class NameableIdx : public Nameable {
 };
 
 
-class NameableAppend : public Nameable {
-  Data_Tree inner_dt;
-  public:
-  bool FromLib=false;
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  std::string Callee, ReturnType="";
-
-  NameableAppend(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
-
-
-  Value *codegen(Value *scope_struct) override;
-  Data_Tree GetDataTree(bool from_assignment=false) override;
-  void Checks();
-};
 
 
 
@@ -896,6 +935,7 @@ public:
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void Checks();
 };
 
 class LambdaExprAST : public ExprAST {
@@ -950,11 +990,11 @@ class LaunchExprAST : public ExprAST {
 public:
   std::unique_ptr<ExprAST> Grid, Block, Smem, Stream;
   std::vector<std::unique_ptr<ExprAST>> Args;
-  FnCompiledValuesVec CompiledArgsVec;
+  CallArgsTy CompiledArgsVec;
   FnCompiledValues CompiledArgs;
   std::string fn_name;
 
-  LaunchExprAST(Parser_Struct *, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, FnCompiledValuesVec CompiledArgsVec, std::string);
+  LaunchExprAST(Parser_Struct *, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::unique_ptr<ExprAST>, std::vector<std::unique_ptr<ExprAST>>, CallArgsTy CompiledArgsVec, std::string);
 
   Value *codegen(Value *scope_struct) override;
   void Checks();
@@ -995,8 +1035,27 @@ class MainExprAST : public ExprAST {
 };
 
 
+class TemplateAST {  
+public:
+    std::string BaseName, Name, Class, Method;
+    int version=0;
+
+    Parser_Struct *parser_struct;
+    Data_Tree ReturnType;
+    CallArgsTy CArgs;
+
+    std::vector<std::string> Args;
+    std::vector<Data_Tree> Types;
+
+    TemplateAST(Parser_Struct *parser_struct, const std::string &Name, Data_Tree ReturnType,
+          std::vector<std::string> Args,
+          std::vector<Data_Tree> Types);
+  
+};
+
 class PrototypeAST {  
-    std::string Name, Class, Method;
+    std::string BaseName, Name, Class, Method;
+    int version=0;
   
     unsigned Precedence; // Precedence if a binary op.
   
@@ -1004,6 +1063,7 @@ class PrototypeAST {
       bool IsOperator, has_compiled_args=false;
       Parser_Struct *parser_struct;
       Data_Tree ReturnType;
+      CallArgsTy CArgs;
       std::vector<std::string> Args;
       std::vector<Data_Tree> Types;
 
@@ -1011,7 +1071,7 @@ class PrototypeAST {
                   const std::string &Class, const std::string &Method,
                   std::vector<std::string> Args,
                   std::vector<Data_Tree> Types,
-                  bool IsOperator = false, unsigned Prec = 0);
+                  bool IsOperator = false, unsigned Prec = 0, bool overwrite=false);
   
     Function *codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_args=nullptr);
     const std::string &getName() const; 
@@ -1020,6 +1080,8 @@ class PrototypeAST {
   
     bool isUnaryOp() const; 
     bool isBinaryOp() const; 
+    
+    void SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits);
   
     char getOperatorName() const; 
   
@@ -1041,4 +1103,12 @@ struct Arg_Pair {
     Arg_Pair(Data_Tree, std::string, std::unique_ptr<Nameable>);
 };
 
+
+int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
+
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
+
+extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
+extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
+extern std::unordered_map<std::string,int> FnLastVersion;

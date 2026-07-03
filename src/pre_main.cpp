@@ -100,6 +100,19 @@ std::vector<char *> glob_str_files;
 
 
 
+void register_call_args_ty() {
+
+    for (auto &fn_args : Function_Arg_DataTypes) {
+        std::vector<Data_Tree> dts;
+        for (auto &arg : fn_args.second) {
+            Data_Tree dt = arg.second;
+            dts.push_back(dt);
+        }
+        auto CArgs = CallArgsTy();
+        SetFnVersion(fn_args.first, dts);
+    }
+}
+
 
 //===----------------------------------------------------------------------===//
 // Top-Level parsing and JIT Driver
@@ -134,6 +147,7 @@ void HandleDefinition() {
   Parser_Struct *parser_struct = new Parser_Struct();
   if (auto FnAST = ParseDefinition(parser_struct)) {
 
+
     FunctionProtos[FnAST->getProto().getName()] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
 
@@ -161,9 +175,9 @@ void HandleGpuDef() {
       std::make_unique<PrototypeAST>(FnAST->getProto());
     GpuFunctions[fn_name] = std::move(FnAST);
 
-    if (!has_compiled_args) {
+    if (!has_compiled_args)
         getGpuFnCheck(fn_name);
-    }
+
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -630,6 +644,7 @@ void build_dicts() {
   set_functions_return_type();
   set_functions_args_type();
   set_user_functions();
+  register_call_args_ty();
 
   // Prime the first token.
   prebuild();

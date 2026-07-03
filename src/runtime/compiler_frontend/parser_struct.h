@@ -11,14 +11,6 @@
 
 
 
-struct FnCompiledValuesVec {
-    std::vector<int8_t> i8s;
-    std::vector<int16_t> i16s;
-    std::vector<int> ints;
-    std::vector<int64_t> i64s;
-    std::vector<float> floats;
-    std::vector<std::string> strings;
-};
 
 struct FnCompiledValues {
     bool has=true;

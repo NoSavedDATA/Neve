@@ -14,7 +14,7 @@
 
 
 
-struct Channel {
+struct DT_channel {
     int buffer_size; 
     uint16_t type;
     bool terminated=false, init=false;
@@ -26,7 +26,7 @@ struct Channel {
     std::mutex mtx;
     std::condition_variable push_cv, pop_cv, cv;
 
-    Channel();
+    DT_channel();
     void New(Scope_Struct *, uint16_t, int);
 };
 

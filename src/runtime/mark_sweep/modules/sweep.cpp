@@ -147,7 +147,7 @@ void GC_Arena::gc_list(void *ptr, uint16_t root_type, uint64_t mark_bit) {
         return;
     uint16_t type16;
     if (root_type==108) {
-        Channel *ch = (Channel*)ptr;
+        DT_channel *ch = (DT_channel*)ptr;
         // std::cout << "gc_list of " << root_type << " -- " << data_type_to_name()[root_type] << " -- "  << ptr << "\n";
         // std::cout << "its array is " << ch->data << "\n";
         if (ch->type>100) {

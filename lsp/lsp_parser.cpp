@@ -23,8 +23,6 @@ static std::unique_ptr<FunctionAST> HandleDefinition() {
     
     Parser_Struct parser_struct;
     if (std::unique_ptr<FunctionAST> FnAST = ParseDefinition(parser_struct)) {
-        // FunctionProtos[FnAST->getProto().getName()] =
-        //   std::make_unique<PrototypeAST>(FnAST->getProto());
         std::cout << "RETURN FROM HANDLE DEFINITION" << ".\n";
         return std::move(FnAST);
     } else {

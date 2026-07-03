@@ -17,13 +17,14 @@ struct Data_Tree {
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);
     Data_Tree(std::string);
 
-    bool CompareMap(Data_Tree&);
-    bool IsTemplate();
-    int Compare(Data_Tree);
-    void Print();
-    std::string toString();
-    bool IsComposite();
-    bool IsBuffered();
+    bool CompareMap(Data_Tree&) const;
+    bool IsTemplate() const;
+    int Compare(Data_Tree) const;
+    size_t Hash() const;
+    void Print(bool break_line=true) const;
+    std::string toString() const;
+    bool IsComposite() const;
+    bool IsBuffered() const;
 
 };
 
@@ -34,3 +35,4 @@ extern std::map<std::string, Data_Tree> functions_return_data_type;
 
 
 std::string UnmangleVec(Data_Tree dt);
+void print_dt_vec(std::vector<Data_Tree> dt);

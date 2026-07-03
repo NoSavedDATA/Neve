@@ -25,22 +25,23 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     return false;
 }
 
-bool Data_Tree::IsComposite() {
+bool Data_Tree::IsComposite() const {
     return (Nested_Data.size()>0||Type=="layout"||is_buffer||is_array);
 }
-bool Data_Tree::IsBuffered() {
+bool Data_Tree::IsBuffered() const {
     return (Type=="layout"||is_buffer||is_array);
 }
 
-int CompareArrays(Data_Tree *L, Data_Tree R) {
+int CompareArrays(const Data_Tree *L, Data_Tree R) {
 
     if(L->Nested_Data.size()==0||R.Nested_Data.size()==0)
         return 1;
 
-    // return L->Nested_Data[0].Compare(R.Nested_Data[0]);
-    return (L->Nested_Data[0].Type==R.Nested_Data[0].Type) ? 0 : 1;
+
+    // return (L->Nested_Data[0].Type==R.Nested_Data[0].Type) ? 0 : 1;
+    return L->Nested_Data[0].Compare(R.Nested_Data[0]);
 }
-int CompareVec(Data_Tree *L, Data_Tree R) {
+int CompareVec(const Data_Tree *L, Data_Tree R) {
     if(L->Nested_Data.size()==0||R.Nested_Data.size()==0)
         return 1;
     return (L->Nested_Data[0].Compare(R.Nested_Data[0])==0) && \
@@ -76,11 +77,32 @@ bool CompareListRecursive(Data_Tree L, Data_Tree R) {
     return true;
 }
 
-bool Data_Tree::CompareMap(Data_Tree &R) {
-    return CheckIsEquivalent(Type, R.Nested_Data[1].Type);
+
+size_t Data_Tree::Hash() const {
+    size_t hash=0;
+    hash += std::hash<std::string>{}(Type);
+    
+    if(is_buffer)
+        hash += std::hash<std::string>{}("as_buffer");
+    if(is_array)
+        hash += std::hash<std::string>{}("as_array");
+
+    if (Nested_Data.size()==0)
+        return hash;
+
+    for (auto &dt : Nested_Data)
+        hash += std::hash<std::string>{}(Type);
+
+    return hash;
 }
 
-bool CompareListTuple(Data_Tree *L, Data_Tree R) {
+bool Data_Tree::CompareMap(Data_Tree &R) const {
+    if (Nested_Data.size()==0)
+        return true;
+    return CheckIsEquivalent(Type, R.Nested_Data[1].Type); 
+}
+
+bool CompareListTuple(const Data_Tree *L, Data_Tree R) {
 
     if(L->Type!="list"||R.Type!="tuple")
         return true;
@@ -91,11 +113,14 @@ bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
 
 
-bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
+bool CheckChannel(const Data_Tree *L_ptr, Data_Tree R) {
     Data_Tree L = *L_ptr;
 
     if(!(L.Type=="channel"||R.Type=="channel"))
         return false;
+
+    if (L.Nested_Data.size()==0||R.Nested_Data.size()==0)
+        return true;
     
     if(L.Type=="channel")
         L = L.Nested_Data[0];
@@ -108,7 +133,7 @@ bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
 
 
 
-int Data_Tree::Compare(Data_Tree other_tree) {    
+int Data_Tree::Compare(Data_Tree other_tree) const {    
     int comparisons = 0;
 
 
@@ -153,13 +178,15 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     if(Type=="array"&&other_tree.Type=="array")
         return CompareArrays(this, other_tree);
 
+    if(Type=="map"&&Nested_Data.size()==0)
+        return 0;
     if(Type!="map"&&other_tree.Type=="map"&&CompareMap(other_tree))
         return 0;
 
     if(Type=="map"&&other_tree.Type!="map"&&Nested_Data[1].Type==other_tree.Type)
         return 0;
 
-    if(Type=="map"&&!in_vec(other_tree.Type, compound_tokens))
+    if(Type=="map"&&!other_tree.IsComposite())
         return Nested_Data[1].Compare(other_tree);
 
     if(in_vec(Type, compound_tokens)&&!in_vec(other_tree.Type, compound_tokens))
@@ -190,16 +217,29 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     return comparisons;
 }
 
-void Data_Tree::Print() {
+void Data_Tree::Print(bool break_line) const {
     std::string str = toString();
     std::cout << str;
     if (is_buffer)
         std::cout << "[]";
-    std::cout << "\n";
+    if (break_line)
+        std::cout << "\n";
 }
 
+void print_dt_vec(std::vector<Data_Tree> dts) {
+    int size = dts.size();
+    if (size==0) 
+        return;
+    std::cout << "(";
+    dts[0].Print(false);
+    for (int i=1; i<size; ++i) {
+        std::cout << ", ";
+        dts[i].Print(false);
+    }
+    std::cout << ")\n";
+}
 
-std::string Data_Tree::toString() {
+std::string Data_Tree::toString() const {
     std::string str = Type; 
     if (Nested_Data.size()>0) {
         str += "<";
@@ -217,7 +257,7 @@ std::string Data_Tree::toString() {
 }
 
 
-bool Data_Tree::IsTemplate() {
+bool Data_Tree::IsTemplate() const {
     if (Type=="layout")
         return true;
     return false;

@@ -63,6 +63,7 @@ std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct *parser_struct);
 /// parenexpr ::= '(' expression ')'
 std::unique_ptr<ExprAST> ParseParenExpr(Parser_Struct *parser_struct, std::string class_name=""); 
 
+size_t HashArgs(std::string &Callee, std::vector<std::unique_ptr<ExprAST>> &Args);
 
 
 std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct *parser_struct, std::string _class, std::string class_name);

@@ -22,6 +22,9 @@ namespace fs = std::filesystem;
 std::vector<std::string> imported_libs;
 std::map<std::string, std::vector<std::string>> lib_submodules;
 
+std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
+std::unordered_map<std::string,int> FnLastVersion;
+std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
@@ -170,11 +173,125 @@ void AsyncFnPriorExprAST::SetCValues(Parser_Struct *parser_struct) {
 }
 
 
-inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
-                                                  std::vector<std::unique_ptr<ExprAST>> &Args,
-                                                  std::string fn_name,
-                                                  bool is_nsk_fn, int sent_args, int arg_offset=1) {
 
+
+
+CallArgsTy::CallArgsTy(std::vector<Data_Tree> dts) {
+    for (auto &dt : dts) {
+        if (dt.Type=="Scope_Struct")
+            continue;
+        this->dts.push_back(dt);
+    }
+}
+
+
+CallArgsTy::CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *exprs) {
+    if (!exprs)
+        return;
+    for (auto &expr : *exprs) {
+        Data_Tree dt = expr->GetDataTree();
+        if (dt.Type=="Scope_Struct")
+            continue;
+        this->dts.push_back(dt);
+    }
+}
+
+int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite) {
+    if (FnLastVersion.count(fn)==0||overwrite) {
+        FnLastVersion[fn] = 0;
+        CArgs.version = 0;
+        CArgs.version_str = fn;
+        if (overwrite)
+            FnVersion[fn].clear();
+        FnVersion[fn].push_back(CArgs);
+        return 0;
+    }
+    FnLastVersion[fn]++;
+    int id = FnLastVersion[fn];
+    CArgs.version = id;
+    CArgs.version_str = fn+"_"+std::to_string(id);
+    FnVersion[fn].push_back(CArgs);
+    return id;
+}
+void AddFnVersion(std::string fn, CallArgsTy CArgs, int idx) {
+    if (FnLastVersion.count(fn)==0)
+        LogErrorS(-1, "Can't AddFn " + fn + ". No previous version existed.");
+    CArgs.version_str = (idx==0) ? fn : fn+"_"+std::to_string(idx);
+    CArgs.version = idx;
+
+    FnVersion[fn].push_back(CArgs);
+}
+
+bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r) {
+    if(l.size()!=r.size())
+        return false;
+    for (int i=0; i<l.size(); ++i) {
+        // std::cout << "COMPARE" << "\n";
+        // l[i].Print();
+        // r[i].Print();
+        if (l[i].Compare(r[i])>0)
+            return false;
+    }
+    return true;
+}
+
+
+std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
+    std::cout << "gen template for " << fn << "\n";
+
+    for (auto &templ : FnTemplates[fn]) {
+
+
+        std::cout << "fn args" << "\n";
+        print_dt_vec(CArgs.dts);
+        std::cout << "template args" << "\n";
+        print_dt_vec(templ.dts);
+
+        {
+            int idx = (FnLastVersion.count(fn)>0) ? FnLastVersion[fn] : 0;
+            CArgs.version = idx;
+            CArgs.version_str = fn+"_"+std::to_string(idx);
+            FnVersion[fn].push_back(CArgs);
+            std::cout << "add template " << fn << "\n";
+            
+            found = true;
+        }
+    }
+
+    return fn;
+}
+
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
+    for (auto cargs : FnVersion[fn]) {
+        if(CompareDTs(CArgs.dts, cargs.dts))
+            return cargs.version_str;
+    }
+    found = false;
+    return fn;
+}
+
+void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs) {
+    std::cout << "\n\nFound implementations" << "\n";
+    int i=0;
+    for (auto cargs : FnVersion[fn]) {
+        if (i++>3)
+            break;
+        std::cout << "\n" << cargs.version_str << "\n";
+        print_dt_vec(cargs.dts);
+    }
+    if (i>3)
+        std::cout << "...\n";
+    std::cout << "\nsent:" << "\n";
+    print_dt_vec(CArgs.dts);
+    LogErrorS(parser_struct->line, "Unmatched call args for " + fn);
+}
+
+
+
+inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
+                                  std::vector<std::unique_ptr<ExprAST>> &Args,
+                                  std::string fn_name,
+                                  bool is_nsk_fn, int sent_args, int arg_offset=1) {
   bool is_vararg = in_vec(fn_name, vararg_methods);
 
   if (Function_Required_Arg_Count.count(fn_name)>0) {
@@ -739,13 +856,16 @@ Data_Tree ReduceExprAST::GetDataTree(bool from_assignment) {
     return dt;
 }
   
+
+void ReduceExprAST::Checks() {
+    GetDataTree();
+}
   
 ReduceExprAST::ReduceExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS,
                              char Op, std::string functional_type)
             : LHS(std::move(LHS)),
               Op(Op), functional_type(functional_type) {
     this->parser_struct = parser_struct;
-    GetDataTree();
 }
   
   
@@ -856,7 +976,8 @@ LayoutExprAST::LayoutExprAST(Parser_Struct *parser_struct, uint16_t type,
 }
 
 
-FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct, std::string fn_name, FnCompiledValuesVec CompiledArgsVec) {
+FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct,
+        std::string fn_name, CallArgsTy CompiledArgsVec) {
 
     FnCompiledValues fn_compiled_values; 
     if (Fn_Compiled_Args.count(fn_name)==0) {
@@ -889,7 +1010,7 @@ LaunchExprAST::LaunchExprAST(Parser_Struct*, std::unique_ptr<ExprAST> Grid,
         std::unique_ptr<ExprAST> Smem,
         std::unique_ptr<ExprAST> Stream,
         std::vector<std::unique_ptr<ExprAST>> Args,
-        FnCompiledValuesVec CompiledArgsVec,
+        CallArgsTy CompiledArgsVec,
         std::string fn_name) 
     : Grid(std::move(Grid)), Block(std::move(Block)), Args(std::move(Args)),
       Smem(std::move(Smem)), Stream(std::move(Stream)),
@@ -906,8 +1027,11 @@ LaunchExprAST::LaunchExprAST(Parser_Struct*, std::unique_ptr<ExprAST> Grid,
         for (int i=stmt->Values.size(); i<3; i++)
             stmt->Values.insert(stmt->Values.end(), std::make_unique<IntExprAST>(1));
     }
+
     
     CompiledArgs = HandleCompiledArgs(parser_struct, fn_name, CompiledArgsVec);
+
+    
     if (CompiledArgs.has)
         fn_name = mangle_cargs_proto(fn_name);
 }
@@ -1479,44 +1603,92 @@ MainExprAST::MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
         : Bodies(std::move(Bodies)) {}
   
   
+
+TemplateAST::TemplateAST(Parser_Struct *parser_struct,
+        const std::string &Name, Data_Tree ReturnType,
+        std::vector<std::string> Args,
+        std::vector<Data_Tree> Types) 
+    : parser_struct(parser_struct), Name(Name), ReturnType(ReturnType),
+      Args(std::move(Args)), Types(std::move(Types)){
+    
+    CArgs = CallArgsTy(this->Types);
+    CArgs.template_ast = this;
+    CArgs.template_ret = ReturnType;
+    FnTemplates[Name].push_back(CArgs);
+}
+
   
+void PrototypeAST::SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits) {
+    if(Inits.size()==0)
+        return;
+    int inits = Inits.size();
+    int i=Args.size()-inits;
+    for (auto &expr : Inits) {
+        std::string arg_name = this->Args[i++];
+        ArgsInit[Name].emplace(arg_name, std::move(expr));
+    }
+
+    // Function_Arg_Count[this->Name] += inits;
+    Function_Required_Arg_Count[this->Name] -= inits;
+
+
+    // Handle positional args
+    for (int i=0; i<inits; ++i) {
+        auto dts = Types;
+        dts.erase(dts.end()-inits, dts.end()-inits+i+1);
+        CallArgsTy CArgs_variation = CallArgsTy(dts);
+        AddFnVersion(BaseName, CArgs_variation, version);
+    }
+}
   
 PrototypeAST::PrototypeAST(Parser_Struct *parser_struct, const std::string &Name, Data_Tree ReturnType, const std::string &Class,
               const std::string &Method,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
-              bool IsOperator, unsigned Prec)
+              bool IsOperator, unsigned Prec, bool overwrite)
       : Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
         IsOperator(IsOperator), Precedence(Prec) {
     this->parser_struct = parser_struct;
 
+    BaseName = this->Name;
 
-    functions_return_data_type[Name] = ReturnType;
-    // std::cout << Name << "|" << this->Types.size() << "|" << this->Args.size() << "\n";
+    // Get Proto version name
+    CArgs = CallArgsTy(this->Types);
+    version = SetFnVersion(this->Name, CArgs, overwrite);
+
+    if (version!=0)
+        this->Name += "_"+std::to_string(version);
+
 
     std::vector<std::string> arg_names;
     int arg_count=0; 
     for (auto arg : this->Types) {
         std::string arg_name = this->Args[arg_count++];
-        Function_Arg_DataTypes[Name][arg_name] = arg;
-        // std::cout << "proto e " << Name << " add " << arg_name << "\n";
+        Function_Arg_DataTypes[this->Name][arg_name] = arg;
         arg_names.push_back(arg_name);
-        data_typeVars[Name][arg_name] = arg;
+        data_typeVars[this->Name][arg_name] = arg;
+        typeVars[this->Name][arg_name] = arg.Type;
     }
 
-    int initialized_args = (ArgsInit.count(Name)>0) ? ArgsInit[Name].size() : 0;
     
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
-    Function_Arg_Names[Name] = std::move(arg_names);
-    Function_Required_Arg_Count[Name] = arg_count-ctx_offset-initialized_args; // Desconsider scope_struct
-    native_fn.push_back(Name);
 
-    if (ends_with(Name, "_prebuild"))
-        prebuild_functions.push_back(Name);
-    // std::cout << "proto " << Name << " has " << arg_count-1 << " args\n";
 
-    has_compiled_args = Fn_Compiled_Args.count(Name)>0;
+    Function_Arg_Names[this->Name] = std::move(arg_names);
+    int required_args = arg_count-ctx_offset;
+    Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
+    Function_Arg_Count[this->Name] = required_args;
+    native_fn.push_back(this->Name);
+
+    functions_return_data_type[this->Name] = ReturnType;
+
+
+    if (ends_with(this->Name, "_prebuild"))
+        prebuild_functions.push_back(this->Name);
+
+    has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
     parser_struct->has_compiled_args = has_compiled_args;
+
 }
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -1657,39 +1829,6 @@ NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct *parser_struct, std::unique
   // }
 }
 
-Data_Tree NameableAppend::GetDataTree(bool from_assignment) {  
-  if (data_type.Type!="")
-    return data_type;
-
-  Data_Tree ret = functions_return_data_type[Callee];
-   
-
-  std::string ret_type = ret.Type;
-  if (ends_with(ret_type, "_vec")) {
-    Data_Tree return_dt = Data_Tree("vec");
-    return_dt.Nested_Data.push_back(remove_suffix(ret_type, "_vec"));
-    ret = return_dt;
-  }
-
-  if(Callee=="zip") {
-
-    Data_Tree return_dt = Data_Tree("list");
-    return_dt.Nested_Data.push_back(Data_Tree("list"));
-
-    for(int i=0; i<Args.size(); ++i) {
-
-      std::string type = Args[i]->GetDataTree().Nested_Data[0].Type;
-      return_dt.Nested_Data[0].Nested_Data.push_back(Data_Tree(type));
-    }
-
-    ret = return_dt;
-  }
-
-  data_type = ret;
-  ReturnType = ret.Type;
-
-  return ret;
-}
 
 
 
@@ -1749,9 +1888,9 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
     ret = return_dt;
   }
 
-
   data_type = ret;
   ReturnType = ret.Type;
+
 
   return ret;
 }
@@ -1857,26 +1996,6 @@ std::unique_ptr<ExprAST> Nameable::Copy() {
     return nullptr;
 }
 
-void NameableAppend::Checks() {
-
-    inner_dt = Inner->Inner->GetDataTree();
-    Callee = inner_dt.Type + "_append";
-
-    if (inner_dt.Type=="array") {
-        std::string appended_type = Args[0]->GetDataTree().Type;
-        std::string elem_type = inner_dt.Nested_Data[0].Type;
-        
-        if(!(elem_type=="float"&&appended_type=="int") && appended_type!=elem_type&&\
-                elem_type!="Function")
-            LogErrorS(parser_struct->line, "Tried to append " + appended_type + " into a " + elem_type + " array.");
-    }
-}
-
-NameableAppend::NameableAppend(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args)
-    : Nameable(parser_struct), Args(std::move(Args))
-{
-    AddNested(std::move(Inner));
-}
 
 void NameableCall::Checks() {
   if (checked)
@@ -1944,26 +2063,18 @@ void NameableCall::Checks() {
         &&method_return_overwrite.count(Callee)==0&&\
           Callee!="array_append"\
           &&!this->isSelf&&!is_first_citizen) {
-    // std::cout << "" << Callee << "|" << std::to_string(!in_vec(Callee, template_fn)) << "\n";
-    // std::cout << "" << this->isSelf << "\n";
       LogErrorS(parser_struct->line, "Function " + Callee + " not yet implemented.");
       return;
   }
     
 
   // vararg
-  if (in_str(Callee, vararg_methods)) {
-    if (Callee=="zip") {
-      GetDataTree();
-      this->Args.push_back(std::make_unique<NullPtrExprAST>());
-    }
-    else {
+  if (in_vec(Callee, vararg_methods)&&!in_vec(Callee, {"print", "printl"})) {
       std::string last_arg = Function_Arg_Names[Callee][Function_Arg_Names[Callee].size()-1];
       if (Function_Arg_Types[Callee][last_arg]=="int")
           this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
       else
           this->Args.push_back(std::make_unique<StringExprAST>("TERMINATE_VARARG"));
-    }
   }
  
   is_nsk_fn = in_str(Callee, native_methods);
@@ -1979,28 +2090,63 @@ void NameableCall::Checks() {
 
   has_obj_overwrite = (Depth>1&&!FromLib&&!is_nsk_fn);
 
-  if(Depth>1&&!FromLib&&is_nsk_fn)
+  bool is_obj = (Depth>1&&!FromLib&&is_nsk_fn); 
+
+  if(is_obj)
       arg_type_check_offset++;
   if (gpu_fn.count(Callee)>0||gpu_ffi.count(Callee))
       arg_type_check_offset--;
 
-  if(!is_first_citizen)
-      Semantic_Arguments_Check(parser_struct, this->Args, Callee, is_nsk_fn, sent_args, arg_type_check_offset);
+  // if(!is_first_citizen)
+  //     Semantic_Arguments_Check(parser_struct, this->Args, Callee, is_nsk_fn, sent_args, arg_type_check_offset);
+  // CompiledArgs = HandleCompiledArgs(parser_struct, Callee, CompiledArgsVec);
 
-  CompiledArgs = HandleCompiledArgs(parser_struct, Callee, CompiledArgsVec);
-  if (CompiledArgs.has)
-    Callee = mangle_cargs_proto(Callee);
+  if (is_obj)
+      Types.push_back(Inner->GetDataTree());
+  for (auto &arg : Args)
+      Types.push_back(arg->GetDataTree());
+  CArgs = CallArgsTy(Types);
+
+
+
+  bool needs_version = !(in_vec(Callee, vararg_methods)||Callee=="Unnamed"||\
+          data_typeVars[parser_struct->function_name].count(Callee)>0&&
+          data_typeVars[parser_struct->function_name][Callee].Type=="Function");
+
+
+  if (needs_version) {
+
+      std::cout << "" << FnLastVersion.count(Callee) << "\n";
+      bool found = true;
+      Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
+
+      if (!found) {
+          std::cout << "not found, try template" << "\n";
+          if (FnTemplates.count(Callee)>0)
+            GenTemplate(parser_struct, Callee, CArgs, found);
+
+          if (!found) {
+              if (FnLastVersion.count(Callee)==0) {
+                    LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
+              } else 
+                  FnNotFound(parser_struct, Callee, CArgs);
+          }
+      }
+  }
+
+  // if (CompiledArgs.has)
+  //   Callee = mangle_cargs_proto(Callee);
 }
 
-NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, FnCompiledValuesVec CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
+
+
+NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
   this->Inner = std::move(Inner);
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
   
   Depth = this->Inner->Depth;
   Callee = this->Inner->Name;
-
-
   
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];

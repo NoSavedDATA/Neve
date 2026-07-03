@@ -151,7 +151,7 @@ extern "C" int prebuild() {
 
 
 
-    vararg_methods = {"zip"};
+    vararg_methods = {"zip", "print", "printl"};
     template_fn = {"simd_load"};
 
     // tensor + string + ...

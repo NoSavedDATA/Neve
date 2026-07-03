@@ -6,6 +6,12 @@ def int array_int_reduce_add(array<int> v)
 		acc += v[i]
 	return acc
 
+def int array_int_reduce_mult(array<int> v)
+	int size = v.size()
+	int acc = 1
+	for i=0, i<size
+		acc *= v[i]
+	return acc
 
 def array<int> array_int_scan_add(array<int> v)
 	array<int> u

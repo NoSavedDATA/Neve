@@ -10,9 +10,9 @@
 
 
 
-Channel::Channel() {}
+DT_channel::DT_channel() {}
 
-void Channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
+void DT_channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
     this->buffer_size = buffer_size;
     __atomic_store_n(&this->buffer_size, buffer_size, __ATOMIC_RELEASE);
     this->type = type;
@@ -35,7 +35,7 @@ void Channel::New(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
 
 
 extern "C" void *channel_Create(Scope_Struct *scope_struct, uint16_t type, int buffer_size) {
-    Channel *ch = newT<Channel>(scope_struct, "channel");
+    DT_channel *ch = newT<DT_channel>(scope_struct, "channel");
     ch->New(scope_struct, type, buffer_size);
     return ch;
 }
@@ -47,7 +47,7 @@ extern "C" void *channel_Create(Scope_Struct *scope_struct, uint16_t type, int b
 
 
 // any x <- ch
-extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, DT_channel *ch) {    
     void **data = (void**)ch->data;
     
     int backoff_us = 1;
@@ -77,7 +77,7 @@ extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, Cha
 
 
 // ch <- msg
-extern "C" int channel_void_message(Scope_Struct *scope_struct, Channel *ch, void *x) {
+extern "C" int channel_void_message(Scope_Struct *scope_struct, DT_channel *ch, void *x) {
 
     void **data = (void**)ch->data;
     
@@ -115,7 +115,7 @@ extern "C" int channel_void_message(Scope_Struct *scope_struct, Channel *ch, voi
 
 
 // str x <- ch
-extern "C" DT_str str_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+extern "C" DT_str str_channel_message(Scope_Struct *scope_struct, void *ptr, DT_channel *ch) {    
     DT_str *data = (DT_str*)ch->data;
     
     int backoff_us = 1;
@@ -146,7 +146,7 @@ extern "C" DT_str str_channel_message(Scope_Struct *scope_struct, void *ptr, Cha
 
 
 // ch <- msg
-extern "C" int channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT_str str) {
+extern "C" int channel_str_message(Scope_Struct *scope_struct, DT_channel *ch, DT_str str) {
 
     DT_str *data = (DT_str*)ch->data;
     
@@ -181,7 +181,7 @@ extern "C" int channel_str_message(Scope_Struct *scope_struct, Channel *ch, DT_s
 
 extern "C" DT_str str_channel_Idx(
         Scope_Struct *scope_struct,
-        Channel *ch,
+        DT_channel *ch,
         int idx) {
     DT_str *data = (DT_str*)ch->data;
 
@@ -221,7 +221,7 @@ extern "C" DT_str str_channel_Idx(
 }
 
 
-extern "C" void str_channel_terminate(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" void str_channel_terminate(Scope_Struct *scope_struct, DT_channel *ch) {
     {
         std::unique_lock<std::mutex> lock(ch->mtx);
         ch->terminated = true;
@@ -230,7 +230,7 @@ extern "C" void str_channel_terminate(Scope_Struct *scope_struct, Channel *ch) {
 }
 
 
-extern "C" int str_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" int str_channel_alive(Scope_Struct *scope_struct, DT_channel *ch) {
     return !ch->terminated;
 }
 
@@ -248,7 +248,7 @@ extern "C" int str_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 
 
 
-extern "C" float float_channel_terminate(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" float float_channel_terminate(Scope_Struct *scope_struct, DT_channel *ch) {
     {
         std::unique_lock<std::mutex> lock(ch->mtx);
         ch->terminated = true;
@@ -256,7 +256,7 @@ extern "C" float float_channel_terminate(Scope_Struct *scope_struct, Channel *ch
     ch->cv.notify_all();  // wake up all waiting senders/receivers
     return 0;
 }
-extern "C" int float_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" int float_channel_alive(Scope_Struct *scope_struct, DT_channel *ch) {
     return !ch->terminated;
 }
 
@@ -266,7 +266,7 @@ extern "C" int float_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 
 
 // int x <- ch
-extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, DT_channel *ch) {    
     int *data = (int*)ch->data;
     
     int backoff_us = 1;
@@ -296,7 +296,7 @@ extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, Channe
 
 
 // ch <- msg
-extern "C" float channel_int_message(Scope_Struct *scope_struct, Channel *ch, int x) {
+extern "C" float channel_int_message(Scope_Struct *scope_struct, DT_channel *ch, int x) {
     int *data = (int*)ch->data;
     
     int backoff_us = 1;
@@ -327,7 +327,7 @@ extern "C" float channel_int_message(Scope_Struct *scope_struct, Channel *ch, in
 
 extern "C" int int_channel_Idx(
         Scope_Struct *scope_struct,
-        Channel *ch,
+        DT_channel *ch,
         int idx) {
     int *data = (int*)ch->data;
 
@@ -364,7 +364,7 @@ extern "C" int int_channel_Idx(
 }
 
 
-extern "C" int int_channel_sum(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" int int_channel_sum(Scope_Struct *scope_struct, DT_channel *ch) {
     std::unique_lock<std::mutex> lock(ch->mtx);
 
     ch->cv.wait(lock, [&]{ return ch->terminated || ch->size <= ch->buffer_size; } );
@@ -384,7 +384,7 @@ extern "C" int int_channel_sum(Scope_Struct *scope_struct, Channel *ch) {
 
 
 
-extern "C" float int_channel_terminate(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" float int_channel_terminate(Scope_Struct *scope_struct, DT_channel *ch) {
     {
         std::unique_lock<std::mutex> lock(ch->mtx);
         ch->terminated = true;
@@ -393,7 +393,7 @@ extern "C" float int_channel_terminate(Scope_Struct *scope_struct, Channel *ch) 
     return 0;
 }
 
-extern "C" bool int_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
+extern "C" bool int_channel_alive(Scope_Struct *scope_struct, DT_channel *ch) {
     return !ch->terminated;
 }
 

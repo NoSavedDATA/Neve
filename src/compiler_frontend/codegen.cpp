@@ -549,6 +549,7 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
     ); 
 }
 
+
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0)
@@ -1012,6 +1013,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
       int c=i+1;
       
+
       std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
@@ -1040,7 +1042,9 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
       for (; i<arg_count; ++i) {
           std::string arg_name = fn_args_name[i+1];
+          // std::cout << "8" << "\n";
           Value *arg_default = ArgsInit[fn_name][arg_name]->codegen(scope_struct);
+          // std::cout << "9" << "\n";
           ArgsV.push_back(arg_default);
       }
   }
@@ -2942,7 +2946,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             for (auto &dyn : dynamic_args)
                 Args.push_back(dyn->expr->codegen(scope_struct));
         }
-        ret = callret(called_op, {L, R}); 
+        ret = callret(called_op, Args); 
     }
 
 
@@ -4044,6 +4048,7 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
 
 
 Value *ReduceExprAST::codegen(Value *scope_struct) {
+    Checks();
     std::string gpu_str = (parser_struct->gpu>0)  ? "gpu_" : "";
     std::string callee = fn + "_" + gpu_str + functional_type + "_" + op_map[Op];
     if(parser_struct->gpu==0)
@@ -4415,6 +4420,7 @@ Value *Nameable::codegen(Value *scope_struct) {
         }
         if (parser_struct->cvalues.ints.count(Name)>0)
             return const_int(parser_struct->cvalues.ints[Name]);
+        std::cout << "AS FN " << parser_struct->function_name << "/" << Name << "\n";
         return getFunctionCheck(Name);
     }
 
@@ -4710,109 +4716,6 @@ inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_
     return true;
 }
 
-Value *NameableAppend::codegen(Value *scope_struct) {  
-    Checks();
-
-    Value *loaded_var = Inner->Inner->codegen(scope_struct);
-
-    if (inner_dt.Type=="array") {
-        Value *appended_val = Args[0]->codegen(scope_struct);
-
-        std::string elem_type = inner_dt.Nested_Data[0].Type;
-
-        Function *TheFunction = Builder->GetInsertBlock()->getParent();
-        BasicBlock *good_sizeBB = BasicBlock::Create(*TheContext, "array.append.ok_size", TheFunction);
-        BasicBlock *bad_sizeBB = BasicBlock::Create(*TheContext, "array.append.bad_size", TheFunction);
-        BasicBlock *postBB = BasicBlock::Create(*TheContext, "array.append.post", TheFunction);
-
-        if (elem_type=="float"&&Args[0]->GetDataTree().Type=="int")
-            appended_val = Builder->CreateSIToFP(appended_val, floatTy, "lfp");
-
-
-        StructType *st = struct_types["scope_struct"];
-        llvm::Type *elemTy;
-        Value *vec = Load_Array(parser_struct->function_name, loaded_var);
-
-        if (!in_vec(elem_type, primary_data_tokens)) {
-            Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
-            Value *gc = Builder->CreateLoad(int8PtrTy, gc_gep);
-            Value *marking = Builder->CreateLoad(boolTy,
-                                        Builder->CreateStructGEP(struct_types["GC"], gc, 3));
-
-            BasicBlock *MarkingBB = BasicBlock::Create(*TheContext, "array.marking", TheFunction);
-            BasicBlock *StandardBB = BasicBlock::Create(*TheContext, "array.standard", TheFunction);
-            
-            Builder->CreateCondBr(marking, MarkingBB, StandardBB);
-            Builder->SetInsertPoint(MarkingBB);
-
-            if (elem_type=="str") {
-                Value *str  = Builder->CreateExtractValue(appended_val, {0});
-                Value *size = Builder->CreateExtractValue(appended_val, {1});
-                call("GC_array_append_str_barrier",
-                     {const_int16(data_name_to_type()[elem_type]), scope_struct, loaded_var, str, size});
-            } else
-                call("GC_array_append_barrier",
-                     {const_int16(data_name_to_type()[elem_type]), scope_struct, loaded_var, appended_val});
-            Builder->CreateBr(postBB);
-
-            Builder->SetInsertPoint(StandardBB);
-        }
-
-        elemTy = get_type_from_str(elem_type); 
-
-
-        Value *vsize_gep = Builder->CreateStructGEP(st, loaded_var, 0);
-        Value *vsize = Builder->CreateLoad(intTy, vsize_gep);
-
-        Value *size_gep = Builder->CreateStructGEP(st, loaded_var, 1);
-        Value *size = Builder->CreateLoad(intTy, size_gep);
-
-
-
-
-
-        Value *Cond = Builder->CreateICmpSLT(vsize, size);
-        Builder->CreateCondBr(Cond, good_sizeBB, bad_sizeBB);
-
-
-        //good size
-        Builder->SetInsertPoint(good_sizeBB);
-        Value *elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
-        Builder->CreateStore(appended_val, elem_gep);
-        Value *next_vsize = Builder->CreateAdd(vsize, const_int(1));
-        Builder->CreateStore(next_vsize, vsize_gep);
-        Builder->CreateBr(postBB);
-
-
-        //bad size (thus double array size)
-        Builder->SetInsertPoint(bad_sizeBB);
-        call("array_double_size", {scope_struct, loaded_var}); 
-        vec = Load_Array(parser_struct->function_name, loaded_var);
-        elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
-        Builder->CreateStore(appended_val, elem_gep);
-        next_vsize = Builder->CreateAdd(vsize, const_int(1));
-        Builder->CreateStore(next_vsize, vsize_gep);
-        Builder->CreateBr(postBB);
-
-
-        //post
-        Builder->SetInsertPoint(postBB); 
-        // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
-    } else {
-        // std::vector<Value *> ArgsV = {scope_struct, loaded_var};
-        std::vector<Value *> ArgsV = {scope_struct, loaded_var, Args[0]->codegen(scope_struct)};
-        // std::vector<Data_Tree> ArgTypes;
-        // ArgsV.push_back(Args[0]->codegen(scope_struct));
-        // ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
-        //         scope_struct,\
-        //         Callee, false, 1);
-        call(Callee, ArgsV);
-    }
-
-
-
-    return const_float(0.0f);
-}
 
 
 
@@ -5041,18 +4944,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (may_allocate) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
-
         previous_stack_top = Load_Stack_Top(parser_struct->function_name);
-        // if (!in_vec(parser_struct->function_name, {"BPE_train", "BPE_get_buff", "BPE_get_masks"})) {
-        //     p2t("----------------");
-        //     Value *stack_top_value = function_values[parser_struct->function_name]["QQ_stack_top"];
-        //     Value *offset =const_int(fn_stack_offset[parser_struct->function_name]);
-        //     p2t("load as " + parser_struct->function_name + " to " + Callee);
-        //     call("print_int", {previous_stack_top});
-        //     call("print_int", {stack_top_value});
-        //     call("print_int", {offset});
-        //     p2t("----------------");
-        // }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }
 
@@ -5062,11 +4954,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
     Value *obj_ptr;
     bool shall_swap = false;
     if(Depth>1&&!FromLib) {
-        if (ends_with(Callee, "__init__")&&isSelf) {
-            Inner->IsLeaf=true;
-            Inner->Load_Last=false; // inhibits Load_slot
-        }
-
         obj_ptr = Inner->codegen(scope_struct);
 
         if(!is_nsk_fn)
@@ -5101,10 +4988,11 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (ReturnType=="")
         GetDataTree();
 
-    if (!is_first_citizen)
+    if (!is_first_citizen) {
         ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
                 scope_struct,\
                 Callee, is_nsk_fn, arg_type_check_offset);
+    }
     else {
         for (int i=0; i<Args.size(); ++i)
             ArgsV.push_back(Args[i]->codegen(scope_struct));
