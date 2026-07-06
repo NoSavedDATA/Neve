@@ -552,14 +552,13 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
 
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
-  if (differences>0)
-  {
-    LogErrorS(parser_struct->line, "Tried to attribute data of different types");
+  if (differences>0) {
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
     RType.Print();
     std::cout << "\n\n";
+    LogErrorS(parser_struct->line, "Tried to attribute data of different types");
     return false;
   }
   return true;
@@ -2475,7 +2474,6 @@ inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs,
     
         std::string sent_type = sent_dt.Type;
         if (is_number(sent_type)) {
-            std::cout << "KEY " << key <<  " GET  " << sent_type <<  "\n";
             CompiledArgs.ints[key] = std::stoi(sent_type);
         } else {
             bool has=false;
@@ -2519,16 +2517,9 @@ std::string SpecializeOperation(std::string fn, Parser_Struct *parser_struct,
         std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS) {
     std::string fn_name = fn;
 
-    std::cout << "\n";
-    std::cout << "SPECIALIZE " << "\n";
-    L_dt.Print();
-    R_dt.Print();
 
     L_dt = SolveComptimeValues(L_dt, parser_struct);
     R_dt = SolveComptimeValues(R_dt, parser_struct);
-    L_dt.Print();
-    R_dt.Print();
-    std::cout << "\n";
 
     if (FunctionProtos.count(fn)==0)
         LogErrorC(parser_struct->line, "Could not find operation " + fn);
@@ -4197,7 +4188,6 @@ std::vector<Value *> LayoutExprAST::GetStrides(Value *ctx) {
         }
         else if (auto stmt = dynamic_cast<Nameable*>(expr.get())) {
             std::string name = stmt->Name;
-            std::cout << "EXPR " << name << "\n";
 
             if (parser_struct->cvalues.ints.count(name)==0)  {
                 cur_val = expr->codegen(ctx);
@@ -4420,7 +4410,6 @@ Value *Nameable::codegen(Value *scope_struct) {
         }
         if (parser_struct->cvalues.ints.count(Name)>0)
             return const_int(parser_struct->cvalues.ints[Name]);
-        std::cout << "AS FN " << parser_struct->function_name << "/" << Name << "\n";
         return getFunctionCheck(Name);
     }
 

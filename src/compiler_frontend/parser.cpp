@@ -2325,12 +2325,7 @@ void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree 
   }
   getNextToken(); // eat )
 
-std::cout << "-------post template proto:   " << CurTok << "/" << ReverseToken(CurTok) << "\n";
 
-  // if (CurTok!=tok_space)
-  //   LogError(parser_struct->line, "Post generic prototype parsing requires a line break.");
-  // getNextToken();
-std::cout << "-------post template proto:   " << CurTok << "/" << ReverseToken(CurTok) << "\n";
 
   new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames), std::move(Types));
 }
@@ -2361,7 +2356,14 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
       return_data_type = Data_Tree("int");
   } else {  
       return_type = IdentifierStr;
-      return_data_type = ParseDataTree(return_type, in_vec(IdentifierStr,compound_tokens), parser_struct);
+      return_data_type = Data_Tree(return_type);
+      if(CurTok!=tok_data&&CurTok!=tok_struct\
+                &&Classes.count(return_type)==0&&return_type!="layout") {
+          return_data_type.is_generic=true;
+      }
+      getNextToken();
+      if (CurTok=='<'||CurTok=='[')
+        return_data_type = Parse_Data_Type(return_type, parser_struct, true);
   }
   
 
@@ -2664,6 +2666,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
   std::vector<std::unique_ptr<ExprAST>> Body;
 
 
+
   bool has_safe_point=false;
   while(!in_char(CurTok, terminal_tokens)) {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
@@ -2856,6 +2859,13 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
 
     PrototypeAST proto = Func->getProto();
     std::string proto_name = proto.getName();
+
+
+    if (proto.is_generic) {
+        Template_FnAST[Func->getProto().getName()] = std::move(Func);
+        continue;
+    }
+
 
     if(!has_main) { // LSP info
       fn_descriptor fn_d = fn_descriptor(remove_substring(proto_name, Name+"_"), proto.ReturnType.Type); 

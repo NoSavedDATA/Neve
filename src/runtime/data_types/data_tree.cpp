@@ -19,6 +19,13 @@ std::map<std::string, Data_Tree> functions_return_data_type;
 Data_Tree::Data_Tree(std::string Type, std::vector<Data_Tree> Nested_Data) : Type(Type), Nested_Data(std::move(Nested_Data)) {}
 Data_Tree::Data_Tree(std::string Type) : Type(Type) {}
 
+bool Data_Tree::HasGeneric() const {
+    bool has_generic = is_generic;
+    for (int i=0; i<Nested_Data.size(); ++i)
+        has_generic |= Nested_Data[i].HasGeneric();
+    return has_generic;
+}
+
 bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     if((L->Type=="list"&&R.Type=="unknown_list")||L->Type=="unknown_list"&&R.Type=="list")
         return true;

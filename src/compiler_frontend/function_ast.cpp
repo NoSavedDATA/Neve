@@ -909,16 +909,13 @@ Function *FunctionAST::codegen() {
 
     
 
-  if (begins_with(Proto->getName(),"bar"))
-      std::cout << "CODEGEN FN " << Proto->getName() << "\n";
   int idx = P.CArgs.version;
   FunctionProtos[Proto->getName()] = std::move(Proto);
   // FunctionProtos[Proto->getName()] = Proto.get();
   std::string function_name = P.getName();
   parser_struct->function_name = function_name;
 
-  if (begins_with(function_name,"bar"))
-      std::cout << "CODEGEN FN " << function_name << "\n";
+
 
 
   Function *TheFunction = getFunction(function_name);
@@ -926,8 +923,9 @@ Function *FunctionAST::codegen() {
     return nullptr;
 
   // If this is an operator, install it.
-  if (P.isBinaryOp())
+  if (P.isBinaryOp()) {
     BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
+  }
 
   // Create a new basic block to start insertion into.
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
@@ -1013,8 +1011,10 @@ Function *FunctionAST::codegen() {
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
 
-  if (P.isBinaryOp())
+
+  if (P.isBinaryOp()) {
     BinopPrecedence.erase(P.getOperatorName());
+  }
   return nullptr;
 }
 

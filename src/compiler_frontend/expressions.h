@@ -1061,7 +1061,7 @@ class PrototypeAST {
   
     unsigned Precedence; // Precedence if a binary op.
   
-      bool IsOperator, has_compiled_args=false, is_generic=false;
+      bool IsOperator=false, has_compiled_args=false, is_generic=false;
       Parser_Struct *parser_struct;
       Data_Tree ReturnType;
       CallArgsTy CArgs;

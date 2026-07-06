@@ -258,18 +258,17 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
     int size = CArgs.args.size();
 
-    std::cout << fn << "/" << this->Name << ": " << size << " -- " << CArgs.dts.size() << "\n";
     
     for (int i=0; i<size; ++i) {
         std::string arg_name = CArgs.args[i];
         Data_Tree dt = CArgs.dts[i];
         data_typeVars[fn][arg_name] = dt;
-        std::cout << fn << "/" << arg_name << "\n";
-        dt.Print();
         this->Args.push_back(arg_name);
         this->Types.push_back(dt);
     }
+
     ReturnType = CArgs.template_ret;
+
     
     functions_return_data_type[fn] = CArgs.template_ret;
     native_fn.push_back(fn);
@@ -291,53 +290,94 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
 }
 
-std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
-    std::cout << "gen template for " << fn << "\n";
-
-    for (auto &templ : FnTemplates[fn]) {
 
 
-        std::cout << "fn args" << "\n";
-        print_dt_vec(CArgs.dts);
-        std::cout << "template args" << "\n";
-        print_dt_vec(templ.dts);
-
-        if (CompareDTs(CArgs.dts, templ.dts)) {
-            std::string base_name = fn;
-            int idx;
-            if (FnLastVersion.count(fn)==0) {
-                idx = 0;
-                FnLastVersion[fn] = 1;
-            } else
-                idx = FnLastVersion[fn]++;
-            fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
-            CArgs.version = idx;
-            CArgs.version_str = fn;
-            FnVersion[base_name].push_back(CArgs);
-            std::cout << "add template " << fn << "\n";
-
-            
-            CArgs.args = templ.args;
-            CArgs.template_ret = templ.template_ret;
-            
-            std::cout << "1"<< "\n";
-            auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
-                            CArgs);
-            std::cout << "2"<< "\n";
-
-            auto &fn_ast = Template_FnAST[base_name];
-            std::cout << "3"<< "\n";
-            fn_ast->Proto = std::move(proto);
-            std::cout << "4"<< "\n";
-            BasicBlock *CurBB = Builder->GetInsertBlock();
-            std::cout << "5"<< "\n";
-            fn_ast->codegen();
-            Builder->SetInsertPoint(CurBB);
-            std::cout << "6"<< "\n";
-            
-            found = true;
-            return fn;
+void AssignGenericTree(Data_Tree dt, Data_Tree templ_dt,
+        std::unordered_map<std::string,Data_Tree> &generics_map) {
+    if (templ_dt.is_generic) {
+        if (generics_map.count(templ_dt.Type)>0) {
+            if (dt.Compare(generics_map[templ_dt.Type])>0) {
+                LogErrorS(-1, "Assigned 2 different values for a single generic type.");
+                return;
+            }
         }
+        generics_map[templ_dt.Type] = dt;
+        return;
+    }
+    for (int i=0; i<templ_dt.Nested_Data.size(); ++i)
+        AssignGenericTree(dt.Nested_Data[i], templ_dt.Nested_Data[i], generics_map);
+}
+
+void DeriveTypedGeneric(Data_Tree templ_dt, Data_Tree &ret_dt,
+        std::unordered_map<std::string,Data_Tree> &generics_map) {
+
+    if (generics_map.count(templ_dt.Type)>0)
+        ret_dt = generics_map[templ_dt.Type].Type;
+    else
+        ret_dt.Type = templ_dt.Type;
+    
+
+    for (int i=0; i<ret_dt.Nested_Data.size(); ++i) {
+        ret_dt.Nested_Data.push_back(Data_Tree(""));
+        DeriveTypedGeneric(templ_dt.Nested_Data[i], ret_dt.Nested_Data[i],
+                            generics_map);
+    }
+}
+
+CallArgsTy AssignGenericTypes(CallArgsTy cargs, CallArgsTy templ) {
+    std::unordered_map<std::string,Data_Tree> generics_map;
+
+    for (int i=0; i<templ.dts.size(); ++i)
+        AssignGenericTree(cargs.dts[i], templ.dts[i], generics_map);
+
+    if (templ.template_ret.HasGeneric()) {
+        Data_Tree ret_dt = Data_Tree("");
+        DeriveTypedGeneric(templ.template_ret, ret_dt, generics_map);
+        templ.template_ret = ret_dt;
+    }
+
+
+    return templ;
+}
+
+std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
+    for (auto &templ : FnTemplates[fn]) {
+        if (!CompareDTs(CArgs.dts, templ.dts))
+            continue;
+
+
+        templ = AssignGenericTypes(CArgs, templ);
+
+
+        std::string base_name = fn;
+        int idx;
+        if (FnLastVersion.count(fn)==0) {
+            idx = 0;
+            FnLastVersion[fn] = 1;
+        } else
+            idx = FnLastVersion[fn]++;
+        fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
+        CArgs.version = idx;
+        CArgs.version_str = fn;
+        FnVersion[base_name].push_back(CArgs);
+
+        
+        CArgs.args = templ.args;
+        CArgs.template_ret = templ.template_ret;
+        
+        auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
+                        CArgs);
+
+        auto &fn_ast = Template_FnAST[base_name];
+        if (!fn_ast.get())
+            LogErrorC(-1, "Template for " +base_name + " failed");
+        fn_ast->Proto = std::move(proto);
+        BasicBlock *CurBB = Builder->GetInsertBlock();
+        fn_ast->codegen();
+        Builder->SetInsertPoint(CurBB);
+        
+        found = true;
+        return fn;
     }
 
     return fn;
@@ -1041,11 +1081,7 @@ int LayoutExprAST::DimsProd() {
         } else
             LogErrorC(parser_struct->line, "layout does not support nested type " + type);
     }
-    std::cout << "dims prod" << "\n";
-    for (auto &p : parser_struct->cvalues.ints)
-        std::cout << "" << p.first << "\n";
     return prod;
-
 }
 
 
@@ -1693,13 +1729,11 @@ TemplateAST::TemplateAST(Parser_Struct *parser_struct,
     : parser_struct(parser_struct), Name(Name), ReturnType(ReturnType),
       Args(std::move(Args)), Types(std::move(Types)){
     
-    std::cout << "TEMPLATE HAS " << this->Args.size() << "\n";
     CArgs = CallArgsTy(this->Types);
     CArgs.template_ast = this;
     CArgs.template_ret = ReturnType;
     CArgs.args = this->Args;
     FnTemplates[Name].push_back(CArgs);
-    std::cout << "ppost " << FnTemplates[Name][0].args.size() << "\n";
 }
 
   
@@ -2015,9 +2049,6 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     else if (FnTemplates.count(Name)>0)
         return Data_Tree("generic_fn");
     else {
-
-        std::cout << "parser_struct: " << parser_struct->cvalues.ints.size() << "\n";
-
         LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->function_name + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }
@@ -2208,7 +2239,6 @@ void NameableCall::Checks() {
       Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
 
       if (!found) {
-          std::cout << "not found, try template" << "\n";
           if (FnTemplates.count(Callee)>0)
             Callee = GenTemplate(parser_struct, Callee, CArgs, found);
 

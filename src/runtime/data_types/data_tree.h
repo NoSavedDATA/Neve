@@ -25,6 +25,7 @@ struct Data_Tree {
     std::string toString() const;
     bool IsComposite() const;
     bool IsBuffered() const;
+    bool HasGeneric() const;
 
 };
 
