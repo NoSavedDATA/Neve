@@ -18,6 +18,7 @@ mall.sh
 *backup/
 *.csv
 *.txt
+*.tar.bz2
 *.nk
 *.nv
 *.py
