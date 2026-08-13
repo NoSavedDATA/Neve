@@ -512,6 +512,15 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_node_reclaim"].push_back("1");
 		Function_Arg_Names["map_node_reclaim"].push_back("2");
 		
+		Function_Arg_Types["hash_ptr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["hash_ptr"]["1"] = "void";
+		
+		Function_Arg_DataTypes["hash_ptr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["hash_ptr"]["1"] = Data_Tree("void");
+		
+		Function_Arg_Names["hash_ptr"].push_back("0");
+		Function_Arg_Names["hash_ptr"].push_back("1");
+		
 		Function_Arg_Types["map_size"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_size"]["1"] = "map";
 		
@@ -541,6 +550,18 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_has_str"].push_back("0");
 		Function_Arg_Names["map_has_str"].push_back("1");
 		Function_Arg_Names["map_has_str"].push_back("2");
+		
+		Function_Arg_Types["map_has_void_ptr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_has_void_ptr"]["1"] = "map";
+		Function_Arg_Types["map_has_void_ptr"]["2"] = "void";
+		
+		Function_Arg_DataTypes["map_has_void_ptr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_has_void_ptr"]["1"] = Data_Tree("map");
+		Function_Arg_DataTypes["map_has_void_ptr"]["2"] = Data_Tree("void");
+		
+		Function_Arg_Names["map_has_void_ptr"].push_back("0");
+		Function_Arg_Names["map_has_void_ptr"].push_back("1");
+		Function_Arg_Names["map_has_void_ptr"].push_back("2");
 		
 		Function_Arg_Types["map_has_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_has_int"]["1"] = "map";
@@ -707,6 +728,15 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_keys_str"].push_back("0");
 		Function_Arg_Names["map_keys_str"].push_back("1");
 		
+		Function_Arg_Types["map_keys_void_ptr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_keys_void_ptr"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_keys_void_ptr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_keys_void_ptr"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_keys_void_ptr"].push_back("0");
+		Function_Arg_Names["map_keys_void_ptr"].push_back("1");
+		
 		Function_Arg_Types["map_keys_array"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_keys_array"]["1"] = "map";
 		
@@ -760,6 +790,15 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["map_bad_key_str"].push_back("0");
 		Function_Arg_Names["map_bad_key_str"].push_back("1");
+		
+		Function_Arg_Types["map_bad_key_void_ptr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_bad_key_void_ptr"]["1"] = "void";
+		
+		Function_Arg_DataTypes["map_bad_key_void_ptr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_bad_key_void_ptr"]["1"] = Data_Tree("void");
+		
+		Function_Arg_Names["map_bad_key_void_ptr"].push_back("0");
+		Function_Arg_Names["map_bad_key_void_ptr"].push_back("1");
 		
 		Function_Arg_Types["map_bad_key_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_bad_key_int"]["1"] = "int";
@@ -962,6 +1001,45 @@ void set_functions_args_type() {
 		Function_Arg_Names["array_int_NewVec"].push_back("9");
 		Function_Arg_Names["array_int_NewVec"].push_back("10");
 		Function_Arg_Names["array_int_NewVec"].push_back("11");
+		
+		Function_Arg_Types["array_float_NewVec"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_float_NewVec"]["1"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["2"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["3"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["4"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["5"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["6"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["7"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["8"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["9"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["10"] = "float";
+		Function_Arg_Types["array_float_NewVec"]["11"] = "float";
+		
+		Function_Arg_DataTypes["array_float_NewVec"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_float_NewVec"]["1"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["2"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["3"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["4"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["5"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["6"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["7"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["8"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["9"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["10"] = Data_Tree("float");
+		Function_Arg_DataTypes["array_float_NewVec"]["11"] = Data_Tree("float");
+		
+		Function_Arg_Names["array_float_NewVec"].push_back("0");
+		Function_Arg_Names["array_float_NewVec"].push_back("1");
+		Function_Arg_Names["array_float_NewVec"].push_back("2");
+		Function_Arg_Names["array_float_NewVec"].push_back("3");
+		Function_Arg_Names["array_float_NewVec"].push_back("4");
+		Function_Arg_Names["array_float_NewVec"].push_back("5");
+		Function_Arg_Names["array_float_NewVec"].push_back("6");
+		Function_Arg_Names["array_float_NewVec"].push_back("7");
+		Function_Arg_Names["array_float_NewVec"].push_back("8");
+		Function_Arg_Names["array_float_NewVec"].push_back("9");
+		Function_Arg_Names["array_float_NewVec"].push_back("10");
+		Function_Arg_Names["array_float_NewVec"].push_back("11");
 		
 		Function_Arg_Types["array_void_NewVec"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_void_NewVec"]["1"] = "void";

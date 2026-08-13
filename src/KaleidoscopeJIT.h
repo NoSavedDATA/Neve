@@ -43,7 +43,6 @@ class FunctionAST;
 
 
 extern std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
-extern std::unordered_map<std::string, std::unique_ptr<FunctionAST>> Template_FnAST;
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {

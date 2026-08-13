@@ -17,6 +17,7 @@ struct Data_Tree {
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);
     Data_Tree(std::string);
 
+
     bool CompareMap(Data_Tree&) const;
     bool IsTemplate() const;
     int Compare(Data_Tree) const;
@@ -26,7 +27,7 @@ struct Data_Tree {
     bool IsComposite() const;
     bool IsBuffered() const;
     bool HasGeneric() const;
-
+    bool Has(std::string type) const;
 };
 
 
@@ -35,5 +36,6 @@ struct Data_Tree {
 extern std::map<std::string, Data_Tree> functions_return_data_type;
 
 
+Data_Tree GenericUnmangleType(Data_Tree dt, Data_Tree generic_dt);
 std::string UnmangleVec(Data_Tree dt);
 void print_dt_vec(std::vector<Data_Tree> dt);

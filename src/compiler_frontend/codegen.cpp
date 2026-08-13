@@ -932,6 +932,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
                                                   bool is_nsk_fn, int arg_offset=1) {
   // -- Required Arguments -- //
 
+  // std::cout << "arg list " << fn_name << "\n";
   // std::cout << "arg list " << fn_name << " | " << Args.size() << " | " << arg_offset << "\n";
   unsigned i, e;
   for (i = 0, e = Args.size(); i != e; ++i) {
@@ -1974,12 +1975,70 @@ Value *strviewcmp(Value *ctx, Value *a, Value *b) {
 
 
 
+Value *new_map_node(Value *scope_struct, Value *query, Value *Val, std::string key_type, std::string value_type) {
+    StructType *st_node = struct_types["map_node"];
+    Value *new_node_ptr = callret("malloc", {const_int(24)});
+
+    Value *nullPtr = ConstantPointerNull::get(
+                cast<PointerType>(int8PtrTy)
+            );
+    // key
+    Value *new_node_key_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 0);
+    if (key_type=="int") {
+        Value *int_ptr = callret("malloc", {const_int(4)});
+        Builder->CreateStore(query, int_ptr);
+        Builder->CreateStore(int_ptr, new_node_key_gep);
+    } else if (key_type=="i64") {
+        Value *int_ptr = callret("malloc", {const_int(8)});
+        Builder->CreateStore(query, int_ptr);
+        Builder->CreateStore(int_ptr, new_node_key_gep);
+    } else if (key_type=="float") {
+        Value *float_ptr = callret("malloc", {const_int(4)});
+        Builder->CreateStore(query, float_ptr);
+        Builder->CreateStore(float_ptr, new_node_key_gep);
+    } else {
+        Builder->CreateStore(query, new_node_key_gep); 
+    }
+
+    // value
+    Value *new_node_value_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 1);
+    if (value_type=="int") {
+        Value *int_ptr = callret("malloc", {const_int(4)});
+        Builder->CreateStore(Val, int_ptr);
+        Builder->CreateStore(int_ptr, new_node_value_gep);
+    } else if (value_type=="i64") {
+        Value *int_ptr = callret("malloc", {const_int(8)});
+        Builder->CreateStore(Val, int_ptr);
+        Builder->CreateStore(int_ptr, new_node_value_gep);
+    } else if (value_type=="float") {
+        Value *float_ptr = callret("malloc", {const_int(4)});
+        Builder->CreateStore(Val, float_ptr);
+        Builder->CreateStore(float_ptr, new_node_value_gep);
+    } else if (value_type=="str")
+        Builder->CreateStore(CopyStrVal(scope_struct, Val), new_node_value_gep);
+    else
+        Builder->CreateStore(Val, new_node_value_gep);
+
+    Value *new_node_next_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 2);
+    Builder->CreateStore(nullPtr, new_node_next_gep);
+    return new_node_ptr;
+}
 
 
-
-
-
-
+inline Value *load_map_node_val(Value *value_gep, std::string value_type) {
+    Value *value;
+    if (value_type=="int") {
+        Value *value_void_ptr = Builder->CreateLoad(int8PtrTy, value_gep);
+        Value *value_int_ptr = Builder->CreateBitCast(value_void_ptr, intTy->getPointerTo());
+        value = Builder->CreateLoad(intTy, value_int_ptr);
+    } else if (value_type=="float") {
+        Value *value_void_ptr = Builder->CreateLoad(int8PtrTy, value_gep);
+        Value *value_float_ptr = Builder->CreateBitCast(value_void_ptr, floatTy->getPointerTo());
+        value = Builder->CreateLoad(floatTy, value_float_ptr);
+    } else
+        value = Builder->CreateLoad(int8PtrTy, value_gep);
+    return value;
+}
 
 
 void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std::string Operation, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
@@ -2096,6 +2155,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             StructType *st = struct_types["map"];
             StructType *st_node = struct_types["map_node"];
 
+
             if (R_dt.Type=="int"&&key_type=="float")
                 query = Builder->CreateSIToFP(query, floatTy);
             if (key_type=="str")
@@ -2107,46 +2167,8 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
                     );
 
 
-            Value *new_node_ptr = callret("malloc", {const_int(24)});
-
-            // key
-            Value *new_node_key_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 0);
-            if (key_type=="int") {
-                Value *int_ptr = callret("malloc", {const_int(4)});
-                Builder->CreateStore(query, int_ptr);
-                Builder->CreateStore(int_ptr, new_node_key_gep);
-            } else if (key_type=="i64") {
-                Value *int_ptr = callret("malloc", {const_int(8)});
-                Builder->CreateStore(query, int_ptr);
-                Builder->CreateStore(int_ptr, new_node_key_gep);
-            } else if (key_type=="float") {
-                Value *float_ptr = callret("malloc", {const_int(4)});
-                Builder->CreateStore(query, float_ptr);
-                Builder->CreateStore(float_ptr, new_node_key_gep);
-            } else
-                Builder->CreateStore(query, new_node_key_gep); 
-
-            // value
-            Value *new_node_value_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 1);
-            if (value_type=="int") {
-                Value *int_ptr = callret("malloc", {const_int(4)});
-                Builder->CreateStore(Val, int_ptr);
-                Builder->CreateStore(int_ptr, new_node_value_gep);
-            } else if (value_type=="i64") {
-                Value *int_ptr = callret("malloc", {const_int(8)});
-                Builder->CreateStore(Val, int_ptr);
-                Builder->CreateStore(int_ptr, new_node_value_gep);
-            } else if (value_type=="float") {
-                Value *float_ptr = callret("malloc", {const_int(4)});
-                Builder->CreateStore(Val, float_ptr);
-                Builder->CreateStore(float_ptr, new_node_value_gep);
-            } else if (value_type=="str")
-                Builder->CreateStore(CopyStrVal(scope_struct, Val), new_node_value_gep);
-            else
-                Builder->CreateStore(Val, new_node_value_gep);
-
+            Value *new_node_ptr = new_map_node(scope_struct, query, Val, key_type, value_type);
             Value *new_node_next_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 2);
-            Builder->CreateStore(nullPtr, new_node_next_gep);
 
             // Load map attributes 
             Value *size_gep = Builder->CreateStructGEP(st, vec_ptr, 0);
@@ -2206,6 +2228,9 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
                 query_hash = callret("hash_array_"+key_dt.Nested_Data[0].Type, {scope_struct, query});
             if (in_vec(key_type,int_types) && key_type!="int")
                 query_hash = Builder->CreateIntCast(query, intTy, true);
+            if (ClassSize.count(key_type)>0)
+                query_hash = callret("hash_ptr", {scope_struct, query});
+            
             Value *hash_pos = Builder->CreateURem(query_hash, map_capacity);
 
 
@@ -2240,6 +2265,9 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             } else if (key_type=="array") {
                 key = Builder->CreateLoad(int8PtrTy, key_gep);
                 keyCond = callret("array_eq_"+key_dt.Nested_Data[0].Type, {scope_struct, query, key});
+            } else if (ClassSize.count(key_type)>0) {
+                key = Builder->CreateLoad(int8PtrTy, key_gep);
+                keyCond = Builder->CreateICmpEQ(key, query);
             } else {
                 key = Builder->CreateLoad(int8PtrTy, key_gep);
                 // keyCond = strviewcmp(scope_struct, key, query);
@@ -2289,6 +2317,9 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             } else if (key_type=="array") {
                 key = Builder->CreateLoad(int8PtrTy, key_gep);
                 keyCond = callret("array_eq_"+key_dt.Nested_Data[0].Type, {scope_struct, query, key});
+            } else if (ClassSize.count(key_type)>0) {
+                key = Builder->CreateLoad(int8PtrTy, key_gep);
+                keyCond = Builder->CreateICmpEQ(key, query);
             } else {
                 key = Builder->CreateLoad(int8PtrTy, key_gep);
                 keyCond = callret("strcmp", {key, query});
@@ -2549,7 +2580,9 @@ std::string SpecializeOperation(std::string fn, Parser_Struct *parser_struct,
             std::cout << "Uninmplemented non-gpu template fn logic (" << fn << ")\n";
 
         idx = (Fn_Last_Version.count(fn)==0) ? 0 : Fn_Last_Version[fn];
-        fn+=std::to_string(idx);
+        fn+="_"+std::to_string(idx);
+        // std::cout << "specialize: " << fn << "\n";
+        // std::cout << "cints " << CompiledArgs.ints.size() << "\n";
         Fn_Compiled_Values[fn] = CompiledArgs;
 
         Function *F= proto->codegen(&dynamic_args);
@@ -2598,6 +2631,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     if (!L || !R)
         return nullptr;
 
+    if (auto *rstmt = dynamic_cast<BinaryExprAST*>(RHS.get())) {
+        if (rstmt->is_fused)
+            return const_int(0);
+    }
 
     if (cast_L_to=="int_to_float")
         L = Builder->CreateSIToFP(L, Type::getFloatTy(*TheContext), "lfp");
@@ -2749,11 +2786,28 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             }
             default:
                 std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
-                std::string called_op = SpecializeOperation(Operation, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
+
                 std::vector<Value *> Args = {L, R};
+                std::vector<Data_Tree> Types = {L_dt, R_dt};
+                if (is_fused) {
+                    if (auto *pstmt = dynamic_cast<BinaryExprAST*>(Parent)) {
+                        Value *ParentV = pstmt->LHS->codegen(scope_struct);
+                        Types.push_back(pstmt->L_dt);
+                        Args.push_back(ParentV);
+                    }
+                }
+                CallArgsTy CArgs = CallArgsTy(Types);
+                bool found;
+                std::string Callee = GetFnVersion(parser_struct, Operation, CArgs, found);
+                // TemplateSolveCompiledArgs(Callee, Operation);
+
+
+                std::string called_op = SpecializeOperation(Callee, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
                 for (auto &dyn : dynamic_args)
                     Args.push_back(dyn->expr->codegen(scope_struct));
                 ret = callret(called_op, Args); 
+                if (is_fused)
+                    return ret;
                 break;
         }       
     } else if (Elements=="vec_vec") {
@@ -2932,6 +2986,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if (parser_struct->gpu==0)
             Args.insert(Args.begin(), scope_struct);
         if (L_dt.IsTemplate()||R_dt.IsTemplate()) {
+            std::cout << "Is template for "  << "\n";
+            L_dt.Print();
+            R_dt.Print();
             std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
             called_op = SpecializeOperation(Operation, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
             for (auto &dyn : dynamic_args)
@@ -3009,7 +3066,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
     if (Opcode==tok_not||Opcode=='!') {
         if(operand_type!="bool") {
-            if (!in_vec(operand_type, primary_data_tokens)&&!in_vec(operand_type, compound_tokens)) {
+            if (!in_vec(operand_type, primary_data_tokens)) {
                 Value *nullPtr = ConstantPointerNull::get(
                         cast<PointerType>(int8PtrTy)
                         );
@@ -3694,6 +3751,8 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
     if (type=="int")
         values.push_back(const_int(TERMINATE_VARARG));
+    if (type=="float")
+        values.push_back(const_float(TERMINATE_VARARG));
     else if (type=="str")
         values.push_back(global_str("TERMINATE_VARARG"));
     else
@@ -3937,7 +3996,7 @@ std::string mangle_cargs_proto(std::string fn_name, bool inc) {
     int idx = (Fn_Last_Version.count(fn_name)==0) ? 0 : Fn_Last_Version[fn_name];
     if (inc)
         Fn_Last_Version[fn_name]++;
-    return fn_name+std::to_string(idx);
+    return fn_name+"_"+std::to_string(idx);
 }
 
 
@@ -3968,7 +4027,6 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
             if (type.is_buffer)
                 Ty = Ty->getPointerTo();
             types.push_back(Ty);
-            
         }
     }
 
@@ -3976,6 +4034,10 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
     FunctionType *FT = FunctionType::get(retTy, types, false); 
 
     std::string fn_name = Name;
+
+    // std::cout << "gen proto " << fn_name << " is_gpu " << parser_struct->gpu << "\n";
+
+    bool has_compiled_args = Fn_Compiled_Args.count(fn_name)>0;
     if (has_compiled_args) {
         fn_name = mangle_cargs_proto(fn_name, true);
         // std::cout << "COMP NEW PROTO " << fn_name << "|" << (parser_struct->gpu>0) << "\n";
@@ -4230,6 +4292,7 @@ Value *LayoutExprAST::codegen(Value *scope_struct) {
         //smem
         bool had = false;
         Value *prev_smem = get_smem_offset(parser_struct, had);
+        // std::cout << "SMEM HAS " << DimsProd() << "\n";
         Value *size = const_int(DimsProd());
         size = Builder->CreateMul(size, const_int(4));
 
@@ -4545,6 +4608,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         BasicBlock *FromNullBB = BasicBlock::Create(*TheContext, "map.from_null.bb", TheFunction);
         BasicBlock *GetKeyBB = BasicBlock::Create(*TheContext, "map.get_key.bb", TheFunction);
         BasicBlock *LoadValBB = BasicBlock::Create(*TheContext, "map.get_val.bb", TheFunction);
+        BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "map.after.bb", TheFunction);
 
          
 
@@ -4561,6 +4625,9 @@ Value *NameableIdx::codegen(Value *scope_struct) {
             query_hash = callret("hash_array_"+key_dt.Nested_Data[0].Type, {scope_struct, query});
         if (in_vec(key_type,int_types) && key_type!="int")
             query_hash = Builder->CreateIntCast(query, intTy, true);
+        if (ClassSize.count(key_type)>0) {
+            query_hash = callret("hash_ptr", {scope_struct, query});
+        }
 
 
         Value *hash_pos = Builder->CreateURem(query_hash, map_capacity);
@@ -4574,11 +4641,16 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         Builder->CreateBr(LoopBB);
 
         Builder->SetInsertPoint(LoopBB);
-        PHINode *cur_node = Builder->CreatePHI(int8PtrTy, 1);
+        PHINode *prev_node;
+        if (IsAppend) {
+            prev_node = Builder->CreatePHI(int8PtrTy, 0);
+            prev_node->addIncoming(node, curBB);
+        }
+        PHINode *cur_node = Builder->CreatePHI(int8PtrTy, 0);
         cur_node->addIncoming(node, curBB);
 
-        Value *IsNull = Builder->CreateICmpEQ(cur_node, nullPtr);
-        Builder->CreateCondBr(IsNull, FromNullBB, GetKeyBB);
+        Builder->CreateCondBr(Builder->CreateICmpEQ(cur_node, nullPtr),
+                              FromNullBB, GetKeyBB);
 
 
         // Get Key
@@ -4599,6 +4671,9 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         } else if (key_type=="array") {
             key = Builder->CreateLoad(int8PtrTy, key_gep);
             keyCond = callret("array_eq_"+key_dt.Nested_Data[0].Type, {scope_struct, query, key});
+        } else if (ClassSize.count(key_type)>0) {
+            key = Builder->CreateLoad(int8PtrTy, key_gep);
+            keyCond = Builder->CreateICmpEQ(key, query);
         } else {
             key = Builder->CreateLoad(int8PtrTy, key_gep);
             keyCond = strview_to_strcmp(scope_struct, query, key);
@@ -4609,34 +4684,50 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         Builder->SetInsertPoint(NextPtrBB);
         Value *next_node_gep = Builder->CreateStructGEP(st_node, cur_node, 2);
         Value *next_node = Builder->CreateLoad(int8PtrTy, next_node_gep);
+        if (IsAppend)
+            prev_node->addIncoming(cur_node, NextPtrBB);
         cur_node->addIncoming(next_node, NextPtrBB);
         Builder->CreateBr(LoopBB);
 
         // From Null
         Builder->SetInsertPoint(FromNullBB);
-        if (key_type=="str")
-            query = Builder->CreateExtractValue(query, {0});
-        call("map_bad_key_"+key_type, {scope_struct, query});
-        Builder->CreateUnreachable();
+
+        key_type = (ClassSize.count(key_type)>0) ? "void_ptr" : key_type;
+        Value *append_node, *new_array;
+        if (IsAppend) {
+            new_array = callret("array_Create",
+                                    {scope_struct,
+                                     const_int16(data_name_to_type()[val_dt.Nested_Data[0].Type])});
+            append_node = new_map_node(scope_struct, query, new_array, key_type, value_type);
+            Value *ptr_to_store = Builder->CreateSelect(
+                                    Builder->CreateICmpEQ(node, nullPtr),
+                                    node_gep, 
+                                    Builder->CreateStructGEP(st_node, prev_node, 2));
+            Builder->CreateStore(append_node, ptr_to_store);
+            Builder->CreateBr(AfterBB);
+        } else {
+            if (key_type=="str")
+                query = Builder->CreateExtractValue(query, {0});
+            call("map_bad_key_"+key_type,
+                    {scope_struct, query});
+            Builder->CreateUnreachable();
+        }
 
         // Get node value
         Builder->SetInsertPoint(LoadValBB);
-
         Value *value_gep = Builder->CreateStructGEP(st_node, cur_node, 1);
-        Value *value;
-        if (value_type=="int") {
-            Value *value_void_ptr = Builder->CreateLoad(int8PtrTy, value_gep);
-            Value *value_int_ptr = Builder->CreateBitCast(value_void_ptr, intTy->getPointerTo());
-            value = Builder->CreateLoad(intTy, value_int_ptr);
-        } else if (value_type=="float") {
-            Value *value_void_ptr = Builder->CreateLoad(int8PtrTy, value_gep);
-            Value *value_float_ptr = Builder->CreateBitCast(value_void_ptr, floatTy->getPointerTo());
-            value = Builder->CreateLoad(floatTy, value_float_ptr);
+
+        Value *value = load_map_node_val(value_gep, value_type);
+        Builder->CreateBr(AfterBB);
+
+        Builder->SetInsertPoint(AfterBB);
+        if (IsAppend) {
+            PHINode *value_node = Builder->CreatePHI(int8PtrTy, 2);
+            value_node->addIncoming(value, LoadValBB);
+            value_node->addIncoming(new_array, FromNullBB);
+            return value_node;
         } else
-            value = Builder->CreateLoad(int8PtrTy, value_gep);
-
-
-        return value;
+            return value;
     }
 
 
@@ -4729,6 +4820,7 @@ Value *callgpu(Function *TheFunction, std::string fn,
                       const std::vector<Value *> &args, std::vector<Data_Tree> &Types,
                       FnCompiledValues CompiledArgs) {
 
+
     bool re_emit_ptx=false;
     if (CompiledArgs.has) {
         int idx=0;
@@ -4738,7 +4830,11 @@ Value *callgpu(Function *TheFunction, std::string fn,
             auto FnAst = GpuFunctions[fn].get();
             
             idx = (Fn_Last_Version.count(fn)==0) ? 0 : Fn_Last_Version[fn];
-            fn+=std::to_string(idx);
+            fn+="_"+std::to_string(idx);
+
+            // std::cout << "codegen_gpu: " << fn << "\n";
+            // std::cout << "cints " << CompiledArgs.ints.size() << "\n";
+
             Fn_Compiled_Values[fn] = CompiledArgs;
 
             Function *F= proto->codegen();

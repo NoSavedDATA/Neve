@@ -123,6 +123,36 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
 }
 
 
+std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy CArgs) {
+  bool found = true;
+  Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
+
+  if (!found) {
+      if (FnTemplates.count(Callee)>0) {
+        Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      }
+
+      if (!found) {
+          if (FnLastVersion.count(Callee)==0) {
+                LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
+          } else 
+              FnNotFound(parser_struct, Callee, CArgs);
+      }
+  }
+  return Callee;
+}
+
+
+void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee) {
+  if (Callee!=base_callee && Fn_Compiled_Args.count(base_callee)>0) {
+    std::vector<std::unique_ptr<CompiledArgs>> vec_copy;
+    for (auto &val : Fn_Compiled_Args[base_callee])
+        vec_copy.push_back(std::make_unique<CompiledArgs>(val->dt, val->name));
+    
+    Fn_Compiled_Args[Callee] = std::move(vec_copy);
+  }
+}
+
 // nlohmann::json ExprAST::toJSON() {
 //   nlohmann::json j;
 //   return j;
@@ -208,7 +238,7 @@ CallArgsTy::CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *exprs) {
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite) {
     if (FnLastVersion.count(fn)==0||overwrite) {
-        FnLastVersion[fn] = 0;
+        FnLastVersion[fn] = 1;
         CArgs.version = 0;
         CArgs.version_str = fn;
         if (overwrite)
@@ -262,7 +292,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     for (int i=0; i<size; ++i) {
         std::string arg_name = CArgs.args[i];
         Data_Tree dt = CArgs.dts[i];
-        data_typeVars[fn][arg_name] = dt;
+        data_typeVars[this->Name][arg_name] = dt;
         this->Args.push_back(arg_name);
         this->Types.push_back(dt);
     }
@@ -270,8 +300,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     ReturnType = CArgs.template_ret;
 
     
-    functions_return_data_type[fn] = CArgs.template_ret;
-    native_fn.push_back(fn);
+    functions_return_data_type[this->Name] = CArgs.template_ret;
+    native_fn.push_back(this->Name);
 
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
     if (parser_struct->gpu==0) {
@@ -280,13 +310,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     }
 
     int required_args = this->Args.size()-ctx_offset;
-    Function_Required_Arg_Count[fn] = required_args; // Desconsider scope_struct
-    Function_Arg_Count[fn] = required_args;
-    Function_Arg_Names[fn] = this->Args;
-    
-
-    // has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
-    // parser_struct->has_compiled_args = has_compiled_args;
+    Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
+    Function_Arg_Count[this->Name] = required_args;
+    Function_Arg_Names[this->Name] = this->Args;
 
 }
 
@@ -296,12 +322,13 @@ void AssignGenericTree(Data_Tree dt, Data_Tree templ_dt,
         std::unordered_map<std::string,Data_Tree> &generics_map) {
     if (templ_dt.is_generic) {
         if (generics_map.count(templ_dt.Type)>0) {
+            generics_map[templ_dt.Type].Print();
             if (dt.Compare(generics_map[templ_dt.Type])>0) {
                 LogErrorS(-1, "Assigned 2 different values for a single generic type.");
                 return;
             }
         }
-        generics_map[templ_dt.Type] = dt;
+        generics_map[templ_dt.Type] = GenericUnmangleType(dt, templ_dt);
         return;
     }
     for (int i=0; i<templ_dt.Nested_Data.size(); ++i)
@@ -341,12 +368,16 @@ CallArgsTy AssignGenericTypes(CallArgsTy cargs, CallArgsTy templ) {
 }
 
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
-    for (auto &templ : FnTemplates[fn]) {
+
+    FunctionAST *fn_ast=nullptr; 
+    for (auto &tpair : Template_FnAST[fn]) {
+        CallArgsTy templ = tpair.first;
         if (!CompareDTs(CArgs.dts, templ.dts))
             continue;
-
+        fn_ast = tpair.second.get();
 
         templ = AssignGenericTypes(CArgs, templ);
+
 
 
         std::string base_name = fn;
@@ -356,6 +387,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy
             FnLastVersion[fn] = 1;
         } else
             idx = FnLastVersion[fn]++;
+        
         fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
         CArgs.version = idx;
         CArgs.version_str = fn;
@@ -364,15 +396,26 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy
         
         CArgs.args = templ.args;
         CArgs.template_ret = templ.template_ret;
+
         
         auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
                         CArgs);
 
-        auto &fn_ast = Template_FnAST[base_name];
-        if (!fn_ast.get())
+        if (parser_struct->gpu>0) {
+            int gpu = parser_struct->gpu;
+            parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
+            proto->codegen();
+            parser_struct->gpu = gpu;
+        }
+
+
+
+        if (!fn_ast)
             LogErrorC(-1, "Template for " +base_name + " failed");
         fn_ast->Proto = std::move(proto);
+        fn_ast->parser_struct->function_name = fn;
         BasicBlock *CurBB = Builder->GetInsertBlock();
+
         fn_ast->codegen();
         Builder->SetInsertPoint(CurBB);
         
@@ -385,7 +428,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy
 
 std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found) {
     for (auto cargs : FnVersion[fn]) {
-        if(CompareDTs(CArgs.dts, cargs.dts))
+        if(CompareDTs(CArgs.dts, cargs.dts)) 
             return cargs.version_str;
     }
     found = false;
@@ -1041,7 +1084,6 @@ MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST
   
 
 Data_Tree LayoutExprAST::GetDataTree(bool) {
-
     dt = Data_Tree("layout");
     dt.Nested_Data.push_back(Data_Tree(data_type_to_name()[type]));
     for (int i=0; i<CArgs.size(); ++i) {
@@ -1211,7 +1253,6 @@ inline void buildTemplateOpCorrespondence(Parser_Struct *parser_struct,
 Data_Tree SolveTemplateOpDt(Parser_Struct *parser_struct,
         std::string op, Data_Tree dt, Data_Tree L_dt, Data_Tree R_dt) {
 
-
     std::map<std::string, std::string> ret_map;
     
     if (dt.Type=="layout") {
@@ -1328,8 +1369,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   Operation = Elements + "_" + operation;
 
 
-
-
   if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
     Operation = "channel_void_message";
 
@@ -1353,15 +1392,27 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     return Data_Tree(ops_type_return[Operation]);
   else if (functions_return_data_type.count(Operation)) {
     Data_Tree dt = functions_return_data_type[Operation];
-    if (dt.IsTemplate())
-        dt = SolveTemplateOpDt(parser_struct, Operation, dt, L_dt, R_dt);
+    // if (Operation=="layout_bf16_layout_bf16_mma") {
+    //     std::cout << "-------" << "\n";
+    // dt.Print();
+    // }
+    // if (dt.IsTemplate()) {
+    //     dt = SolveTemplateOpDt(parser_struct, Operation, dt, L_dt, R_dt);
+    // }
+    // std::cout << "CALL OPERATION " << Operation << "\n";
     return dt;
   }
   else if (elements_type_return.count(Elements)>0)
     type = elements_type_return[Elements];
+  else if (is_store_sugar) {
+      if (auto *rstmt = dynamic_cast<BinaryExprAST*>(RHS.get()))
+          rstmt->is_fused = (rstmt->Op=='@');
+      return L_dt;
+  }
   else {
-      if (Op!='=')
+      if (Op!='=') {
           LogErrorS(parser_struct->line, "Operation function " + Operation + " not found.");
+      }
   }
 
   return Data_Tree(type);
@@ -1734,6 +1785,8 @@ TemplateAST::TemplateAST(Parser_Struct *parser_struct,
     CArgs.template_ret = ReturnType;
     CArgs.args = this->Args;
     FnTemplates[Name].push_back(CArgs);
+
+
 }
 
   
@@ -1767,7 +1820,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
               std::vector<std::string> Args,
               std::vector<Data_Tree> Types,
               bool IsOperator, unsigned Prec, bool overwrite)
-      : Name(Name), ReturnType(ReturnType), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
+      : Name(Name), ReturnType(ReturnType),
+        Class(Class), Method(Method),
+        Args(std::move(Args)), Types(std::move(Types)),
         IsOperator(IsOperator), Precedence(Prec) {
     this->parser_struct = parser_struct;
 
@@ -1807,9 +1862,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     if (ends_with(this->Name, "_prebuild"))
         prebuild_functions.push_back(this->Name);
 
-    has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
-    parser_struct->has_compiled_args = has_compiled_args;
-
+    parser_struct->has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
+    CArgs = CallArgsTy(this->Types);
 }
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -2156,12 +2210,21 @@ void NameableCall::Checks() {
   }
 
 
-  if(Callee=="map_keys")
-    Callee += "_" + this->Inner->GetDataTree().Nested_Data[0].Type;
-  if(Callee=="map_values")
-    Callee += "_" + this->Inner->GetDataTree().Nested_Data[1].Type;
-  if(Callee=="map_has")
-    Callee += "_" + this->Args[0]->GetDataTree().Type;
+  if(Callee=="map_keys") {
+    std::string map_ty = this->Inner->GetDataTree().Nested_Data[0].Type;
+    map_ty = (ClassSize.count(map_ty)>0) ? "void_ptr" : map_ty;
+    Callee += "_" + map_ty;
+  }
+  if(Callee=="map_values") {
+    std::string map_ty = this->Inner->GetDataTree().Nested_Data[1].Type;
+    map_ty = (ClassSize.count(map_ty)>0) ? "void_ptr" : map_ty;
+    Callee += "_" + map_ty;
+  }
+  if(Callee=="map_has") {
+    std::string map_ty = this->Args[0]->GetDataTree().Type;
+    map_ty = (ClassSize.count(map_ty)>0) ? "void_ptr" : map_ty;
+    Callee += "_" + map_ty;
+  }
   if(Callee=="map_get") {
     std::string value_ty = this->Inner->GetDataTree().Nested_Data[1].Type;
     if (!in_vec(value_ty,primary_data_tokens)&&!in_vec(value_ty,compound_tokens))
@@ -2187,6 +2250,10 @@ void NameableCall::Checks() {
   //     return;
   // }
     
+  if (Callee=="array_append") {
+      if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get()))
+          idx_stmt->IsAppend=true;
+  }
 
   // vararg
   if (in_vec(Callee, vararg_methods)&&!in_vec(Callee, {"print", "printl"})) {
@@ -2217,9 +2284,6 @@ void NameableCall::Checks() {
   if (gpu_fn.count(Callee)>0||gpu_ffi.count(Callee))
       arg_type_check_offset--;
 
-  // if(!is_first_citizen)
-  //     Semantic_Arguments_Check(parser_struct, this->Args, Callee, is_nsk_fn, sent_args, arg_type_check_offset);
-  // CompiledArgs = HandleCompiledArgs(parser_struct, Callee, CompiledArgsVec);
 
   if (is_obj)
       Types.push_back(Inner->GetDataTree());
@@ -2234,25 +2298,17 @@ void NameableCall::Checks() {
           data_typeVars[parser_struct->function_name][Callee].Type=="Function");
 
 
+
   if (needs_version) {
-      bool found = true;
-      Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
+      std::string base_callee = Callee;
 
-      if (!found) {
-          if (FnTemplates.count(Callee)>0)
-            Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      Callee = SolveTemplate(parser_struct, Callee, CArgs);
+      if (Callee!=base_callee && gpu_fn.count(base_callee)>0)
+        gpu_fn[Callee] = 1;
 
-          if (!found) {
-              if (FnLastVersion.count(Callee)==0) {
-                    LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
-              } else 
-                  FnNotFound(parser_struct, Callee, CArgs);
-          }
-      }
+      TemplateSolveCompiledArgs(Callee, base_callee);
   }
-
-  // if (CompiledArgs.has)
-  //   Callee = mangle_cargs_proto(Callee);
+  
 }
 
 

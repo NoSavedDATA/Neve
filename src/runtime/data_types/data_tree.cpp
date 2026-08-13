@@ -26,6 +26,17 @@ bool Data_Tree::HasGeneric() const {
     return has_generic;
 }
 
+bool Data_Tree::Has(std::string type) const {
+    if (type==Type)
+        return true;
+    for (int i=0; i<Nested_Data.size(); ++i) {
+        if (Nested_Data[i].Has(type))
+            return true;
+    }
+    return false;
+}
+
+
 bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     if((L->Type=="list"&&R.Type=="unknown_list")||L->Type=="unknown_list"&&R.Type=="list")
         return true;
@@ -143,6 +154,7 @@ bool CheckChannel(const Data_Tree *L_ptr, Data_Tree R) {
 int Data_Tree::Compare(Data_Tree other_tree) const {    
     int comparisons = 0;
 
+
     if(is_generic||other_tree.is_generic)
         return 0;
 
@@ -150,6 +162,9 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
         return 0;
 
     if(Type=="Function"||other_tree.Type=="Function")
+        return 0;
+
+    if(Type=="nullptr" && (!in_vec(other_tree.Type, primary_data_tokens)||other_tree.is_array))
         return 0;
 
     if((!in_vec(Type, primary_data_tokens)||is_array) && other_tree.Type=="nullptr")
@@ -273,7 +288,15 @@ bool Data_Tree::IsTemplate() const {
 }
 
 
+Data_Tree GenericUnmangleType(Data_Tree dt, Data_Tree generic_dt) {
+    Data_Tree ret_dt = dt;
 
+    if (dt.is_buffer&&generic_dt.is_buffer)
+        ret_dt.is_buffer = false;
+
+
+    return ret_dt;
+}
 
 
 

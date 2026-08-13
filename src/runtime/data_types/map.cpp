@@ -29,7 +29,6 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
     this->key_type = key_type;
     this->val_type = value_type;
 
-    // size = 1200;
     capacity = ((size + 7) / 8) * 8;
     if (capacity<8)
         capacity=8;
@@ -107,6 +106,17 @@ extern "C" int map_node_reclaim(Scope_Struct *ctx, DT_map *map, DT_map_node *nod
     return 0;
 }
 
+extern "C" int hash_ptr(Scope_Struct *ctx, void *ptr) {
+    uintptr_t addr = (uintptr_t)ptr;
+    uintptr_t hash = addr;
+    hash = (hash ^ (hash >> 16)) * 0x45d9f3b;
+    hash = (hash ^ (hash >> 16)) * 0x45d9f3b;
+    hash = hash ^ (hash >> 16);
+
+    // Mask off the sign bit to ensure positive
+    return (int)(hash & 0x7fffffff);
+}
+
 extern "C" int map_size(Scope_Struct *scope_struct, DT_map *map) {
     return map->size;
 }
@@ -166,9 +176,11 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
                 if (key->type==2)
                     hashed = hash_array_int(scope_struct, key);
                 else
-                    LogErrorC(-1, "map expand not implemented for array of type " + map->key_type);
+                    LogErrorC(-1, "map expand not implemented for key array of type " + map->key_type);
 
-            } else {
+            } else if (ClassSize.count(map->key_type)>0) {
+                hashed = hash_ptr(scope_struct, node->key);
+            } else { 
                 LogErrorC(-1, "map expand not implemented for " + map->key_type);
                 std::exit(0);
             }
@@ -196,6 +208,17 @@ extern "C" bool map_has_str(Scope_Struct *ctx, DT_map *map, DT_str query) {
         char *key = static_cast<char*>(cur_node->key);
         if(query.size == strlen(key) &&
            std::memcmp(query.str, key, query.size) == 0)
+            return true;
+        cur_node = cur_node->next;
+    }
+    return false;
+}
+extern "C" bool map_has_void_ptr(Scope_Struct *scope_struct, DT_map *map, void *query) {
+    int hash_pos = hash_ptr(scope_struct, query) % map->capacity;
+    
+    DT_map_node *cur_node = map->nodes[hash_pos];
+    while(cur_node!=nullptr) {
+        if (query == cur_node->key)
             return true;
         cur_node = cur_node->next;
     }
@@ -357,6 +380,26 @@ extern "C" DT_array *map_keys_str(Scope_Struct *scope_struct, DT_map *map) {
     return array;
 }
 
+extern "C" DT_array *map_keys_void_ptr(Scope_Struct *scope_struct, DT_map *map) {
+    std::cout << "keys void ptr" << "\n";
+    DT_array *array = newT<DT_array>(scope_struct, "any");
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+
+    void **vec = static_cast<void**>(array->data);
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            char *key = static_cast<char*>(node->key);
+            vec[idx++] = key;
+            node = node->next;
+        }
+    }
+    array->virtual_size = idx;
+    return array;
+}
+
 extern "C" DT_array *map_keys_array(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
     array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
@@ -490,6 +533,12 @@ extern "C" DT_array *map_values_int(Scope_Struct *scope_struct, DT_map *map) {
 extern "C" void map_bad_key_str(Scope_Struct *scope_struct, char *key) {
     std::string key_str = key;
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + key_str);
+    std::exit(0);
+}
+
+extern "C" void map_bad_key_void_ptr(Scope_Struct *scope_struct, void *key) {
+    LogErrorC(scope_struct->code_line, "Map does not contain pointer key: ");
+    std::cout << "" << key << "\n";
     std::exit(0);
 }
 

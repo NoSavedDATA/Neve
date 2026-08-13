@@ -2181,12 +2181,8 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct *parser_struct, int ExprPre
 
 
   while (true) {
-    
-
-
     while (in_vec(CurTok, functional_tokens))
         LHS = ParseFunctionalOp(parser_struct, std::move(LHS), class_name);
-
 
 
     // If this is a binop, find its precedence.
@@ -2207,7 +2203,6 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct *parser_struct, int ExprPre
     }
 
     int BinOp = CurTok;
-
 
 
 
@@ -2251,6 +2246,8 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct *parser_struct, int ExprPre
             BinOp = sugar_ops[BinOp];
         std::unique_ptr<BinaryExprAST> LHS_ = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
         LHS_->is_store_sugar = true;
+        if (auto *rstmt = dynamic_cast<BinaryExprAST*>(LHS_->RHS.get()))
+            rstmt->Parent = LHS_.get();
         LHS = std::move(LHS_);
     } else
         LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
@@ -2279,7 +2276,7 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct *parser_struct, std::stri
 }
 
 
-void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree ret_dt) {
+TemplateAST * ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree ret_dt) {
   getNextToken(); // eat <
 
   std::vector<std::string> generic_args;
@@ -2304,13 +2301,18 @@ void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree 
   std::vector<std::string> ArgNames;
   std::vector<Data_Tree> Types;
 
+  int generic_count = 0;
+
   std::vector<std::unique_ptr<ExprAST>> Inits;
   while(true) {
     Data_Tree dt = Data_Tree(IdentifierStr);
-    dt.is_generic = in_vec(IdentifierStr, generic_args);
+    bool is_generic = in_vec(IdentifierStr, generic_args);
     getNextToken(); // arg name
     if (in_vec(CurTok, {'[', '<'}))
-        Parse_Data_Type(IdentifierStr, parser_struct, true);
+        dt = Parse_Data_Type(IdentifierStr, parser_struct, true);
+    dt.is_generic = dt.is_generic || is_generic;
+    if (dt.is_generic)
+        generic_count++;
 
     Types.push_back(dt);
     ArgNames.push_back(IdentifierStr);
@@ -2325,9 +2327,20 @@ void ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree 
   }
   getNextToken(); // eat )
 
+  for (auto generic_arg : generic_args) {
+      bool found = false;
+      for (auto &type : Types) {
+        if(type.Has(generic_arg)) {
+            found=true;
+            break;
+        }
+      }
+      if (!found)
+          LogError(parser_struct->line, "The generic type " + generic_arg +" has not been used.");
+  }
 
-
-  new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames), std::move(Types));
+  TemplateAST * tstmt= new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames), std::move(Types));
+  return tstmt;
 }
 
 /// prototype
@@ -2444,12 +2457,13 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
                                             Kind != 0,
                                             BinaryPrecedence);
   if (CurTok=='<') {
-      ParseTemplateProto(parser_struct, FnName, return_data_type);
+      TemplateAST *tstmt = ParseTemplateProto(parser_struct, FnName, return_data_type);
       auto proto = std::make_unique<PrototypeAST>(parser_struct, "",
                                             return_type, "", "", std::move(ArgNames),
                                             std::move(Types),
                                             Kind != 0,
                                             BinaryPrecedence);
+      proto->CArgs = tstmt->CArgs;
       proto->is_generic = true;
       proto->Name = FnName;
       return std::move(proto);
@@ -2661,7 +2675,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
     return nullptr;
 
   parser_struct->function_name = Proto->getName();
-  parser_struct->has_compiled_args = Proto->has_compiled_args;
+  parser_struct->has_compiled_args = Fn_Compiled_Args.count(parser_struct->function_name)>0;
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
@@ -2862,7 +2876,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
 
 
     if (proto.is_generic) {
-        Template_FnAST[Func->getProto().getName()] = std::move(Func);
+        Template_FnAST[Func->getProto().getName()][proto.CArgs] = std::move(Func);
         continue;
     }
 

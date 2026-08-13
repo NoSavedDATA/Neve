@@ -266,6 +266,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_node_reclaim", map_node_reclaimTy);
 
+	FunctionType *hash_ptrTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("hash_ptr", hash_ptrTy);
+
 	FunctionType *map_sizeTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -286,6 +293,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("map_has_str", map_has_strTy);
+
+	FunctionType *map_has_void_ptrTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_has_void_ptr", map_has_void_ptrTy);
 
 	FunctionType *map_has_intTy= FunctionType::get(
 		Type::getInt1Ty(*TheContext),
@@ -385,6 +399,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_keys_str", map_keys_strTy);
 
+	FunctionType *map_keys_void_ptrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_keys_void_ptr", map_keys_void_ptrTy);
+
 	FunctionType *map_keys_arrayTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -426,6 +447,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("map_bad_key_str", map_bad_key_strTy);
+
+	FunctionType *map_bad_key_void_ptrTy= FunctionType::get(
+		Type::getVoidTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_bad_key_void_ptr", map_bad_key_void_ptrTy);
 
 	FunctionType *map_bad_key_intTy= FunctionType::get(
 		Type::getVoidTy(*TheContext),
@@ -1308,6 +1336,13 @@ void Generate_LLVM_Functions() {
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("array_int_NewVec", array_int_NewVecTy);
+
+	FunctionType *array_float_NewVecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("array_float_NewVec", array_float_NewVecTy);
 
 	FunctionType *array_void_NewVecTy= FunctionType::get(
 		int8PtrTy,

@@ -22,11 +22,11 @@ void set_functions_return_type() {
   functions_return_type = {{"_glob_b_", "str_vec"}, {"glob", "str_vec"},
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"ShuffleStrVec", "str_vec"},
-						{"map_Create", "map"}, {"map_node_reclaim", "int"}, {"map_size", "int"}, {"map_has_str", "bool"}, {"map_has_int", "bool"}, {"map_has_i64", "bool"}, {"map_get_str_int", ""}, {"map_get_i64_any", ""}, {"map_get_i64_int", ""}, {"map_has_float", "bool"}, {"map_has_char", "bool"}, {"map_print", "int"}, {"map_node_set_bucket", "int"}, {"map_node_set_next", "int"}, {"map_node_overwrite_bucket", "int"}, {"map_node_overwrite", "int"}, {"map_keys_str", "array"}, {"map_keys_array", "array"}, {"map_keys_i64", "array"}, {"map_keys", "array"}, {"map_values", "array"}, {"map_values_int", "array"}, {"map_clear", "int"}, 
+						{"map_Create", "map"}, {"map_node_reclaim", "int"}, {"hash_ptr", "int"}, {"map_size", "int"}, {"map_has_str", "bool"}, {"map_has_void_ptr", "bool"}, {"map_has_int", "bool"}, {"map_has_i64", "bool"}, {"map_get_str_int", ""}, {"map_get_i64_any", ""}, {"map_get_i64_int", ""}, {"map_has_float", "bool"}, {"map_has_char", "bool"}, {"map_print", "int"}, {"map_node_set_bucket", "int"}, {"map_node_set_next", "int"}, {"map_node_overwrite_bucket", "int"}, {"map_node_overwrite", "int"}, {"map_keys_str", "array"}, {"map_keys_void_ptr", "array"}, {"map_keys_array", "array"}, {"map_keys_i64", "array"}, {"map_keys", "array"}, {"map_values", "array"}, {"map_values_int", "array"}, {"map_clear", "int"}, 
 						{"read_float", "float"}, {"float_ptr_print", "float"}, {"float_to_str", "str"}, {"float_to_str_buffer", "int"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
 						{"charv_print", "int"}, 
 						{"is_null", "bool"}, 
-						{"array_Create", "array"}, {"array_clone", "array"}, {"array_slice", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"array_clear", "float"}, {"array_int_NewVec", "array"}, {"array_void_NewVec", "array"}, {"array_print_int", "float"}, {"array_print_char", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"array_print_float", "int"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "array"}, {"array_sum_int", "int"}, {"array_prod_int", "int"}, {"array_Split_Parallel", "array"}, {"array_print_str", "int"}, {"array_shuffle_str", "int"}, {"hash_array_int", "int"}, {"array_eq_int", "bool"}, 
+						{"array_Create", "array"}, {"array_clone", "array"}, {"array_slice", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"array_clear", "float"}, {"array_int_NewVec", "array"}, {"array_float_NewVec", "array"}, {"array_void_NewVec", "array"}, {"array_print_int", "float"}, {"array_print_char", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"array_print_float", "int"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "array"}, {"array_sum_int", "int"}, {"array_prod_int", "int"}, {"array_Split_Parallel", "array"}, {"array_print_str", "int"}, {"array_shuffle_str", "int"}, {"hash_array_int", "int"}, {"array_eq_int", "bool"}, 
 						{"randint", "int"}, {"randu", "float"}, {"randn", "float"}, 
 						{"putchard", "float"}, {"printd", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
@@ -71,8 +71,10 @@ void set_functions_return_type() {
 	functions_return_data_type["bf16_to_str_buffer"] = Data_Tree("int");
 	functions_return_data_type["map_Create"] = Data_Tree("map");
 	functions_return_data_type["map_node_reclaim"] = Data_Tree("int");
+	functions_return_data_type["hash_ptr"] = Data_Tree("int");
 	functions_return_data_type["map_size"] = Data_Tree("int");
 	functions_return_data_type["map_has_str"] = Data_Tree("bool");
+	functions_return_data_type["map_has_void_ptr"] = Data_Tree("bool");
 	functions_return_data_type["map_has_int"] = Data_Tree("bool");
 	functions_return_data_type["map_has_i64"] = Data_Tree("bool");
 	functions_return_data_type["map_get_str_int"] = Data_Tree("");
@@ -86,6 +88,7 @@ void set_functions_return_type() {
 	functions_return_data_type["map_node_overwrite_bucket"] = Data_Tree("int");
 	functions_return_data_type["map_node_overwrite"] = Data_Tree("int");
 	functions_return_data_type["map_keys_str"] = Data_Tree("array");
+	functions_return_data_type["map_keys_void_ptr"] = Data_Tree("array");
 	functions_return_data_type["map_keys_array"] = Data_Tree("array");
 	functions_return_data_type["map_keys_i64"] = Data_Tree("array");
 	functions_return_data_type["map_keys"] = Data_Tree("array");
@@ -133,6 +136,7 @@ void set_functions_return_type() {
 	functions_return_data_type["array_bad_idx"] = Data_Tree("int");
 	functions_return_data_type["array_clear"] = Data_Tree("float");
 	functions_return_data_type["array_int_NewVec"] = Data_Tree("array");
+	functions_return_data_type["array_float_NewVec"] = Data_Tree("array");
 	functions_return_data_type["array_void_NewVec"] = Data_Tree("array");
 	functions_return_data_type["array_print_int"] = Data_Tree("float");
 	functions_return_data_type["array_print_char"] = Data_Tree("float");

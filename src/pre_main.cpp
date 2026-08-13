@@ -80,7 +80,8 @@ LCG rng(generate_custom_seed());
 
 
 std::vector<std::unique_ptr<FunctionAST>> AllFunctions;
-std::unordered_map<std::string, std::unique_ptr<FunctionAST>> Template_FnAST;
+// std::unordered_map<std::string, std::unique_ptr<FunctionAST>> Template_FnAST;
+std::unordered_map<std::string,std::unordered_map<CallArgsTy,std::unique_ptr<FunctionAST>,ArgsHasher,ArgsEqual>> Template_FnAST;
 std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 // Vars
@@ -153,7 +154,7 @@ void HandleDefinition() {
   Parser_Struct *parser_struct = new Parser_Struct();
   if (auto FnAST = ParseDefinition(parser_struct)) {
     if (FnAST->getProto().is_generic) {
-        Template_FnAST[FnAST->getProto().getName()] = std::move(FnAST);
+        Template_FnAST[FnAST->getProto().getName()][FnAST->getProto().CArgs] = std::move(FnAST);
         return;
     }
 
@@ -178,14 +179,21 @@ void HandleGpuDef() {
 
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
-    bool has_compiled_args = FnAST->getProto().has_compiled_args;
+    if (FnAST->getProto().is_generic) {
+        Template_FnAST[FnAST->getProto().getName()][FnAST->getProto().CArgs] = std::move(FnAST);
+        return;
+    }
 
     FunctionProtos[fn_name] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
     GpuFunctions[fn_name] = std::move(FnAST);
 
-    if (!has_compiled_args)
+    bool has_compiled_args = Fn_Compiled_Args.count(fn_name)>0;
+    bool is_template = FnTemplates.count(fn_name)>0;
+
+    if (!has_compiled_args&&!is_template) {
         getGpuFnCheck(fn_name);
+    }
 
   } else {
     // Skip token for error recovery.

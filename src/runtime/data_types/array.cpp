@@ -204,6 +204,36 @@ extern "C" DT_array *array_int_NewVec(Scope_Struct *scope_struct, int first, ...
   return vec;
 }
 
+extern "C" DT_array *array_float_NewVec(Scope_Struct *scope_struct, float first, ...) { 
+  int elem_size = 4;
+
+  DT_array *vec = newT<DT_array>(scope_struct, "array");
+  vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
+  float *data = (float*)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+
+  float x = first;
+  va_list args;
+  va_start(args, x);
+
+  int idx = 0;
+  do {
+    __atomic_store(&data[idx], &x, __ATOMIC_RELEASE);
+    idx++;
+    int size = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&vec->virtual_size, size+1, __ATOMIC_RELEASE);
+    if (vec->virtual_size >= vec->size) {
+        array_double_size(scope_struct, vec);
+        float *data = (float*)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+    }
+    x = va_arg(args, float);
+  } while(x!=TERMINATE_VARARG);
+  va_end(args);
+  // std::cout << "new vec: " << vec << "\n";
+  return vec;
+}
+
 extern "C" DT_array *array_void_NewVec(Scope_Struct *scope_struct, void *first, ...) { 
   int elem_size = 8;
 

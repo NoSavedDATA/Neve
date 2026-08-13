@@ -32,6 +32,7 @@ proto tuple<int,int> map_get_i64_int(any, i64)
 proto bool map_has_i64(map<i64,any>, i64)
 proto bool map_has_int(map<int,any>, int)
 proto bool map_has_str(map<str,any>, str)
+proto bool map_has_void_ptr(map<any,any>, any)
 
 operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby

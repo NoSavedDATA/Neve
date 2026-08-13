@@ -461,8 +461,9 @@ class BinaryExprAST : public ExprAST {
 
 public:
   std::string Elements, Operation;
-  bool is_store_sugar=false;
+  bool is_store_sugar=false, is_fused=false;
   std::unique_ptr<ExprAST> LHS, RHS;
+  ExprAST *Parent=nullptr;
   char Op;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *);
@@ -580,6 +581,7 @@ class NameableCall : public Nameable {
 class NameableIdx : public Nameable {
   public:
   std::unique_ptr<IndexExprAST> Idx;
+  bool IsAppend=false;
 
   NameableIdx(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx);
 
@@ -1061,7 +1063,7 @@ class PrototypeAST {
   
     unsigned Precedence; // Precedence if a binary op.
   
-      bool IsOperator=false, has_compiled_args=false, is_generic=false;
+      bool IsOperator=false, is_generic=false;
       Parser_Struct *parser_struct;
       Data_Tree ReturnType;
       CallArgsTy CArgs;
@@ -1111,10 +1113,15 @@ struct Arg_Pair {
 
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
-std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found);
+void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
+std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found);
+void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);
 
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
 
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
+
+

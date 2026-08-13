@@ -30,6 +30,7 @@ extern Module *CurModule;
 extern std::unique_ptr<Module> GlobalModule;
 extern std::unique_ptr<TargetMachine> CTM, PtxTM;
 
+extern std::unordered_map<std::string,std::unordered_map<CallArgsTy,std::unique_ptr<FunctionAST>,ArgsHasher,ArgsEqual>> Template_FnAST;
 
 extern std::map<std::string, StructType*> struct_types;
 extern std::unordered_map<std::string, int> struct_type_size;
@@ -129,6 +130,25 @@ inline Value *callret(std::string fn, const std::vector<Value *> &args) {
 }
 
 
+
+inline Function *getGpuFn(const std::string &Name) {
+    if (auto *F = PtxModule->getFunction(Name))
+        return F;
+    
+
+    auto FI = FunctionProtos.find(Name);
+    if (FI == FunctionProtos.end()) {
+        LogError(-1, "Gpu function " + Name + " was not found.");
+        return nullptr;
+    }
+
+    Function *F = FI->second->codegen();
+
+
+    return F;
+}
+
+
 inline Function *getGpuFnCheck(const std::string &Name) {
     if (auto *F = PtxModule->getFunction(Name)) {
         if (!F->empty())
@@ -141,8 +161,9 @@ inline Function *getGpuFnCheck(const std::string &Name) {
 
     Function *F = FI->second->codegen();
 
-    if (F->empty())
+    if (F->empty()) {
         GpuFunctions[Name]->codegen_gpu();
+    }
 
     return F;
 }

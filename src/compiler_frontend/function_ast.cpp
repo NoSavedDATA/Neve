@@ -815,13 +815,20 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
   std::string fn_name = function_name;
   if (idx>=0)
-      fn_name += std::to_string(idx);
+      fn_name += "_" + std::to_string(idx);
   
 
-  Function *TheFunction = PtxModule->getFunction(fn_name); 
+  // Function *TheFunction = PtxModule->getFunction(fn_name); 
+  Function *TheFunction = getGpuFn(fn_name); 
   if(!TheFunction)
-    std::cout << "PTX function " << function_name << " not found.\n";
+    std::cout << "PTX function " << fn_name << " not found.\n";
 
+
+  // std::cout << "gpu fn: " << fn_name << "\n";
+  // if (fn_name=="layout_bf16_layout_bf16_mma_1") {
+  //   for (auto &pair : Fn_Compiled_Values)
+  //       std::cout << "- " << pair.first << "\n";
+  // }
 
 
   auto prev_module = CurModule;
@@ -858,17 +865,19 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
   if (idx>=0)
       parser_struct->cvalues = Fn_Compiled_Values[fn_name];
   
-  
-
   SetKernelVars(function_name);
+
+
 
   for (auto &body : Body) {
     if (idx>=0) {// is comp specialization
         body->SetCValues(parser_struct);
     }
+    // std::cout << "ints: " << parser_struct->cvalues.ints.size()  << "\n";
+    // std::cout << "codegen " << typeid(*body).name() << "\n";
     body->codegen(scope_struct);
   }
-  
+
   if(!Builder->GetInsertBlock()->getTerminator())
       Builder->CreateRetVoid(); 
 
@@ -876,7 +885,7 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
   Builder = std::move(oldBuilder);
   CurModule = prev_module;
 
-
+    // PtxModule->print(llvm::errs(), nullptr);
   if (verifyFunction(*TheFunction, &errs()))
     errs() << "Invalid function!\n";
 
@@ -900,8 +909,9 @@ Function *FunctionAST::codegen() {
     return nullptr;
 
 
-  if (parser_struct->gpu>0)
+  if (parser_struct->gpu>0) {
       return codegen_gpu();
+  }
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
@@ -1003,7 +1013,7 @@ Function *FunctionAST::codegen() {
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
     // if (current_codegen_function=="bar_1")
-    //     TheModule->print(llvm::errs(), nullptr);
+        // TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;
   } 

@@ -15,3 +15,5 @@ extern "C" void *nullptr_get() {
 extern "C" bool is_null(void *ptr) {
   return ptr==nullptr;
 }
+
+
