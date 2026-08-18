@@ -21,8 +21,15 @@ struct FnCompiledValues {
     std::unordered_map<std::string, float> floats;
     std::unordered_map<std::string, std::string> strings;
     std::unordered_map<std::string, Data_Tree> layouts;
+    std::unordered_map<std::string, Data_Tree> dts;
+
+    void AddInt(std::string key, int val) {
+        ints[key] = val;
+        dts[key] = Data_Tree("int");
+    }
 
     bool operator==(const FnCompiledValues& rhs) const {
+        // todo: add other cvalues
         if (rhs.ints.size()!=ints.size())
             return false;
         if (rhs.layouts.size()!=layouts.size())
@@ -59,7 +66,7 @@ struct FnCompiledValues {
 struct CompValHasher {
     std::size_t operator()(const FnCompiledValues& v) const {
         size_t hash = 0;
-
+        // todo: add other cvalues
         for (auto &p : v.ints)
             hash += p.second;
         
@@ -91,6 +98,8 @@ struct Parser_Struct {
   int control_flow_depth=0;
   FnCompiledValues cvalues;
   Parser_Struct *Copy();
+  std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
+  std::unordered_map<std::string, int> dyn_args_dict;
 };
 
 extern std::unordered_map<std::string,std::unordered_map<FnCompiledValues,int,CompValHasher,CompValEqual>> Fn_Compiled_Version;

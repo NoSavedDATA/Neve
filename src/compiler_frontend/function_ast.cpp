@@ -824,11 +824,6 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
     std::cout << "PTX function " << fn_name << " not found.\n";
 
 
-  // std::cout << "gpu fn: " << fn_name << "\n";
-  // if (fn_name=="layout_bf16_layout_bf16_mma_1") {
-  //   for (auto &pair : Fn_Compiled_Values)
-  //       std::cout << "- " << pair.first << "\n";
-  // }
 
 
   auto prev_module = CurModule;
@@ -870,11 +865,12 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
   for (auto &body : Body) {
-    if (idx>=0) {// is comp specialization
-        body->SetCValues(parser_struct);
-    }
-    // std::cout << "ints: " << parser_struct->cvalues.ints.size()  << "\n";
-    // std::cout << "codegen " << typeid(*body).name() << "\n";
+    // if (idx>=0) // is comp specialization
+    body->SetCValues(parser_struct);
+    // }
+    // std::cout << "\n\n" << typeid(*body).name() << "\n";
+    // std::cout << "idx: " << idx << "\n";
+    // std::cout << "codegen " << parser_struct->function_name << "\n";
     body->codegen(scope_struct);
   }
 
@@ -885,7 +881,8 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
   Builder = std::move(oldBuilder);
   CurModule = prev_module;
 
-    // PtxModule->print(llvm::errs(), nullptr);
+  // if (begins_with(function_name, "layout"))
+  //   PtxModule->print(llvm::errs(), nullptr);
   if (verifyFunction(*TheFunction, &errs()))
     errs() << "Invalid function!\n";
 
@@ -933,9 +930,6 @@ Function *FunctionAST::codegen() {
     return nullptr;
 
   // If this is an operator, install it.
-  if (P.isBinaryOp()) {
-    BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
-  }
 
   // Create a new basic block to start insertion into.
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
@@ -1022,9 +1016,6 @@ Function *FunctionAST::codegen() {
   TheFunction->eraseFromParent();
 
 
-  if (P.isBinaryOp()) {
-    BinopPrecedence.erase(P.getOperatorName());
-  }
   return nullptr;
 }
 

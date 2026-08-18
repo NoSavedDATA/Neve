@@ -90,7 +90,6 @@ LCG rng(generate_custom_seed());
 std::map<std::string, std::vector<char *>> ClassStrVecs;
 std::map<std::string, DT_int_vec *> NamedIntVecs;
 std::map<std::string, float> NamedClassValues;
-std::map<std::string, int> NamedInts;
 std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 std::map<std::string, char *> ScopeNamesToClean;
 std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;

@@ -200,8 +200,12 @@ std::map<int, std::string> token_to_string = {
   { static_cast<int>('z'), "z" },
 
 };
+
+
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal,
-                         tok_diff, tok_higher_eq, tok_minor_eq, tok_offby};
+                         tok_diff, tok_rshift, tok_lshift, tok_int_div,
+                         tok_plus_plus, tok_arrow, 
+                         tok_higher_eq, tok_minor_eq, tok_offby};
 
 std::unordered_map<int, int> sugar_ops = {{tok_plus_eq, '+'}, {tok_minus_eq, '-'},
                                           {tok_mult_eq, '*'}, {tok_div_eq, '/'}};

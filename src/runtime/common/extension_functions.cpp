@@ -184,6 +184,9 @@ std::vector<int> concat_int_vec(std::vector<int> l, std::vector<int>r)
   return concatenated_vectors;
 }
 
+bool in_vec(int value, const std::vector<char>& list) {
+    return std::find(list.begin(), list.end(), static_cast<char>(value)) != list.end();
+}
 
 bool CheckIsEquivalent(std::string LType, std::string RType) {
   if(LType==RType)

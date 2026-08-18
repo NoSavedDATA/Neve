@@ -80,14 +80,12 @@ LCG rng(generate_custom_seed());
 
 
 std::vector<std::unique_ptr<FunctionAST>> AllFunctions;
-// std::unordered_map<std::string, std::unique_ptr<FunctionAST>> Template_FnAST;
 std::unordered_map<std::string,std::unordered_map<CallArgsTy,std::unique_ptr<FunctionAST>,ArgsHasher,ArgsEqual>> Template_FnAST;
 std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 // Vars
 std::map<std::string, std::vector<char *>> ClassStrVecs;
 std::map<std::string, float> NamedClassValues;
-std::map<std::string, int> NamedInts;
 std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 std::map<std::string, char *> ScopeNamesToClean;
 std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;

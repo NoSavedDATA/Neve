@@ -1509,6 +1509,7 @@ void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {  
     // Handle break stmt
     
+
     for (auto &body : Body) {
         if (auto *if_stmt = dynamic_cast<IfExprAST*>(body.get()))
             if_stmt->codegen_from_loop(scope_struct, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
@@ -2504,9 +2505,9 @@ inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs,
     if (!in_vec(key, data_tokens)&&!in_vec(key, compound_tokens)&&key!="layout") {
     
         std::string sent_type = sent_dt.Type;
-        if (is_number(sent_type)) {
-            CompiledArgs.ints[key] = std::stoi(sent_type);
-        } else {
+        if (is_number(sent_type))
+            CompiledArgs.AddInt(key, std::stoi(sent_type));
+        else {
             bool has=false;
             for (auto &arg : dynamic_args) {
                 if (arg->name==key) {
@@ -2797,15 +2798,21 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                     }
                 }
                 CallArgsTy CArgs = CallArgsTy(Types);
-                bool found;
-                std::string Callee = GetFnVersion(parser_struct, Operation, CArgs, found);
-                // TemplateSolveCompiledArgs(Callee, Operation);
 
 
-                std::string called_op = SpecializeOperation(Callee, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
+                for (auto &[name, _, dt] : FnDynArgs[Operation]) {
+                    std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct,
+                            name, 1, false);
+                    nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
+                    Args.push_back(nameable->codegen(scope_struct));
+                }
+                parser_struct->dyn_args.clear();
+
                 for (auto &dyn : dynamic_args)
                     Args.push_back(dyn->expr->codegen(scope_struct));
-                ret = callret(called_op, Args); 
+
+                // PtxModule->print(llvm::errs(), nullptr);
+                ret = callret(Operation, Args); 
                 if (is_fused)
                     return ret;
                 break;
@@ -2981,7 +2988,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         ret = llvm_data_ops[Operation](parser_struct, Builder->GetInsertBlock()->getParent(),
                                         L_dt, R_dt, LHS, RHS, scope_struct, L, R);
     else {
-        std::string called_op = Operation;
         std::vector<Value *> Args = {L, R};
         if (parser_struct->gpu==0)
             Args.insert(Args.begin(), scope_struct);
@@ -2989,12 +2995,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             std::cout << "Is template for "  << "\n";
             L_dt.Print();
             R_dt.Print();
-            std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
-            called_op = SpecializeOperation(Operation, parser_struct, dynamic_args, L_dt, R_dt, LHS, RHS);
-            for (auto &dyn : dynamic_args)
-                Args.push_back(dyn->expr->codegen(scope_struct));
+
+
+            for (auto &[name, _, dt] : parser_struct->dyn_args) {
+                std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct,
+                        name, 1, false);
+                nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
+                Args.push_back(nameable->codegen(scope_struct));
+            }
+            parser_struct->dyn_args.clear();
         }
-        ret = callret(called_op, Args); 
+        ret = callret(Operation, Args); 
     }
 
 
@@ -4029,6 +4040,7 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
             types.push_back(Ty);
         }
     }
+
 
     llvm::Type *retTy = get_type_from_data(ReturnType);
     FunctionType *FT = FunctionType::get(retTy, types, false); 

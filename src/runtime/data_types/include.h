@@ -24,7 +24,6 @@
 
 extern std::map<std::string, std::vector<char *>> ClassStrVecs;
 extern std::map<std::string, float> NamedClassValues;
-extern std::map<std::string, int> NamedInts;
 extern std::map<std::string, std::string> NamedObjects;
 extern std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 extern std::map<std::string, char *> ScopeNamesToClean;

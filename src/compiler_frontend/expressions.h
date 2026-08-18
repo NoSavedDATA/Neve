@@ -85,7 +85,7 @@ class ExprAST {
 
 struct CallArgsTy {
     std::vector<Data_Tree> dts;
-    bool has=false;
+    bool has=false, is_op=false;
     std::vector<int8_t> i8s;
     std::vector<int16_t> i16s;
     std::vector<int> ints;
@@ -97,6 +97,9 @@ struct CallArgsTy {
     int version = -1;
     TemplateAST *template_ast=nullptr;
     Data_Tree template_ret;
+    FnCompiledValues cvalues;
+    std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
+    std::unordered_map<std::string, int> dyn_args_dict;
 
     CallArgsTy(std::vector<Data_Tree> dts);
     CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *stmt=nullptr);
@@ -471,6 +474,7 @@ public:
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
+  FnCompiledValues GetSubmitedCValues();
   void Checks();
 };
 
@@ -1042,6 +1046,7 @@ class TemplateAST {
 public:
     std::string BaseName, Name, Class, Method;
     int version=0;
+    bool IsOperator=false;
 
     Parser_Struct *parser_struct;
     Data_Tree ReturnType;
@@ -1052,7 +1057,7 @@ public:
 
     TemplateAST(Parser_Struct *parser_struct, const std::string &Name, Data_Tree ReturnType,
           std::vector<std::string> Args,
-          std::vector<Data_Tree> Types);
+          std::vector<Data_Tree> Types, bool is_op);
   
 };
 
@@ -1086,12 +1091,9 @@ class PrototypeAST {
     const std::string &getClass() const; 
     const std::string &getMethod() const; 
   
-    bool isUnaryOp() const; 
-    bool isBinaryOp() const; 
     
     void SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits);
   
-    char getOperatorName() const; 
   
     unsigned getBinaryPrecedence() const; 
 };
@@ -1107,20 +1109,23 @@ struct CompiledArgs {
 struct Arg_Pair {
     Data_Tree dt;
     std::string name;
-    std::unique_ptr<Nameable> expr;
+    std::unique_ptr<Nameable> expr=nullptr;
     Arg_Pair(Data_Tree, std::string, std::unique_ptr<Nameable>);
+    Arg_Pair(Data_Tree, std::string);
 };
 
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
 std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found);
 void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
-std::string GenTemplate(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found);
+std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
+                        CallArgsTy CArgs, bool &found, bool is_op=false, bool is_fused_op=false);
 void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);
 
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
 
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
+extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
 

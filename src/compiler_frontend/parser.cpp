@@ -22,6 +22,8 @@
 
 Arg_Pair::Arg_Pair(Data_Tree dt, std::string name, std::unique_ptr<Nameable> expr) : dt(dt), name(name), expr(std::move(expr)) {}
 
+Arg_Pair::Arg_Pair(Data_Tree dt, std::string name) : dt(dt), name(name) {}
+
 
 
 
@@ -2276,7 +2278,8 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct *parser_struct, std::stri
 }
 
 
-TemplateAST * ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, Data_Tree ret_dt) {
+TemplateAST *ParseTemplateProto(Parser_Struct *parser_struct, std::string fn,
+                                 Data_Tree ret_dt, bool is_op) {
   getNextToken(); // eat <
 
   std::vector<std::string> generic_args;
@@ -2339,8 +2342,8 @@ TemplateAST * ParseTemplateProto(Parser_Struct *parser_struct, std::string fn, D
           LogError(parser_struct->line, "The generic type " + generic_arg +" has not been used.");
   }
 
-  TemplateAST * tstmt= new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames), std::move(Types));
-  return tstmt;
+  return new TemplateAST(parser_struct, fn, ret_dt, std::move(ArgNames),
+                                       std::move(Types), is_op);
 }
 
 /// prototype
@@ -2382,10 +2385,19 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
 
   unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
   unsigned BinaryPrecedence = 30;
+  bool is_op=false;
 
   switch (CurTok) {
   default:
+  {
+    if (in_vec(CurTok, ops)) {
+        is_op=true;
+        FnName = op_map[CurTok];
+        getNextToken();
+        break;
+    }
     return LogErrorProto(parser_struct->line, "Expected prototype function name.");
+  }
   case tok_constructor:
     FnName += "__init__";
     method =  "__init__";
@@ -2454,14 +2466,15 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
       return std::make_unique<PrototypeAST>(parser_struct, FnName,
                                             return_type, _class, method, std::move(ArgNames),
                                             std::move(Types),
-                                            Kind != 0,
+                                            false,
                                             BinaryPrecedence);
+  // <>() 
   if (CurTok=='<') {
-      TemplateAST *tstmt = ParseTemplateProto(parser_struct, FnName, return_data_type);
+      TemplateAST *tstmt = ParseTemplateProto(parser_struct, FnName, return_data_type, is_op);
       auto proto = std::make_unique<PrototypeAST>(parser_struct, "",
                                             return_type, "", "", std::move(ArgNames),
                                             std::move(Types),
-                                            Kind != 0,
+                                            false,
                                             BinaryPrecedence);
       proto->CArgs = tstmt->CArgs;
       proto->is_generic = true;
@@ -2482,6 +2495,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
   if (CurTok == tok_space)
     getNextToken();
 
+  bool has_generic=false;
   while (CurTok != ')') {
     if (IdentifierStr=="s"||IdentifierStr=="str")
       type="str";
@@ -2506,6 +2520,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
       std::string IdName = IdentifierStr;
 
       if (type=="layout") {
+          has_generic = true;
           data_tree.ctime = true;
           Fn_Compiled_Args[FnName].push_back(std::make_unique<CompiledArgs>(data_tree, IdName));
       }
@@ -2558,7 +2573,6 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
       if (CurTok=='=') {
           getNextToken();
           Inits.push_back(std::move(ParseExpression(parser_struct, parser_struct->class_name)));
-          // ArgsInit[FnName].emplace(IdName,);
       } 
     }
     
@@ -2578,6 +2592,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
   getNextToken(); // eat ')'.
 
 
+  // () <>
   if (CurTok=='<') {// Compiletime values
       getNextToken(); // eat '<'
       while(true) {
@@ -2615,9 +2630,14 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
 
   auto proto = std::make_unique<PrototypeAST>(parser_struct, FnName,
                                          return_data_type, _class, method, std::move(ArgNames),
-                                         std::move(Types), Kind != 0,
+                                         std::move(Types), is_op,
                                          BinaryPrecedence);
   proto->SetDefaultArgs(std::move(Inits));
+
+  if (has_generic) {
+      FnTemplates[proto->Name].push_back(CallArgsTy(proto->Types));
+      proto->is_generic = has_generic;
+  }
   return std::move(proto); 
 }
 
