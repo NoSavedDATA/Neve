@@ -1,3 +1,4 @@
+#include "codegen.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
 
@@ -16,7 +17,10 @@
 #include "../simd/include.h"
 #include "../KaleidoscopeJIT.h"
 
+#include "expressions.h"
 #include "include.h"
+#include "logging.h"
+#include "modules.h"
 
 
 
@@ -39,6 +43,8 @@ std::unordered_map<std::string, Function *> async_fn;
 std::string current_codegen_function;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
+
+std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Value*>>> layout_strides;
 
 std::vector<std::string> Global_Uniques;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
@@ -771,9 +777,14 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     }
 
 
+    bool is_layout = Type=="layout";
+    if (is_layout) {
+        std::cout << "SET STRIDE FOR " << parser_struct->function_name << "||" << VarName << "\n";
+        auto *layout_stmt = dynamic_cast<LayoutExprAST*>(Init);
+        layout_strides[parser_struct->function_name][VarName] = layout_stmt->GetStrides(scope_struct);
+    }
 
-
-    if((in_vec(Type, primary_data_tokens)||Type=="layout")&&!(is_self||is_attr)) { 
+    if((in_vec(Type, primary_data_tokens)||is_layout)&&!(is_self||is_attr)) { 
       StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
       continue;
     }
@@ -4242,7 +4253,6 @@ std::vector<Value *> LayoutExprAST::GetStrides(Value *ctx) {
     Value *acc = const_int(1), *cur_val;
     bool from_dynamic=false;
 
-
     for (int i=CArgs.size()-1; i>=0; --i) {
         auto &carg = CArgs[i];
         std::string type = carg->dt.Type; 
@@ -4291,15 +4301,17 @@ Value *LayoutExprAST::codegen(Value *scope_struct) {
     if (!smem) {
         Value *ptr = Args[0]->codegen(scope_struct);
 
-        Value *offset = const_int(0);
-        for (int i=0; i<strides.size(); ++i) {
-            offset = Builder->CreateAdd(offset, 
-                            Builder->CreateMul(strides[i],
-                                               Args[i+1]->codegen(scope_struct))
-                        );
-        }
+        return ptr;
 
-        return Builder->CreateGEP(ty, ptr, offset);
+        // Value *offset = const_int(0);
+        // for (int i=0; i<strides.size(); ++i) {
+        //     offset = Builder->CreateAdd(offset, 
+        //                     Builder->CreateMul(strides[i],
+        //                                        Args[i+1]->codegen(scope_struct))
+        //                 );
+        // }
+
+        // return Builder->CreateGEP(ty, ptr, offset);
     } else {
         //smem
         bool had = false;
@@ -4931,6 +4943,45 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     return const_int(0);
 }
 
+
+
+Value *NameableCall::codegen_tile(Value *scope_struct) {  
+    auto *idx_stmt = dynamic_cast<NameableIdx*>(Inner.get());
+
+    Data_Tree layout_dt = Inner->Inner->GetDataTree();
+
+
+    if (!idx_stmt||layout_dt.Type!="layout")
+        LogErrorS(parser_struct->line, "Tile op failed.");
+
+    Value *ptr = Inner->Inner->codegen(scope_struct);
+    std::string layout_name = Inner->Inner->GetName();
+
+    llvm::Type *ty = get_type_from_data(layout_dt.Nested_Data[0]);
+
+
+    std::vector<Value*> strides = layout_strides[parser_struct->function_name][layout_name];
+
+    int args_size = Args.size();
+    int idxs_size = idx_stmt->Idx->Idxs.size();
+    if (strides.size()!=args_size)
+        LogErrorC(parser_struct->line, "Tile expression requires the amount of tiles to be equal the amount of layout dimensions");
+
+    std::vector<DimSlice> &tiles = idx_stmt->Idx->Idxs;
+    Value *offset = const_int(0);
+    for (int i=0; i<args_size; ++i) {
+        Value *stride = strides[i];
+        Value *tile = tiles[i].start->codegen(scope_struct);
+        Value *idx = Args[i]->codegen(scope_struct);
+
+        Value *product = Builder->CreateMul(stride,
+                            Builder->CreateMul(tile,idx));
+        offset = Builder->CreateAdd(offset, product);
+    }
+    return Builder->CreateGEP(ty, ptr, offset);
+}
+
+
 Value *NameableCall::codegen_append(Value *scope_struct) {  
 
     Data_Tree inner_dt = Inner->GetDataTree();
@@ -5033,6 +5084,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     if (Callee=="array_append")
         return codegen_append(scope_struct);
+    if (is_tile)
+        return codegen_tile(scope_struct);
     
 
     bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&\

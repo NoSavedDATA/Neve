@@ -12,6 +12,7 @@
 #include "include.h"
 #include "../runtime/compiler_frontend/parser_struct.h"
 #include "../runtime/data_types/data_tree.h"
+#include "logging.h"
 
 
 using namespace llvm;
@@ -396,6 +397,7 @@ void AssignGenericTypes(Parser_Struct *parser_struct, CallArgsTy cargs, CallArgs
         templ.template_ret = ret_dt;
     }
 }
+
 
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         CallArgsTy CArgs, bool &found,
@@ -2069,6 +2071,10 @@ NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct *parser_struct, std::unique
 Data_Tree NameableCall::GetDataTree(bool from_assignment) {
    Checks();
 
+  if(is_tile) {
+    Data_Tree dt = this->Inner->GetDataTree();
+    return this->Inner->GetDataTree();
+  }
 
   if(is_first_citizen) {
     data_type = this->Inner->GetDataTree().Nested_Data[0];
@@ -2332,6 +2338,20 @@ void NameableCall::Checks() {
       if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get()))
           idx_stmt->IsAppend=true;
   }
+
+
+  if (this->Inner) {
+    if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get())) {
+        is_tile=this->Inner->GetDataTree().Type=="layout";
+        if (is_tile) {
+            int args_size = Args.size();
+            int idxs_size = idx_stmt->Idx->Idxs.size();
+            if (args_size!=idxs_size)
+                LogErrorS(parser_struct->line, "Tile size requires idxs equal to the number of tile");
+        }
+    }
+  }
+
 
   // vararg
   if (in_vec(Callee, vararg_methods)&&!in_vec(Callee, {"print", "printl"})) {

@@ -562,6 +562,7 @@ class NameableCall : public Nameable {
   bool checked=false;
   public:
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
+  bool is_tile = false;
   int arg_type_check_offset=1; 
   size_t hash=0;
   std::vector<std::unique_ptr<ExprAST>> Args;
@@ -576,6 +577,7 @@ class NameableCall : public Nameable {
 
   Value *codegen(Value *scope_struct) override;
   Value *codegen_append(Value *scope_struct);
+  Value *codegen_tile(Value *scope_struct);
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   void Checks();
