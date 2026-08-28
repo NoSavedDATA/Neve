@@ -18,6 +18,8 @@
 #include "../common/include.h"
 #include "../runtime/data_types/data_tree.h"
 #include "include.h"
+#include "logging.h"
+#include "tokenizer.h"
 
 
 Arg_Pair::Arg_Pair(Data_Tree dt, std::string name, std::unique_ptr<Nameable> expr) : dt(dt), name(name), expr(std::move(expr)) {}
@@ -375,8 +377,9 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct *parser_struct, std::un
   if (CurTok=='(')
     return ParseCallExpr(parser_struct, std::move(nameable), class_name, depth);
 
-  if (CurTok=='[')
+  if (CurTok=='['||CurTok=='{')
     return ParseIdxExpr(parser_struct, std::move(nameable), class_name, depth);
+
   
   // std::cout << "DEPTH " << depth << "\n";
   // if (depth==1)
@@ -513,7 +516,7 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct *parser_stru
 }
 
 
-std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct *parser_struct, std::string class_name) {
+std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct *parser_struct, std::string class_name, char closing_tok) {
   
   std::vector<DimSlice> slices;
   while (true) {
@@ -535,7 +538,7 @@ std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct *parser_struct, std::string
           is_slice = true;
           getNextToken(); // :
 
-          if (!(CurTok==','||CurTok==']'))
+          if (!(CurTok==','||CurTok==closing_tok))
             second_idx = ParseExpression(parser_struct, class_name, false);
         }
       }
@@ -629,20 +632,22 @@ std::unique_ptr<ExprAST> ParseLLVM_IR_CallExpr(Parser_Struct *parser_struct, std
 
 
 std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct *parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
-  
-  getNextToken(); // eat [
-  std::unique_ptr<IndexExprAST> index_expr = ParseIdx(parser_struct, class_name);
-  if(CurTok!=']')
-    LogError(parser_struct->line, "Expected \"]\"");
+  bool is_bracket = CurTok=='{';
+  char closing_tok = (is_bracket) ? '}' : ']';
+  getNextToken(); // eat [ | {
+  std::unique_ptr<IndexExprAST> index_expr = ParseIdx(parser_struct, class_name, closing_tok);
+  if(CurTok!=closing_tok)
+    LogError(parser_struct->line, "Expected " + closing_tok);
   getNextToken(); // eat ]
 
+
   std::unique_ptr<NameableIdx> vec_expr = std::make_unique<NameableIdx>(parser_struct,
-                                std::move(inner), std::move(index_expr));
+                                std::move(inner), std::move(index_expr), is_bracket);
 
 
   if (CurTok=='(')
     return ParseCallExpr(parser_struct, std::move(vec_expr), class_name, depth);
-  if (CurTok=='[')
+  if (CurTok=='['||CurTok=='{')
     return ParseIdxExpr(parser_struct, std::move(vec_expr), class_name, depth);
   if (CurTok=='.') {
     getNextToken();
@@ -698,7 +703,7 @@ std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct *parser_struct, std::unique
     getNextToken();
     return ParseNameableExpr(parser_struct, std::move(call_expr), class_name, false, depth);
   }
-  if (CurTok=='[')
+  if (CurTok=='['||CurTok=='{')
     return ParseIdxExpr(parser_struct, std::move(call_expr), class_name, depth);
 
   std::unique_ptr<ExprAST> expr_ptr(static_cast<ExprAST*>(call_expr.release()));

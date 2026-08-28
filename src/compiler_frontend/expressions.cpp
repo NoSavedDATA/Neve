@@ -2071,6 +2071,8 @@ NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct *parser_struct, std::unique
 Data_Tree NameableCall::GetDataTree(bool from_assignment) {
    Checks();
 
+
+
   if(is_tile) {
     Data_Tree dt = this->Inner->GetDataTree();
     return this->Inner->GetDataTree();
@@ -2213,7 +2215,7 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
 }
 
 
-NameableIdx::NameableIdx(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
+NameableIdx::NameableIdx(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx, bool IsBracket) : Nameable(parser_struct), Idx(std::move(Idx)), IsBracket(IsBracket) {
   this->Inner = std::move(Inner); 
   this->Inner->IsLeaf = false;
   this->isSelf = this->Inner->isSelf;
@@ -2342,12 +2344,16 @@ void NameableCall::Checks() {
 
   if (this->Inner) {
     if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get())) {
-        is_tile=this->Inner->GetDataTree().Type=="layout";
+        Data_Tree inner_dt = this->Inner->GetDataTree(true);
+        is_tile=inner_dt.IsBuffered();
         if (is_tile) {
             int args_size = Args.size();
             int idxs_size = idx_stmt->Idx->Idxs.size();
             if (args_size!=idxs_size)
                 LogErrorS(parser_struct->line, "Tile size requires idxs equal to the number of tile");
+            if (!idx_stmt->IsBracket&&inner_dt.Type!="layout")
+                LogErrorS(parser_struct->line, "Type " + inner_dt.Type + " works only with bracket tiling.");
+
         }
     }
   }

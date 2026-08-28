@@ -64,7 +64,9 @@ llvm::Type *get_type_from_data(Data_Tree dt) {
   llvm::Type *llvm_type;
   if (dt.is_array) {
     llvm_type = get_type_from_data(Data_Tree(dt.Type));
-    int size = std::stoi(dt.Nested_Data[0].Type);
+    int size = 1;
+    for (int i=0; i<dt.Nested_Data.size(); ++i)
+        size *= std::stoi(dt.Nested_Data[i].Type);
     llvm_type = ArrayType::get(llvm_type, size);
   } else if (type=="layout") {
     llvm_type = get_type_from_data(Data_Tree(dt.Nested_Data[0].Type));
@@ -328,8 +330,20 @@ Value *CalcArrayIdx(Value *scope_struct, Value *vec, std::unique_ptr<ExprAST> &i
     return idx->codegen(scope_struct);
 }
 
-Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct) {
+Value *Idx_Calc_Codegen(Parser_Struct *parser_struct, std::string name, std::string type, Value *vec, std::unique_ptr<IndexExprAST> &idxs, Data_Tree dt, Value *scope_struct) {
   auto &indices = idxs->Idxs;
+  if (type=="layout") {
+    std::vector<Value *> strides = layout_strides[parser_struct->function_name][name];
+    
+    Value *offset = const_int(0);
+    int j=1;
+    for (int i=indices.size()-1; i>=0; --i) {
+        Value *stride = strides[strides.size() - j++];
+        Value *idx = indices[i].start->codegen(scope_struct);
+        offset = Builder->CreateAdd(offset, Builder->CreateMul(stride, idx));
+    }
+    return offset;
+  }
   auto &first = indices[0].start; 
   if (!has_slice(indices)) {
     if (type=="array")
@@ -779,7 +793,6 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
     bool is_layout = Type=="layout";
     if (is_layout) {
-        std::cout << "SET STRIDE FOR " << parser_struct->function_name << "||" << VarName << "\n";
         auto *layout_stmt = dynamic_cast<LayoutExprAST*>(Init);
         layout_strides[parser_struct->function_name][VarName] = layout_stmt->GetStrides(scope_struct);
     }
@@ -992,7 +1005,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
     ArgsV.push_back(arg);
 
-    if (!is_nsk_fn && !in_vec(type, primary_data_tokens)) {
+    if (!is_nsk_fn && !in_vec(type, primary_data_tokens) && parser_struct->gpu==0) {
         // If it creates a new memory address for a high-level fn, store address on the stack.
         bool does_op_create_memory = \
             (F||dynamic_cast<UnaryExprAST*>(Args[i].get())\
@@ -1101,6 +1114,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
 
+        // float x <-
         if(Init->GetIsMsg()) {
             Value *void_ptr = Constant::getNullValue(int8PtrTy);
             if (!in_vec(Type, primary_data_tokens)&&Type!="str")
@@ -1111,6 +1125,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
 
+        // float[] x
         if (data_type.is_array && !(is_self||is_attr)) { 
             if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(VarNames[i].second.get())) {
                 AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, \
@@ -1121,6 +1136,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         }
 
 
+        // float x
         if(in_vec(Type, primary_data_tokens) && !data_type.is_buffer && !(is_self||is_attr)) { 
             if (Type=="bool"&&init_type=="any")
                 initial_value = callret("to_bool", {scope_struct, initial_value}); 
@@ -2154,7 +2170,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
         Data_Tree dt = LHSV->GetDataTree(true);
         std::string type = UnmangleVec(dt);
 
-        Value *idx = Idx_Calc_Codegen(type, vec_ptr, LHSV->Idx, scope_struct); //StoreIdx
+        Value *idx = Idx_Calc_Codegen(parser_struct, LHSV->Inner->GetName(), type, vec_ptr, LHSV->Idx, dt, scope_struct); //StoreIdx
 
 
         if(type=="map") {
@@ -4294,12 +4310,22 @@ std::vector<Value *> LayoutExprAST::GetStrides(Value *ctx) {
 
 Value *LayoutExprAST::codegen(Value *scope_struct) {
 
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
     llvm::Type *ty = get_type_from_data(dt.Nested_Data[0]);
 
     std::vector<Value*> strides = GetStrides(scope_struct);
 
     if (!smem) {
-        Value *ptr = Args[0]->codegen(scope_struct);
+        Value *ptr; 
+        if (Args.size()==0) { 
+            Data_Tree array_dt = Data_Tree(dt.Nested_Data[0]);
+            for (int i=1; i<dt.Nested_Data.size(); ++i) 
+                array_dt.Nested_Data.push_back(dt.Nested_Data[i]);
+            array_dt.is_array=true;
+            ptr = CreateEntryBlockAlloca(TheFunction, "stack_layout", \
+                                            get_type_from_data(array_dt));
+        } else
+            ptr = Args[0]->codegen(scope_struct);
 
         return ptr;
 
@@ -4569,7 +4595,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
 
     Value *loaded_var = Inner->codegen(scope_struct);
-    Value *idx = Idx_Calc_Codegen(compound_type, loaded_var, Idx, scope_struct);
+    Value *idx = Idx_Calc_Codegen(parser_struct, Inner->GetName(), compound_type, loaded_var, Idx, inner_dt, scope_struct);
 
     if (inner_dt.is_array) {
         llvm::Type *Ty = get_type_from_data(Data_Tree(inner_dt.Type));
@@ -4584,6 +4610,8 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     if (inner_dt.Type=="layout") {
         llvm::Type *Ty = get_type_from_data(Data_Tree(inner_dt.Nested_Data[0].Type));
         Value *gep = Builder->CreateInBoundsGEP(Ty, loaded_var, idx); //&arr[0]
+        if (IsBracket)
+            return gep;
         return Builder->CreateLoad(Ty, gep);
     }
 
@@ -4947,35 +4975,43 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
 
 Value *NameableCall::codegen_tile(Value *scope_struct) {  
     auto *idx_stmt = dynamic_cast<NameableIdx*>(Inner.get());
+    bool is_bracket = idx_stmt->IsBracket;
+    Data_Tree inner_dt = Inner->Inner->GetDataTree();
+    bool is_layout = inner_dt.Type=="layout";
 
-    Data_Tree layout_dt = Inner->Inner->GetDataTree();
-
-
-    if (!idx_stmt||layout_dt.Type!="layout")
+    if (!idx_stmt)
         LogErrorS(parser_struct->line, "Tile op failed.");
 
     Value *ptr = Inner->Inner->codegen(scope_struct);
-    std::string layout_name = Inner->Inner->GetName();
 
-    llvm::Type *ty = get_type_from_data(layout_dt.Nested_Data[0]);
+    llvm::Type *ty = get_type_from_data(
+                        (is_layout) ? inner_dt.Nested_Data[0]
+                                    : Data_Tree(inner_dt.Type)
+                     );
 
+    std::vector<Value*> strides;
+    if (is_layout) {
+        std::string layout_name = Inner->Inner->GetName();
+        strides = layout_strides[parser_struct->function_name][layout_name];
+    }
 
-    std::vector<Value*> strides = layout_strides[parser_struct->function_name][layout_name];
 
     int args_size = Args.size();
     int idxs_size = idx_stmt->Idx->Idxs.size();
-    if (strides.size()!=args_size)
+    if (is_layout&&strides.size()!=args_size&&!is_bracket)
         LogErrorC(parser_struct->line, "Tile expression requires the amount of tiles to be equal the amount of layout dimensions");
 
     std::vector<DimSlice> &tiles = idx_stmt->Idx->Idxs;
     Value *offset = const_int(0);
     for (int i=0; i<args_size; ++i) {
-        Value *stride = strides[i];
+        Value *stride = (!is_bracket) ? strides[i] : nullptr;
         Value *tile = tiles[i].start->codegen(scope_struct);
         Value *idx = Args[i]->codegen(scope_struct);
 
-        Value *product = Builder->CreateMul(stride,
-                            Builder->CreateMul(tile,idx));
+        Value *product = Builder->CreateMul(tile,idx);
+        if (!is_bracket)
+            product = Builder->CreateMul(stride, product);
+
         offset = Builder->CreateAdd(offset, product);
     }
     return Builder->CreateGEP(ty, ptr, offset);
@@ -5085,7 +5121,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (Callee=="array_append")
         return codegen_append(scope_struct);
     if (is_tile)
-        return codegen_tile(scope_struct);
+        return codegen_tile(scope_struct); 
     
 
     bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&\

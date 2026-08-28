@@ -587,9 +587,9 @@ class NameableCall : public Nameable {
 class NameableIdx : public Nameable {
   public:
   std::unique_ptr<IndexExprAST> Idx;
-  bool IsAppend=false;
+  bool IsAppend=false, IsBracket=false;
 
-  NameableIdx(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx);
+  NameableIdx(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx, bool);
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;

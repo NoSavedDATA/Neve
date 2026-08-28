@@ -780,6 +780,10 @@ void SetKernelVars(std::string function_name) {
         PtxModule->getOrInsertFunction(
             "llvm.nvvm.read.ptx.sreg.ctaid.x",
             Builder->getInt32Ty());
+    FunctionCallee ctaid_y =
+        PtxModule->getOrInsertFunction(
+            "llvm.nvvm.read.ptx.sreg.ctaid.y",
+            Builder->getInt32Ty());
 
     FunctionCallee ntid_x =
         PtxModule->getOrInsertFunction(
@@ -793,6 +797,7 @@ void SetKernelVars(std::string function_name) {
 
     Value *tid  = Builder->CreateCall(tid_x);
     Value *bid  = Builder->CreateCall(ctaid_x);
+    Value *bid_y= Builder->CreateCall(ctaid_y);
     Value *bdim = Builder->CreateCall(ntid_x);
 
     Value *warp  = Builder->CreateSDiv(tid, const_int(32));
@@ -800,6 +805,7 @@ void SetKernelVars(std::string function_name) {
 
     function_values[function_name]["tx"] = tid;
     function_values[function_name]["bx"] = bid;
+    function_values[function_name]["by"] = bid_y;
     function_values[function_name]["warp"] = warp;
     function_values[function_name]["lane"] = lane;
 }
