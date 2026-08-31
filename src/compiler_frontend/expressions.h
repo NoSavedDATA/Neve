@@ -990,7 +990,7 @@ public:
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   std::vector<Value *> GetStrides(Value *);
-  int DimsProd();
+  Value *DimsProd();
 };
 
 

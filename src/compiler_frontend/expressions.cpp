@@ -479,12 +479,11 @@ std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsT
     found = true;
     for (auto cargs : FnVersion[fn]) {
         if(CompareDTs(CArgs.dts, cargs.dts) && CArgs.cvalues==cargs.cvalues) {
-            if(begins_with(fn, "layout")) {
-
-                std::cout << "FOUND FOR " << cargs.version_str << "\n";
-                print_dt_vec(CArgs.dts);
-                print_dt_vec(cargs.dts);
-            }
+            // if(begins_with(fn, "layout")) {
+            //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
+            //     print_dt_vec(CArgs.dts);
+            //     print_dt_vec(cargs.dts);
+            // }
             return cargs.version_str;
         }
     }
@@ -1152,36 +1151,6 @@ Data_Tree LayoutExprAST::GetDataTree(bool) {
 }
 
 
-int LayoutExprAST::DimsProd() {
-
-    int prod=1;
-    for (int i=CArgs.size()-1; i>=0; --i) {
-        auto &carg = CArgs[i];
-        std::string type = carg->dt.Type; 
-        std::string str = carg->name; 
-        auto &expr = carg->expr; 
-
-
-        if (type=="int")
-            prod *= std::stoi(str);
-        else if (auto stmt = dynamic_cast<Nameable*>(expr.get())) {
-            std::string name = expr->Name;
-            if (parser_struct->cvalues.ints.count(name)==0)
-                LogErrorC(parser_struct->line, "(dims prod) compile time value \"" + name + "\" not found in layout expr");
-            
-            prod *= parser_struct->cvalues.ints[name];
-
-        }
-        else if (type=="str") {
-            if (parser_struct->cvalues.ints.count(str)==0)
-                LogErrorC(parser_struct->line, "Compile time value \"" + str + "\" not found in layout expr");
-            
-            prod *= parser_struct->cvalues.ints[str];
-        } else
-            LogErrorC(parser_struct->line, "layout does not support nested type " + type);
-    }
-    return prod;
-}
 
 
 LayoutExprAST::LayoutExprAST(Parser_Struct *parser_struct, uint16_t type,
@@ -1464,10 +1433,8 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
             CArgs.cvalues = GetSubmitedCValues();
             Operation = GetFnVersion(parser_struct, Operation, CArgs, found);
 
-            std::cout << "GetFnVersion " << Operation << ", found: " << found << "\n";
             if (!found) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic, is_fused);
-                std::cout << "GenTemplate " << Operation << "\n";
             }
             if (found)
                 return functions_return_data_type[Operation];

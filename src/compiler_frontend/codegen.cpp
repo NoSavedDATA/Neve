@@ -2703,7 +2703,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             }
             default:
                 std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
-                std::cout << "layout expr: " << Operation << "\n";
 
                 std::vector<Value *> Args = {L, R};
                 std::vector<Data_Tree> Types = {L_dt, R_dt};
@@ -2729,7 +2728,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                     Args.push_back(dyn->expr->codegen(scope_struct));
 
                 // PtxModule->print(llvm::errs(), nullptr);
-                std::cout << "CALL " << Operation << "\n";
                 ret = callret(Operation, Args); 
                 if (is_fused)
                     return ret;
@@ -4154,6 +4152,34 @@ GlobalVariable *get_smem() {
         );
 }
 
+Value *LayoutExprAST::DimsProd() {
+    Value *prod = const_int(1);
+
+    for (int i=CArgs.size()-1; i>=0; --i) {
+        auto &carg = CArgs[i];
+        std::string type = carg->dt.Type; 
+        std::string str = carg->name; 
+        auto &expr = carg->expr; 
+
+
+        Value *dim_i;
+        if (type=="int")
+            dim_i = const_int(std::stoi(str));
+        else if (auto stmt = dynamic_cast<Nameable*>(expr.get())) {
+            std::string name = expr->Name;
+            if (parser_struct->cvalues.ints.count(name)>0)
+                dim_i = const_int(parser_struct->cvalues.ints[name]);
+            else if (function_values[parser_struct->function_name].count(name)>0)
+                dim_i = function_values[parser_struct->function_name][name];
+            else
+                LogErrorC(parser_struct->line, "(dims prod) value \"" + name + "\" not found in layout expr");
+        } else
+            LogErrorC(parser_struct->line, "layout does not support nested type " + type);
+
+        prod = Builder->CreateMul(dim_i, prod);
+    }
+    return prod;
+}
 
 std::vector<Value *> LayoutExprAST::GetStrides(Value *ctx) {
     std::vector<Value *> Strides;
@@ -4233,8 +4259,7 @@ Value *LayoutExprAST::codegen(Value *scope_struct) {
         //smem
         bool had = false;
         Value *prev_smem = get_smem_offset(parser_struct, had);
-        // std::cout << "SMEM HAS " << DimsProd() << "\n";
-        Value *size = const_int(DimsProd());
+        Value *size = DimsProd();
         size = Builder->CreateMul(size, const_int(4));
 
         llvm::Type *smemTy = ArrayType::get(int8Ty, 0);

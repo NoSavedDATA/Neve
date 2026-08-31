@@ -178,7 +178,6 @@ void HandleGpuDef() {
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
     if (FnAST->getProto().is_generic) {
-        std::cout << "GENERIC " << FnAST->getProto().getName() << "\n";
         Template_FnAST[FnAST->getProto().getName()][FnAST->getProto().CArgs] = std::move(FnAST);
         return;
     }
