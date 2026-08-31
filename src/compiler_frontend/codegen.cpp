@@ -2504,121 +2504,10 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
     seen_var_attr=false;
 }
 
-Data_Tree SolveComptimeValues(Data_Tree dt, Parser_Struct *parser_struct) {
-    Data_Tree ret_dt = Data_Tree(dt.Type);
-
-    if (dt.Type=="layout") {
-        ret_dt.Nested_Data.push_back(dt.Nested_Data[0]);
-        for(int i=1; i<dt.Nested_Data.size();++i) {
-            std::string type = dt.Nested_Data[i].Type;
-            if (parser_struct->cvalues.ints.count(type)>0)
-                type = std::to_string(parser_struct->cvalues.ints[type]);
-
-            ret_dt.Nested_Data.push_back(Data_Tree(type));
-        }
-    }
-    return ret_dt;
-}
 
 
 
-inline void BuildTemplateArgTree(FnCompiledValues &CompiledArgs,
-        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
-        Data_Tree &arg_dt, Data_Tree &sent_dt,
-        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
-        Parser_Struct *parser_struct) {
-    
-    std::string key = arg_dt.Type;
-    if (!in_vec(key, data_tokens)&&!in_vec(key, compound_tokens)&&key!="layout") {
-    
-        std::string sent_type = sent_dt.Type;
-        if (is_number(sent_type))
-            CompiledArgs.AddInt(key, std::stoi(sent_type));
-        else {
-            bool has=false;
-            for (auto &arg : dynamic_args) {
-                if (arg->name==key) {
-                    has=true;
-                    break;
-                }
-            }
-            if(!has) {
-                std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct, sent_type, 1, false);
-                nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
-                auto arg_pair = std::make_unique<Arg_Pair>(data_typeVars[parser_struct->function_name][sent_type],
-                                         key, std::move(nameable));
-                dynamic_args.push_back(std::move(arg_pair));
-            }
 
-        }
-    }
-    
-    for (int i=0; i<arg_dt.Nested_Data.size(); ++i)
-        BuildTemplateArgTree(CompiledArgs, dynamic_args, arg_dt.Nested_Data[i], sent_dt.Nested_Data[i], LHS, RHS, parser_struct);
-}
-
-
-inline void BuildSpecializedArgs(FnCompiledValues &CompiledArgs, 
-        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
-        Data_Tree &L_dt, Data_Tree &R_dt,
-        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS,
-        std::vector<Data_Tree> &ProtoTypes, int arg_offset,
-        Parser_Struct *parser_struct) {
-    BuildTemplateArgTree(CompiledArgs, dynamic_args, ProtoTypes[arg_offset],
-                                L_dt, LHS, RHS, parser_struct);
-    BuildTemplateArgTree(CompiledArgs, dynamic_args, ProtoTypes[arg_offset+1],
-                                R_dt, LHS, RHS, parser_struct);
-}
-
-std::string SpecializeOperation(std::string fn, Parser_Struct *parser_struct,
-        std::vector<std::unique_ptr<Arg_Pair>> &dynamic_args,
-        Data_Tree L_dt, Data_Tree R_dt,
-        std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS) {
-    std::string fn_name = fn;
-
-
-    L_dt = SolveComptimeValues(L_dt, parser_struct);
-    R_dt = SolveComptimeValues(R_dt, parser_struct);
-
-    if (FunctionProtos.count(fn)==0)
-        LogErrorC(parser_struct->line, "Could not find operation " + fn);
-    auto proto = FunctionProtos[fn].get();
-    std::vector<std::string> Args = proto->Args;
-
-    int arg_offset = (parser_struct->gpu==0) ? 1 : 0;
-
-    FnCompiledValues CompiledArgs;
-    if (L_dt.Type=="layout")
-        CompiledArgs.layouts[Args[arg_offset]] = L_dt;
-    if (R_dt.Type=="layout")
-        CompiledArgs.layouts[Args[arg_offset+1]] = R_dt;
-    
-    BuildSpecializedArgs(CompiledArgs, dynamic_args, L_dt, R_dt, LHS, RHS, proto->Types, arg_offset, parser_struct);
-
-
-    int idx=0;
-    if (Fn_Compiled_Version[fn].count(CompiledArgs)==0) {
-        FunctionAST *FnAst;
-        if (parser_struct->gpu>0) {
-            need_re_emit_ptx = true;
-            FnAst = GpuFunctions[fn].get();
-            proto = FnAst->Proto.get();
-        }
-        else
-            std::cout << "Uninmplemented non-gpu template fn logic (" << fn << ")\n";
-
-        idx = (Fn_Last_Version.count(fn)==0) ? 0 : Fn_Last_Version[fn];
-        fn+="_"+std::to_string(idx);
-        // std::cout << "specialize: " << fn << "\n";
-        // std::cout << "cints " << CompiledArgs.ints.size() << "\n";
-        Fn_Compiled_Values[fn] = CompiledArgs;
-
-        Function *F= proto->codegen(&dynamic_args);
-        FnAst->codegen_gpu(idx, &dynamic_args);
-    }
-
-    return fn;
-}
 
 
 
@@ -2814,6 +2703,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             }
             default:
                 std::vector<std::unique_ptr<Arg_Pair>> dynamic_args;
+                std::cout << "layout expr: " << Operation << "\n";
 
                 std::vector<Value *> Args = {L, R};
                 std::vector<Data_Tree> Types = {L_dt, R_dt};
@@ -2839,6 +2729,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                     Args.push_back(dyn->expr->codegen(scope_struct));
 
                 // PtxModule->print(llvm::errs(), nullptr);
+                std::cout << "CALL " << Operation << "\n";
                 ret = callret(Operation, Args); 
                 if (is_fused)
                     return ret;

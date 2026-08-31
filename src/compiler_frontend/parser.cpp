@@ -2526,7 +2526,6 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
 
       if (type=="layout") {
           has_generic = true;
-          data_tree.ctime = true;
           Fn_Compiled_Args[FnName].push_back(std::make_unique<CompiledArgs>(data_tree, IdName));
       }
 
@@ -2605,7 +2604,6 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
             return LogErrorProto(parser_struct->line, "Prototype compiletime args require a data type.");
 
           Data_Tree data_tree = ParseDataTree(IdentifierStr, in_vec(IdentifierStr, compound_tokens), parser_struct);
-          data_tree.ctime = true;
 
           if (CurTok!=tok_identifier)
             return LogErrorProto(parser_struct->line, "Prototype compiletime args require name");
@@ -2632,6 +2630,11 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct *parser_struct, bool 
   getNextToken();
 
 
+  // if (begins_with(FnName, "layout")) {
+  //       std::cout << ">>>>>>NORMAL PROTOTYPE  " << FnName << "\n";
+  // }
+  // if (has_generic)
+  //       std::cout << ">>>>>>GENERIC PROTOTYPE  " << FnName << "\n";
 
   auto proto = std::make_unique<PrototypeAST>(parser_struct, FnName,
                                          return_data_type, _class, method, std::move(ArgNames),

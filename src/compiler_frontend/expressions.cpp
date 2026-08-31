@@ -479,8 +479,12 @@ std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsT
     found = true;
     for (auto cargs : FnVersion[fn]) {
         if(CompareDTs(CArgs.dts, cargs.dts) && CArgs.cvalues==cargs.cvalues) {
-            // if(begins_with(fn, "layout"))
-            //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
+            if(begins_with(fn, "layout")) {
+
+                std::cout << "FOUND FOR " << cargs.version_str << "\n";
+                print_dt_vec(CArgs.dts);
+                print_dt_vec(cargs.dts);
+            }
             return cargs.version_str;
         }
     }
@@ -1459,8 +1463,12 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
             CallArgsTy CArgs = CallArgsTy(Types);
             CArgs.cvalues = GetSubmitedCValues();
             Operation = GetFnVersion(parser_struct, Operation, CArgs, found);
-            if (!found)
+
+            std::cout << "GetFnVersion " << Operation << ", found: " << found << "\n";
+            if (!found) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic, is_fused);
+                std::cout << "GenTemplate " << Operation << "\n";
+            }
             if (found)
                 return functions_return_data_type[Operation];
           }
@@ -1894,9 +1902,12 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
             this->Name = this->Types[ctx_offset].Type +"_" + this->Name;
     }
 
-    // if (begins_with(this->Name, "layout"))
-        // std::cout << "SET VERSION FOR " << this->Name << "\n";
-    version = SetFnVersion(this->Name, CArgs, overwrite);
+    // if (begins_with(this->Name, "layout")) {
+    //     std::cout << "----SET VERSION FOR " << this->Name << "\n";
+    //     std::cout << "generic " << is_generic << "\n";
+    // }
+    if (!IsOperator)
+        version = SetFnVersion(this->Name, CArgs, overwrite);
     if (version!=0)
         this->Name += "_"+std::to_string(version);
 
