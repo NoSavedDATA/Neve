@@ -1609,6 +1609,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     llvm::Type *llvm_type = get_type_from_data(start_type);
 
 
+
     Value *StartVal = Start->codegen(scope_struct);
     if (!StartVal)
         return nullptr;
@@ -1696,8 +1697,11 @@ Value *ForExprAST::codegen(Value *scope_struct) {
         NextVal = Builder->CreateAdd(LoopVar, StepVal, "nextvar"); // Increment  
     if (start_type=="float")
         NextVal = Builder->CreateFAdd(LoopVar, StepVal, "nextvar"); // Increment 
+    
 
     LoopVar->addIncoming(NextVal, CurBB);
+
+
     for (auto &name : changed_vars) {
         Value *val = function_values[parser_struct->function_name][name];
         function_phi_values[name]->addIncoming(val, CurBB);
@@ -1949,6 +1953,15 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
+
+
+Value *IntervalLoopExprAST::codegen(Value *scope_struct) {
+    Checks();
+
+    Body[0]->codegen(scope_struct);
+
+    return const_int(0);
+}
 
 
 
@@ -2746,6 +2759,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
                 if (parser_struct->gpu>0) {
                     Args.push_back(get_smem_offset(parser_struct));
+                    // Args.push_back(const_int(0));
                 }
 
                 // PtxModule->print(llvm::errs(), nullptr);
@@ -4072,6 +4086,11 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
         types.push_back(Ty);
     }
 
+    // Parser_Struct *lambda_parser_struct = parser_struct->Copy();
+    // lambda_parser_struct->function_name = lambda_fn;
+    std::string prev_name = parser_struct->function_name;
+    parser_struct->function_name = lambda_fn;
+    Body->SetCValues(parser_struct);
 
     Data_Tree ret_dt = Body->GetDataTree();
     llvm::Type *retTy = get_type_from_data(ret_dt);
@@ -4104,6 +4123,7 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
     Builder->SetInsertPoint(BB);
 
 
+
     int args_count = ArgsType.size();
     auto it = F->arg_begin();
 
@@ -4119,7 +4139,6 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
             function_values[lambda_fn]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
             fn_stack_offset[lambda_fn] = 0;
         } else {
-            function_values[lambda_fn][arg_name] = &Arg;
             StoreVal(F, lambda_fn, arg_name, &Arg,
                         data_typeVars[lambda_fn][arg_name]);
         }
@@ -4128,16 +4147,19 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
 
     Value *ret = Body->codegen(scope_struct);
 
-    Builder->CreateRet(ret);
-    // Builder->CreateRetVoid(); 
 
-    // Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    parser_struct->function_name = prev_name;
+
+
+    Builder->CreateRet(ret);
+
     Builder->SetInsertPoint(CurBB);
 
     return const_int(0);
 }
 
 Value *MapitExprAST::codegen(Value *scope_struct) {
+    Checks();
     Lambda->codegen(scope_struct);
 
 
@@ -4170,9 +4192,12 @@ GlobalVariable *get_smem() {
 }
 
 
-Value *CastNum(Value *ctx, Value *val, Data_Tree L_dt, Data_Tree R_dt) {
+Value *CastNum(Parser_Struct *parser_struct, Value *ctx, Value *val, Data_Tree L_dt, Data_Tree R_dt) {
     if (L_dt.Type=="float"&&R_dt.IsInteger())
         val = Builder->CreateSIToFP(val, floatTy);
+
+    // if (L_dt.IsInteger()&&R_dt.Type=="float")
+    //     LogErrorS(parser_struct->line, "Cannot cast float to int.");
     
     if (L_dt.Type!=R_dt.Type) {
         if (L_dt.IsInteger()&&R_dt.IsInteger())
@@ -4183,12 +4208,13 @@ Value *CastNum(Value *ctx, Value *val, Data_Tree L_dt, Data_Tree R_dt) {
     return val;
 }
 
-void InitArray(Value *ctx, Value *dest_ptr, Value *size, std::unique_ptr<ExprAST> &InitVal,
+void InitArray(Parser_Struct *parser_struct, Value *ctx, Value *dest_ptr, Value *size, std::unique_ptr<ExprAST> &InitVal,
                 Data_Tree dt) {
     Data_Tree init_dt = InitVal->GetDataTree();
-    llvm::Type *ty = get_type_from_data(init_dt);
+    llvm::Type *ty = get_type_from_data(dt);
     Value *init_val = InitVal->codegen(ctx);
-    init_val = CastNum(ctx, init_val, dt, init_dt);
+
+    init_val = CastNum(parser_struct, ctx, init_val, dt, init_dt);
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
@@ -4350,7 +4376,7 @@ Value *LayoutExprAST::codegen_smem(Value *scope_struct, std::vector<Value*> &str
         PointerType::get(ty, 3));
 
     if (Args.size()>0)
-        InitArray(scope_struct, smem_ptr, DimsProd(), Args[0], dt.Nested_Data[0]);
+        InitArray(parser_struct, scope_struct, smem_ptr, DimsProd(), Args[0], dt.Nested_Data[0]);
 
 
     return smem_ptr;
@@ -4373,10 +4399,9 @@ Value *LayoutExprAST::codegen_stack(Value *scope_struct, std::vector<Value*> &st
     Value *ptr = CreateEntryBlockAlloca(TheFunction, "stack_layout", \
                                     get_type_from_data(array_dt));
 
-    if (Args.size()>0) {
-        std::cout << "GOT " << Args.size() << " args\n";
-        InitArray(scope_struct, ptr, DimsProd(), Args[0], dt.Nested_Data[0]);
-    }
+    if (Args.size()>0)
+        InitArray(parser_struct, scope_struct, ptr, DimsProd(), Args[0], dt.Nested_Data[0]);
+    
     return ptr;
 }
 
@@ -5254,6 +5279,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (gpu_fn.count(Callee)>0) {
         std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
         ArgsV_slice.push_back(get_smem_offset(parser_struct));
+        // ArgsV_slice.push_back(const_int(0));
         ret = callret(Callee, ArgsV_slice);
     } else
         ret = callret(Callee, ArgsV);

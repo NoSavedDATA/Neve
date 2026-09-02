@@ -1,14 +1,17 @@
 #include "llvm/IR/Value.h"
 
 
+#include <cstddef>
 #include <cstdio>
 #include <execinfo.h>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
 #include <stdio.h>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 
@@ -251,15 +254,22 @@ Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct *pa
 
 
 /// numberexpr ::= number
-std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct) {
+std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct,
+                                    bool is_double_dot) {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
-  getNextToken(); // consume the number
+  if (is_double_dot)
+      CurTok = tok_double_dot;
+  else
+      getNextToken(); // consume the number
   return std::move(Result);
 }
 
-std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct *parser_struct) {
+std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct *parser_struct, bool is_double_dot) {
   auto Result = std::make_unique<IntExprAST>(IntVal);
-  getNextToken(); // consume the number
+  if (is_double_dot)
+      CurTok = tok_double_dot;
+  else
+      getNextToken(); // consume the number
   return std::move(Result);
 }
 
@@ -832,11 +842,9 @@ std::vector<std::unique_ptr<ExprAST>> ParseIndentedBodies(Parser_Struct *parser_
 
   bool has_safe_point=false;
   handle_tok_space();
-  while(!in_char(CurTok, terminal_tokens))
-  {
+  while(!in_char(CurTok, terminal_tokens)) {
     //std::cout << "\n\nParsing new expression with tabs: " << SeenTabs << " tok: " << ReverseToken(CurTok) << "\n";
-    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
-    {
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space) {
       //std::cout << "Breaking for with cur tok: " << ReverseToken(CurTok) << " Seen Tabs:" << SeenTabs <<  "\n";
       break;
     } 
@@ -1256,10 +1264,12 @@ std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct *parser_struct, std::string
 
 std::unique_ptr<ExprAST> ParseNewList(Parser_Struct *parser_struct, std::string class_name) {
 
+  int cur_level_tabs = SeenTabs;
   getNextToken(); // [
 
   std::string element_type;
-  std::vector<std::unique_ptr<ExprAST>> Elements;
+  bool is_interval=false;
+  std::vector<std::unique_ptr<ExprAST>> Elements, Finishes;
   if (CurTok != ']') {
     while (true) {
 
@@ -1269,10 +1279,27 @@ std::unique_ptr<ExprAST> ParseNewList(Parser_Struct *parser_struct, std::string 
       else
         return nullptr;
 
+      if (is_interval&&CurTok!=tok_double_dot) {
+
+        LogErrorBreakLine(parser_struct->line, "\[x..y\,z] expression missing .. for a certain dim.");
+        return nullptr;  
+      }
+
+      if (CurTok==tok_double_dot) {
+          getNextToken(); // eat ..
+          if (CurTok=='.')
+              getNextToken(); 
+          is_interval=true;
+
+          if (auto element = ParseExpression(parser_struct, class_name, false))
+            Finishes.push_back(std::move(element));
+      }
+
       if (CurTok == ']')
         break;
+
       if (CurTok != ',') {
-        LogErrorBreakLine(parser_struct->line, "Expected \",\" or \"]\" at the new tuple expression.");
+        LogErrorBreakLine(parser_struct->line, "Expected \",\" or \"]\" at the new tuple expression. Got " + ReverseToken(CurTok));
         return nullptr;
       }
       getNextToken();
@@ -1280,8 +1307,27 @@ std::unique_ptr<ExprAST> ParseNewList(Parser_Struct *parser_struct, std::string 
   }   
   getNextToken(); // ]
 
-  
 
+
+
+  if (is_interval) {
+      std::vector<std::unique_ptr<ExprAST>> var_names;
+      if (cur_level_tabs==SeenTabs) {
+        while(CurTok==tok_identifier) {
+            if (auto element = ParseExpression(parser_struct, class_name, false))
+                var_names.push_back(std::move(element));
+            if(CurTok!=',')
+                break;
+            getNextToken(); // eat ,
+        }
+      }
+      std::vector<std::unique_ptr<ExprAST>> Body;
+      Parser_Struct *loop_parser_struct = parser_struct->Copy();
+      loop_parser_struct->loop_depth++;
+      Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
+
+      return std::make_unique<IntervalLoopExprAST>(parser_struct, std::move(Elements), std::move(Finishes), std::move(Body), std::move(var_names));
+  }
   return std::make_unique<NewVecExprAST>(std::move(Elements), "array");
 }
 
@@ -1894,8 +1940,7 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct *parser_struct, std::string 
 
   
   while(true) {
-    if (CurTok==tok_number)
-    {
+    if (CurTok==tok_number) {
       expr = std::make_unique<NumberExprAST>(NumVal);
       getNextToken();
     } else if (CurTok==tok_int) {
@@ -1987,8 +2032,12 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
     return ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, can_be_list);
   case tok_number:
     return ParseNumberExpr(parser_struct);
+  case tok_number_double_dot:
+    return ParseNumberExpr(parser_struct,true);
   case tok_int:
     return ParseIntExpr(parser_struct);
+  case tok_int_double_dot:
+    return ParseIntExpr(parser_struct,true);
   case tok_lutlo:
     return ParseLutLoExpr(parser_struct);
   case tok_luthi:
@@ -2116,7 +2165,6 @@ std::unique_ptr<ExprAST> ParseScan(Parser_Struct *parser_struct,
 
 
 std::unique_ptr<LambdaExprAST> ParseLambda(Parser_Struct *parser_struct, std::string lambda_fn, std::string class_name) {
-    // ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, false);
 
     std::vector<std::string> args;
     if (parser_struct->gpu==0)
@@ -2124,7 +2172,7 @@ std::unique_ptr<LambdaExprAST> ParseLambda(Parser_Struct *parser_struct, std::st
     args.push_back(IdentifierStr);
     getNextToken();
     while (CurTok==',') {
-        getNextToken();
+        getNextToken(); // eat ,
         args.push_back(IdentifierStr);
         getNextToken();
     }

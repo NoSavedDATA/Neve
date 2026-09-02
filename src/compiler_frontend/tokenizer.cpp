@@ -122,6 +122,9 @@ std::map<int, std::string> token_to_string = {
   { tok_xor, "tok xor" },
   
   { '.', "dot<.>" },
+  { tok_double_dot, ".." },
+  { tok_number_double_dot, "<float>.." },
+  { tok_int_double_dot, "<int>.." },
 
   { 36, "$" },
 
@@ -304,8 +307,7 @@ static int get_token(bool block) {
   
     
 
-  if (LastChar=='[')
-  {
+  if (LastChar=='[') {
     LastChar = tokenizer->get();
     return '[';
   }
@@ -325,9 +327,9 @@ static int get_token(bool block) {
             default:
                 LogErrorC(tokenizer->Line, "Unknown escape sequence");
         }
-    } else {
+    } else
         NumVal = LastChar;               // normal char
-    }
+    
 
     LastChar = tokenizer->get();
 
@@ -338,8 +340,7 @@ static int get_token(bool block) {
     return tok_char;
 }
 
-  if (LastChar=='"')
-  {
+  if (LastChar=='"') {
 
     LastChar = tokenizer->get();
     if (LastChar=='"') {
@@ -349,8 +350,7 @@ static int get_token(bool block) {
     }
     IdentifierStr = LastChar;
 
-    while (true)
-    {
+    while (true) {
       LastChar = tokenizer->get();
       if(LastChar=='"')
         break;
@@ -362,9 +362,12 @@ static int get_token(bool block) {
   }
 
 
-  if(LastChar=='.') 
-  {
+  if(LastChar=='.') {
     LastChar = tokenizer->get();
+    if(LastChar=='.') {
+        LastChar = tokenizer->get();
+        return tok_double_dot;
+    }
     return '.';
   }
   
@@ -423,7 +426,8 @@ static int get_token(bool block) {
   // }
   
   if (isdigit(LastChar)) { // Number: [-.]+[0-9.]+
-    bool is_float=false;
+    int is_float=0;
+    bool is_double_dot=false;
     bool is_hexa=false;
     
     std::string NumStr;
@@ -433,13 +437,20 @@ static int get_token(bool block) {
     }
     do {
       if(LastChar=='.')
-        is_float=true;
+        is_float++;
       if(LastChar=='x')
         is_hexa=true;
 
+      char prev_char = LastChar;
+
       NumStr += LastChar;
       LastChar = tokenizer->get();
-    } while (isdigit(LastChar) || LastChar == '.' || LastChar=='x' || (is_hexa&&isalpha(LastChar)));
+
+      if (prev_char=='.'&&LastChar=='.') {
+          is_float--;
+          is_double_dot=true;
+      }
+    } while (!is_double_dot && (isdigit(LastChar) || LastChar == '.' || LastChar=='x' || (is_hexa&&isalpha(LastChar))));
 
     if (is_hexa)
         HexaVal = strtoull(NumStr.c_str(), nullptr, 16);
@@ -448,8 +459,14 @@ static int get_token(bool block) {
         IntVal = strtoull(NumStr.c_str(), nullptr, 10);
     }
     
-    if (is_float) return tok_number;
+    if (is_float>0) {
+        if (is_double_dot) return tok_number_double_dot;
+        return tok_number;
+    }
+    
     if (is_hexa) return tok_hexa;
+
+    if (is_double_dot) return tok_int_double_dot;
     return tok_int;
   }
 

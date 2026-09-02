@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 #include "llvm/IR/Value.h"
@@ -329,6 +330,26 @@ class NewTupleExprAST : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
+
+class IntervalLoopExprAST : public ExprAST {
+
+  public:
+    Parser_Struct *parser_struct;
+    std::vector<std::unique_ptr<ExprAST>> Starts, Ends, Body, VarNames;
+    std::unique_ptr<ExprAST> ForLoop;
+    bool Check = false;
+    
+    IntervalLoopExprAST(
+        Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<ExprAST>> Starts,
+        std::vector<std::unique_ptr<ExprAST>> Ends,
+        std::vector<std::unique_ptr<ExprAST>> Body,
+        std::vector<std::unique_ptr<ExprAST>> VarNames);
+
+  Value *codegen(Value *scope_struct) override;
+  void Checks();
+};
+
 class NewVecExprAST : public ExprAST {
 
   public:
@@ -476,6 +497,7 @@ public:
   bool GetNeedGCSafePoint() override;
   FnCompiledValues GetSubmitedCValues();
   void Checks();
+  // void SetCValues(Parser_Struct *parser_struct);
 };
 
 
@@ -772,10 +794,9 @@ class IfExprAST : public ExprAST {
   
 /// ForExprAST - Expression class for for.
 class ForExprAST : public ExprAST {
-  std::string VarName;
-  std::unique_ptr<ExprAST> Start, End, Step;
-
   public:
+    std::string VarName;
+    std::unique_ptr<ExprAST> Start, End, Step;
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
@@ -964,6 +985,7 @@ public:
 class MapitExprAST : public ExprAST {
 
 public:
+  bool Check = false;
   std::unique_ptr<LambdaExprAST> Lambda;
   std::unique_ptr<ExprAST> LHS;
   std::string fn="";
@@ -971,6 +993,7 @@ public:
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  void Checks();
 };
 
 

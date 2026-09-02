@@ -42,6 +42,9 @@ enum Token {
     tok_class_attr = -79,
     tok_extern = -3,
     tok_import = -51,
+    tok_double_dot = -98,
+    tok_number_double_dot = -99,
+    tok_int_double_dot = -100,
 
 
     // functional

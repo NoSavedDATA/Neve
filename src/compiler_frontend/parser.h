@@ -54,7 +54,8 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct *parser_struct, std::stri
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string class_name, bool can_be_list=true);
 
 /// numberexpr ::= number
-std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct);
+std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct, bool is_double_dot=false);
+std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct *parser_struct, bool is_double_dot=false);
 
 std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct *parser_struct); 
 

@@ -1,5 +1,6 @@
 
 
+#include "expressions.h"
 #include "llvm/IR/Value.h"
 
 
@@ -8,7 +9,9 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "include.h"
@@ -170,6 +173,16 @@ void ExprAST::SetCValues(Parser_Struct *parser_struct) {
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
+// void BinaryExprAST::SetCValues(Parser_Struct *parser_struct) {
+//     if (!this->parser_struct)
+//         return;
+//     this->parser_struct->function_name = parser_struct->function_name;
+//     this->parser_struct->cvalues = parser_struct->cvalues;
+//     std::cout << "SET BINARY TO " << parser_struct->function_name << "\n";
+//     LHS->SetCValues(parser_struct);
+//     RHS->SetCValues(parser_struct);
+// }
+
 void ForExprAST::SetCValues(Parser_Struct *parser_struct) {
     this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
@@ -326,7 +339,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
 
 void AssignGenericTree(Parser_Struct *parser_struct,
-        Data_Tree dt, Data_Tree templ_dt,
+        Data_Tree dt, Data_Tree &templ_dt,
         std::unordered_map<std::string,Data_Tree> &generics_map,
         CallArgsTy &templ,
         FnCompiledValues &cvalues) {
@@ -345,7 +358,8 @@ void AssignGenericTree(Parser_Struct *parser_struct,
                 return;
             }
         }
-        generics_map[templ_type] = GenericUnmangleType(dt, templ_dt);
+        templ_dt = GenericUnmangleType(dt, templ_dt);
+        generics_map[templ_type] = templ_dt;
         return;
     }
     else if (templ_type!="layout"&&\
@@ -420,10 +434,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
         fn_ast = tpair.second.get();
         FnCompiledValues cvalues;
-        // std::cout << "GenTemplate: " << fn << "\n";
+        // std::cout << "\n\nGenTemplate: " << fn << "\n";
         // print_dt_vec(CArgs.dts);
         // print_dt_vec(templ.dts);
         AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
+
 
 
         if (is_fused_op)
@@ -683,6 +698,58 @@ NewTupleExprAST::NewTupleExprAST(
 void NewVecExprAST::Checks() {
 
   GetDataTree();
+}
+
+IntervalLoopExprAST::IntervalLoopExprAST(
+        Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<ExprAST>> Starts,
+        std::vector<std::unique_ptr<ExprAST>> Ends,
+        std::vector<std::unique_ptr<ExprAST>> Body,
+        std::vector<std::unique_ptr<ExprAST>> VarNames)
+        : Starts(std::move(Starts)), Ends(std::move(Ends)),
+          VarNames(std::move(VarNames)) {
+
+    // if (this->VarNames.size()==0)
+    //     this->VarNames = {"i", "j", "k"};
+
+
+    int loops = this->Starts.size();
+    
+    Parser_Struct *last_parser_struct = parser_struct;
+    for (int i=loops-1; i>=0; --i) {
+        std::string var_name = this->VarNames[i]->GetName();
+        Parser_Struct *loop_parser_struct = last_parser_struct->Copy();
+
+        // todo loop_depth is inversed
+        loop_parser_struct->loop_depth++;
+        last_parser_struct = loop_parser_struct;
+
+        std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(last_parser_struct, var_name, 1);
+        nameable->AddNested(std::make_unique<NameableRoot>(last_parser_struct));
+
+        std::unique_ptr<ExprAST> EndCond = std::make_unique<BinaryExprAST>(
+                '<', std::move(nameable),
+                std::move(this->Ends[i]),
+                last_parser_struct);
+
+
+        std::vector<std::unique_ptr<ExprAST>> Loop;
+        Loop.push_back(std::make_unique<ForExprAST>(
+                var_name, std::move(this->Starts[i]),
+                std::move(EndCond),
+                std::make_unique<IntExprAST>(1),
+                std::move(Body), loop_parser_struct
+            ));
+        Body = std::move(Loop);
+    }
+    this->Body = std::move(Body);
+}
+
+void IntervalLoopExprAST::Checks() {
+    if (Check) return;
+    Check = true;
+  // typeVars[parser_struct->function_name][VarName] = Start->GetDataTree().Type;
+  // data_typeVars[parser_struct->function_name][VarName] = Start->GetDataTree();
 }
   
 NewVecExprAST::NewVecExprAST(
@@ -1112,15 +1179,20 @@ LambdaExprAST::LambdaExprAST(Parser_Struct *parser_struct, std::string lambda_fn
   
   
 Data_Tree MapitExprAST::GetDataTree(bool from_assignment) {
+    Checks();
     return LHS->GetDataTree();
 }
 
-MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
-    : LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
-    this->parser_struct = parser_struct;
+
+void MapitExprAST::Checks() {
+    if (Check)
+        return;
+    Check=true;
+
 
     Data_Tree dt = this->LHS->GetDataTree();
     std::string scope = this->Lambda->lambda_fn;
+
     
 
     int first_idx;
@@ -1149,6 +1221,12 @@ MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST
     
     std::string gpu_str = (parser_struct->gpu>0) ? "_gpu" : "";
     fn+=gpu_str+"_mapit";
+}
+
+MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
+    : LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
+    this->parser_struct = parser_struct;
+
 }
   
 
