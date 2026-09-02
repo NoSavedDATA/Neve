@@ -988,6 +988,9 @@ public:
   LayoutExprAST(Parser_Struct *, uint16_t type, std::vector<std::unique_ptr<CompiledArgs>>, std::vector<std::unique_ptr<ExprAST>>, bool);
 
   Value *codegen(Value *scope_struct) override;
+  Value *codegen_ptr(Value *scope_struct, std::vector<Value*>&);
+  Value *codegen_stack(Value *scope_struct, std::vector<Value*>&);
+  Value *codegen_smem(Value *scope_struct, std::vector<Value*>&);
   Data_Tree GetDataTree(bool from_assignment=false) override;
   std::vector<Value *> GetStrides(Value *);
   Value *DimsProd();

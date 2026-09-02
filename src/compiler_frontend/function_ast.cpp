@@ -25,6 +25,7 @@
 
 // #include "../../lsp/json.hpp"
 #include "../include.h"
+#include "parser.h"
 
 ExitOnError ExitOnErr;
 std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
@@ -857,24 +858,26 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
         if (Fn_Compiled_Values[fn_name].layouts.count(arg_name))
             data_typeVars[function_name][arg_name] = Fn_Compiled_Values[fn_name].layouts[arg_name]; 
   }
-  if (dynamic_args) {
-      for (auto &dynamic_arg : *dynamic_args) {
-        data_typeVars[function_name][dynamic_arg->name] = dynamic_arg->dt;
-      }
-  }
 
   if (idx>=0)
       parser_struct->cvalues = Fn_Compiled_Values[fn_name];
+
+
+  for (auto &[name, value] : function_values[fn_name]) {
+        Data_Tree dt = data_typeVars[fn_name][name];
+        if (dt.Type=="layout")
+            layout_strides[fn_name][name] = GetStrides(parser_struct, dt, scope_struct);
+  }
+
   
   SetKernelVars(function_name);
-
 
 
   for (auto &body : Body) {
     // if (idx>=0) // is comp specialization
     body->SetCValues(parser_struct);
     // }
-    // std::cout << "\n\n" << typeid(*body).name() << "\n";
+    // std::cout << "\n\n(gpu)" << typeid(*body).name() << "\n";
     // std::cout << "idx: " << idx << "\n";
     // std::cout << "codegen " << parser_struct->function_name << "\n";
     body->codegen(scope_struct);

@@ -37,6 +37,17 @@ bool Data_Tree::Has(std::string type) const {
 }
 
 
+
+
+bool Data_Tree::IsPrimary() const {
+    return Nested_Data.size()==0&&!is_buffer&&!is_array&&!is_generic\
+                &&!in_vec(Type, compound_tokens);
+}
+
+bool Data_Tree::IsInteger() const {
+    return in_vec(Type, int_types);
+}
+
 bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     if((L->Type=="list"&&R.Type=="unknown_list")||L->Type=="unknown_list"&&R.Type=="list")
         return true;

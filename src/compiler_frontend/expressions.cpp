@@ -3,6 +3,8 @@
 #include "llvm/IR/Value.h"
 
 
+#include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -329,6 +331,10 @@ void AssignGenericTree(Parser_Struct *parser_struct,
         CallArgsTy &templ,
         FnCompiledValues &cvalues) {
 
+    // std::cout << "\n\ntree in layout" << "\n";
+    // dt.Print();
+    // templ_dt.Print();
+    // std::cout << "generic? " << templ_dt.is_generic << "\n";
 
     std::string templ_type = templ_dt.Type;
     if (templ_dt.is_generic) {
@@ -362,10 +368,13 @@ void AssignGenericTree(Parser_Struct *parser_struct,
             cvalues.AddInt(templ_type, parser_struct->cvalues.ints[dt.Type]);
     }
 
-    for (int i=0; i<templ_dt.Nested_Data.size(); ++i)
+    for (int i=0; i<templ_dt.Nested_Data.size(); ++i) {
+        if (templ_dt.Nested_Data[i].Type=="smem")
+            continue;
         AssignGenericTree(parser_struct,
                           dt.Nested_Data[i], templ_dt.Nested_Data[i],
                           generics_map, templ, cvalues);
+    }
 }
 
 void DeriveTypedGeneric(Data_Tree templ_dt, Data_Tree &ret_dt,
@@ -409,10 +418,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         if (!CompareDTs(CArgs.dts, templ.dts))
             continue;
 
-
-
         fn_ast = tpair.second.get();
         FnCompiledValues cvalues;
+        // std::cout << "GenTemplate: " << fn << "\n";
+        // print_dt_vec(CArgs.dts);
+        // print_dt_vec(templ.dts);
         AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
 
 
@@ -442,11 +452,14 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
         
         CArgs.args = templ.args;
+        CArgs.dts = templ.dts;
         CArgs.template_ret = templ.template_ret;
         functions_return_data_type[fn] = CArgs.template_ret;
         
+
         auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
                         CArgs);
+
 
         if (parser_struct->gpu>0) {
             int gpu = parser_struct->gpu;
@@ -1421,13 +1434,19 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   else {
       if (Op!='=') {
           std::string fn = (has_generic) ? Operation : operation; 
+
           if (FnTemplates.count(fn)>0) {
             bool found;
             is_fused = (Parent!=nullptr&&Op=='@');
 
             std::vector<Data_Tree> Types = {L_dt, R_dt};
-            if (is_fused)
-                Types.push_back(Data_Tree("any")); // substitute during specialization
+            if (is_fused) {
+                // Types.push_back(Data_Tree("any")); // substitute during specialization
+                if (auto *parent_stmt = dynamic_cast<BinaryExprAST*>(Parent)) {
+                    Data_Tree parent_dt = parent_stmt->LHS->GetDataTree();
+                    Types.push_back(parent_dt);
+                }
+            }
 
             CallArgsTy CArgs = CallArgsTy(Types);
             CArgs.cvalues = GetSubmitedCValues();

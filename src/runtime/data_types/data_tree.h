@@ -25,6 +25,8 @@ struct Data_Tree {
     void Print(bool break_line=true) const;
     std::string toString() const;
     bool IsComposite() const;
+    bool IsPrimary() const;
+    bool IsInteger() const;
     bool IsBuffered() const;
     bool HasGeneric() const;
     bool Has(std::string type) const;

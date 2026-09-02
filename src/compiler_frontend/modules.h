@@ -40,6 +40,7 @@ extern std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 extern std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 extern std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 extern std::unordered_map<std::string, llvm::Type*> tuple_cache;
+extern std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Value*>>> layout_strides;
 
 extern std::unordered_map<std::string, std::function<Value*(Parser_Struct*, Function*, std::string, std::string, Data_Tree,
                                                        Value*, Value*,
