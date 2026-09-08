@@ -127,7 +127,7 @@ void Generate_Class_Types() {
         std::vector<llvm::Type*> types;
         for (auto &attr : ClassAttrsName[class_name]) {
             Data_Tree dt = data_typeVars[class_name][attr];
-            types.push_back(get_type_from_data(dt));
+            types.push_back(get_type_from_data(nullptr, dt));
         }
         StructType *st = StructType::create(
             *TheContext,

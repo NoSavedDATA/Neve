@@ -31,9 +31,9 @@ void Generate_Lib_Functions() {
         
         llvm::Type *fn_return_type;
         if (ret=="void")
-             fn_return_type = get_type_from_data(Data_Tree("void_ptr"));
+             fn_return_type = get_type_from_data(nullptr, Data_Tree("void_ptr"));
         else 
-             fn_return_type = get_type_from_data(pair.second);
+             fn_return_type = get_type_from_data(nullptr, pair.second);
 
         std::vector<llvm::Type *> arg_types;
 

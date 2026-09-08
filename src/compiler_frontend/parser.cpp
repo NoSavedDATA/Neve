@@ -255,8 +255,9 @@ Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct *pa
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct,
-                                    bool is_double_dot) {
+                                    bool is_double_dot, bool is_inf) {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
+  Result->SetIsInf(is_inf);
   if (is_double_dot)
       CurTok = tok_double_dot;
   else
@@ -264,8 +265,10 @@ std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct,
   return std::move(Result);
 }
 
-std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct *parser_struct, bool is_double_dot) {
+std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct *parser_struct,
+                                    bool is_double_dot, bool is_inf) {
   auto Result = std::make_unique<IntExprAST>(IntVal);
+  Result->SetIsInf(is_inf);
   if (is_double_dot)
       CurTok = tok_double_dot;
   else
@@ -2034,10 +2037,14 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
     return ParseNumberExpr(parser_struct);
   case tok_number_double_dot:
     return ParseNumberExpr(parser_struct,true);
+  case tok_finf:
+    return ParseNumberExpr(parser_struct,false,true);
   case tok_int:
     return ParseIntExpr(parser_struct);
   case tok_int_double_dot:
     return ParseIntExpr(parser_struct,true);
+  case tok_inf:
+    return ParseIntExpr(parser_struct,false,true);
   case tok_lutlo:
     return ParseLutLoExpr(parser_struct);
   case tok_luthi:

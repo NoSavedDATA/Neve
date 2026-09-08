@@ -70,6 +70,10 @@ enum Token {
     tok_const = -84,
 
 
+    tok_finf = -101,
+    tok_inf = -102,
+
+
     // consts
     tok_lutlo = -81,
     tok_luthi = -82,

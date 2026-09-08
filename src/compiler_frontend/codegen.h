@@ -57,7 +57,7 @@ Value *LoadVal(std::string fn_name, std::string name, Data_Tree dt);
 
 
 Type *get_type_from_str(std::string type);
-llvm::Type *get_type_from_data(Data_Tree);
+llvm::Type *get_type_from_data(Parser_Struct*,Data_Tree);
 
 
 

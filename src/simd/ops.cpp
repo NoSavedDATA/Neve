@@ -3,7 +3,7 @@
 
 
 
-Value *simd_add(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_add(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     Data_Tree dt = LHS->GetDataTree();
     if (dt.Nested_Data[0].Type == "float") {
         auto *mul = Builder->CreateFAdd(L, R);
@@ -14,7 +14,7 @@ Value *simd_add(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Va
     }
     return Builder->CreateAdd(L, R);
 }
-Value *simd_mult(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_mult(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     Data_Tree dt = LHS->GetDataTree();
     
     if (dt.Nested_Data[0].Type == "float") {
@@ -28,51 +28,51 @@ Value *simd_mult(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, V
     return Builder->CreateMul(L, R);
 }
 
-Value *simd_equal(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_equal(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpEQ(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_dif(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_dif(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpNE(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_and(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_and(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateAnd(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_or(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_or(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateOr(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_higher(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_higher(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpSGT(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_minor(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_minor(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpSLT(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_highereq(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_highereq(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpSGE(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
-Value *simd_minoreq(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+Value *simd_minoreq(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
     auto *cmp = Builder->CreateICmpSLE(L, R);
-    auto *vecTy = get_type_from_data(LHS->GetDataTree());
+    auto *vecTy = get_type_from_data(parser_struct, LHS->GetDataTree());
     return Builder->CreateSExt(cmp, vecTy);
 }
 
-// Value *simd_lshift(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+// Value *simd_lshift(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
 //     return Builder->CreateShl(L, R);
 // }
-// Value *simd_rshift(std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
+// Value *simd_rshift(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R) {
 //     return Builder->CreateLShr(L, R);
 // }
 static bool is_i8_vector(Value *V) {
@@ -88,7 +88,7 @@ static int get_vector_elements(Value *V) {
     auto *VT = cast<VectorType>(V->getType());
     return VT->getElementCount().getKnownMinValue();
 }
-Value *simd_rshift(std::unique_ptr<ExprAST> &LHS,
+Value *simd_rshift(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS,
                    std::unique_ptr<ExprAST> &RHS,
                    Value *L,
                    Value *R) {
@@ -153,7 +153,7 @@ Value *simd_rshift(std::unique_ptr<ExprAST> &LHS,
 
     return Builder->CreateLShr(L, R);
 }
-Value *simd_lshift(std::unique_ptr<ExprAST> &LHS,
+Value *simd_lshift(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS,
                    std::unique_ptr<ExprAST> &RHS,
                    Value *L,
                    Value *R) {

@@ -4,7 +4,7 @@
 Value *ctz(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-    auto *ty = get_type_from_data(args_type[0]);
+    auto *ty = get_type_from_data(parser_struct, args_type[0]);
     Value *v = ArgsV[0];
 
     llvm::Function* ctz = llvm::Intrinsic::getDeclaration(
@@ -21,7 +21,7 @@ Value *ctz(Parser_Struct * parser_struct, Function *TheFunction,
 Value *swap_bit(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-    auto *ty = get_type_from_data(args_type[0]);
+    auto *ty = get_type_from_data(parser_struct, args_type[0]);
     Value *v = ArgsV[0], *idx = ArgsV[1];
     // cast idx to same type
     Value* idx_cast = Builder->CreateIntCast(idx, ty, false);
@@ -61,7 +61,7 @@ Data_Tree vec_shuffle_ret(Parser_Struct * parser_struct, std::vector<std::unique
 Value *simd_load(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-    llvm::Type *ty = get_type_from_data(data_type);
+    llvm::Type *ty = get_type_from_data(parser_struct, data_type);
 
     Value *ptr = ArgsV[0];
     if (args_type[0].Type=="str")
@@ -75,7 +75,7 @@ Value *simd_load(Parser_Struct * parser_struct, Function *TheFunction,
 Value *simd_store(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args, std::vector<Value*> &ArgsV) {
-    llvm::Type *ty = get_type_from_data(data_type);
+    llvm::Type *ty = get_type_from_data(parser_struct, data_type);
 
     Value *ptr = ArgsV[0];
     if (args_type[0].Type=="str")
@@ -225,7 +225,7 @@ Value *vec_print(Parser_Struct * parser_struct, Function *TheFunction,
     const std::string &vec_type = dt.Nested_Data[0].Type;
     int vec_size = std::stoi(dt.Nested_Data[1].Type);
     
-    llvm::Type *vecTy = get_type_from_data(dt);
+    llvm::Type *vecTy = get_type_from_data(parser_struct, dt);
     Value *alloca = CreateEntryBlockAlloca(TheFunction, "vec", vecTy);
 
     Builder->CreateStore(ArgsV[0], alloca);

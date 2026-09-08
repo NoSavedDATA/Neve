@@ -863,8 +863,11 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
       parser_struct->cvalues = Fn_Compiled_Values[fn_name];
 
 
+
   for (auto &[name, value] : function_values[fn_name]) {
         Data_Tree dt = data_typeVars[fn_name][name];
+        // std::cout << "SET " << name << " TO " << "\n";
+        // dt.Print();
         if (dt.Type=="layout")
             layout_strides[fn_name][name] = GetStrides(parser_struct, dt, scope_struct);
   }
@@ -877,7 +880,8 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
     // if (idx>=0) // is comp specialization
     body->SetCValues(parser_struct);
     // }
-    // std::cout << "\n\n(gpu)" << typeid(*body).name() << "\n";
+      // std::cout << "\n(codegen_gpu) " << fn_name << "\n";
+    // std::cout << "(gpu)" << typeid(*body).name() << "\n";
     // std::cout << "idx: " << idx << "\n";
     // std::cout << "codegen " << parser_struct->function_name << "\n";
     body->codegen(scope_struct);

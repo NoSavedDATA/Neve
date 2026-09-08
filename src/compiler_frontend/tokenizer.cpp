@@ -230,6 +230,8 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel},
                                              {"main", tok_main},
+                                             {"inf", tok_inf},
+                                             {"finf", tok_finf},
                                              {"reduce", tok_reduce},
                                              {"scan", tok_scan},
                                              {"mapit", tok_mapit},
@@ -412,6 +414,8 @@ static int get_token(bool block) {
       IdentifierStr = "__slee_p_";
     if (IdentifierStr == "tanh")
       IdentifierStr = "_tanh";
+    if (IdentifierStr == "tanh")
+      IdentifierStr = "_tanh";
     return tok_identifier;
   }
   // if (LastChar=='@') {
@@ -465,7 +469,6 @@ static int get_token(bool block) {
     }
     
     if (is_hexa) return tok_hexa;
-
     if (is_double_dot) return tok_int_double_dot;
     return tok_int;
   }

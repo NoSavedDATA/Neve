@@ -162,19 +162,21 @@ class IndexExprAST : public ExprAST {
   
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
-
   public:
+    bool IsInf=false;
     float Val;
     NumberExprAST(float Val); 
-
   Value *codegen(Value *scope_struct) override;
+  void SetIsInf(bool);
 }; 
   
 class IntExprAST : public ExprAST {
   public:
+    bool IsInf=false;
     int64_t Val;
     IntExprAST(int64_t Val); 
   Value *codegen(Value *scope_struct) override;
+  void SetIsInf(bool);
 }; 
 
 
@@ -486,6 +488,7 @@ class BinaryExprAST : public ExprAST {
 public:
   std::string Elements, Operation;
   bool is_store_sugar=false, is_fused=false;
+  std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::unique_ptr<ExprAST> LHS, RHS;
   ExprAST *Parent=nullptr;
   char Op;
@@ -1112,7 +1115,7 @@ class PrototypeAST {
       PrototypeAST(Parser_Struct *,
                   const std::string &,
                   const std::string &,
-                  CallArgsTy);
+                  CallArgsTy, CallArgsTy &);
   
     Function *codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_args=nullptr);
     const std::string &getName() const; 
@@ -1144,10 +1147,10 @@ struct Arg_Pair {
 
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
-std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found);
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout=true);
 void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
-                        CallArgsTy CArgs, bool &found, bool is_op=false, bool is_fused_op=false);
+                        CallArgsTy CArgs, bool &found, bool is_op=false);
 void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);
 
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;

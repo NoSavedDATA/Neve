@@ -108,7 +108,7 @@ Value *DT_vec_Create(Parser_Struct * parser_struct, Function *TheFunction,
         size = num_expr->Val;
         const std::string &data_type = data_type_to_name()[num_expr->Val];
         dt = Data_Tree(data_type);
-        ty = get_type_from_data(dt);
+        ty = get_type_from_data(parser_struct, dt);
     } else
         LogError(parser_struct->line, "Vec expected type");
     if (auto num_expr = dynamic_cast<IntExprAST*>(Args[1].get()))
