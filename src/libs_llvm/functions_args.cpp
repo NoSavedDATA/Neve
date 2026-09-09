@@ -1937,15 +1937,6 @@ void set_functions_args_type() {
 		Function_Arg_Names["randn"].push_back("2");
 	
 		
-		Function_Arg_Types["str_Copy"]["0"] = "Scope_Struct";
-		Function_Arg_Types["str_Copy"]["1"] = "str";
-		
-		Function_Arg_DataTypes["str_Copy"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["str_Copy"]["1"] = Data_Tree("str");
-		
-		Function_Arg_Names["str_Copy"].push_back("0");
-		Function_Arg_Names["str_Copy"].push_back("1");
-		
 		Function_Arg_Types["str_eq"]["0"] = "Scope_Struct";
 		Function_Arg_Types["str_eq"]["1"] = "str";
 		Function_Arg_Types["str_eq"]["2"] = "str";

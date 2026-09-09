@@ -31,7 +31,7 @@ using namespace llvm;
 namespace fs = std::filesystem;
 
 
-std::unordered_map<std::string, llvm::Type*> tuple_cache;
+std::unordered_map<std::string, llvm::StructType*> tuple_cache;
 std::map<std::string, int> fn_stack_offset;
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
 std::map<std::string, std::map<std::string, Value *>> function_values;
@@ -88,17 +88,20 @@ llvm::Type *get_type_from_data(Parser_Struct *parser_struct, Data_Tree dt) {
   }
   else if (type=="tuple") {
     std::string dt_str = dt.toString();
-    if (tuple_cache.count(dt_str)>0)
+    if (tuple_cache.count(dt_str)>0) {
+        std::cout << "CACHED TUPLE Data_Tree" << dt_str << "\n";
         return tuple_cache[dt_str];
+    }
     std::vector<llvm::Type *> tupleTypes;
     for (auto dt : dt.Nested_Data)
         tupleTypes.push_back(get_type_from_data(parser_struct, dt));
-    llvm_type = StructType::create(
+    auto st_type = StructType::create(
         *TheContext,
         tupleTypes,
         dt_str
     );
-    tuple_cache[dt_str] = llvm_type;
+    tuple_cache[dt_str] = st_type;
+    llvm_type = st_type;
   }
   else if (type=="vec") {
     llvm::Type *inner_dt = get_type_from_data(parser_struct, Data_Tree(dt.Nested_Data[0].Type));
@@ -984,6 +987,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
   // std::cout << "arg list " << fn_name << "\n";
   // std::cout << "arg list " << fn_name << " | " << Args.size() << " | " << arg_offset << "\n";
+
   unsigned i, e;
   for (i = 0, e = Args.size(); i != e; ++i) {
     if (dynamic_cast<PositionalArgExprAST*>(Args[i].get()))
@@ -991,7 +995,6 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
      
     Value *arg = Args[i]->codegen(scope_struct);
  
-
     Data_Tree data_type = Args[i]->GetDataTree();
     std::string type = data_type.Type;
 
@@ -999,6 +1002,15 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
     
     int tgt_arg = i + arg_offset;
+    // if (Function_Arg_DataTypes.count(fn_name)==0)
+    //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no data types ");
+    // if (Function_Arg_Names.count(fn_name)==0)
+    //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no arg names ");
+    // if (tgt_arg>=Function_Arg_Names[fn_name].size())
+    //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no target arg " + std::to_string(tgt_arg));
+    // if (Function_Arg_DataTypes[fn_name].count(Function_Arg_Names[fn_name][tgt_arg])==0)
+    //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no data types ");
+
     Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
     std::string expected_type = expected_data_type.Type;
 
@@ -1031,6 +1043,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
     ArgsV.push_back(arg);
 
+
     if (!is_nsk_fn && !in_vec(type, primary_data_tokens) && parser_struct->gpu==0) {
         // If it creates a new memory address for a high-level fn, store address on the stack.
         bool does_op_create_memory = \
@@ -1044,6 +1057,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
             Set_Stack_Top(scope_struct, parser_struct->function_name);
         }
     }
+
 
 
     if (!ArgsV.back()) {
@@ -3615,10 +3629,25 @@ Value *RetExprAST::codegen(Value *scope_struct) {
 
 
     std::vector<llvm::Type *> retTypes;
-    for (int i=0; i<Vars.size(); i++)
-         retTypes.push_back(get_type_from_data(parser_struct, Vars[i]->GetDataTree()));
+    Data_Tree tupleTy = Data_Tree("tuple");
+    for (int i=0; i<Vars.size(); i++) {
+         if (parser_struct->function_name=="warpMax_float") {
+            std::cout << "add ret type" << "\n";
+            Vars[i]->GetDataTree().Print();
+         }
+         Data_Tree dt = Vars[i]->GetDataTree();
+         tupleTy.Nested_Data.push_back(dt);
+         retTypes.push_back(get_type_from_data(parser_struct, dt));
+    }
+
+    std::string dt_str = tupleTy.toString();
+
     
-    StructType *retTy = StructType::create(
+    StructType *retTy;
+    if (tuple_cache.count(dt_str)>0)
+        retTy = tuple_cache[dt_str];
+    else
+        retTy = StructType::create(
         *TheContext,
         retTypes,
         "ret_expr_type"
@@ -4664,7 +4693,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     Data_Tree inner_dt = Inner->GetDataTree();
 
 
-
     std::string compound_type = UnmangleVec(inner_dt);
     std::string type;
     if (compound_type=="tuple") {
@@ -4881,6 +4909,8 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
     auto &indices = Idx->Idxs;
     if (compound_type=="array") {
+
+
 
         Data_Tree elem_dt = Inner->GetDataTree().Nested_Data[0];
         llvm::Type *elemTy = get_type_from_data(parser_struct, elem_dt); 

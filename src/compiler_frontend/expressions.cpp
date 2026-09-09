@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <execution>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -19,6 +21,7 @@
 #include "../runtime/compiler_frontend/parser_struct.h"
 #include "../runtime/data_types/data_tree.h"
 #include "logging.h"
+#include "modules.h"
 
 
 using namespace llvm;
@@ -168,7 +171,7 @@ void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee) {
  
 
 void ExprAST::SetCValues(Parser_Struct *parser_struct) {
-    if (!this->parser_struct)
+    if (!this->parser_struct||!parser_struct)
         return;
     this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
@@ -575,6 +578,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
           LogErrorS(parser_struct->line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
   }
 
+
   // -- Required Arguments -- //
   unsigned i, e;
   for (i = 0, e = Args.size(); i != e; ++i) {
@@ -597,18 +601,22 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
 
 
     if (!in_vec(fn_name, {"to_int", "to_bool",  "to_float", "printl", "print"})) { 
+
       if (Function_Arg_DataTypes.count(fn_name)>0) {   
+
         Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
+
 
 
         int differences = expected_data_type.Compare(data_type);
         if (differences>0) { 
-          LogErrorS(parser_struct->line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ".");
+          int line = (!parser_struct) ? 0 : parser_struct->line;
           std::cout << "Expected\n   ";
           expected_data_type.Print();
           std::cout << "\nPassed\n   ";
           data_type.Print();
           std::cout << "\n\n";
+          LogErrorS(line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ".");
         } 
       }
     }
@@ -2001,7 +2009,11 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
 
     // Get Proto version name
-    CArgs = CallArgsTy(this->Types);
+
+    std::vector<Data_Tree> cargs_types = this->Types;
+    // if (Class!="")
+    //     cargs_types.insert(cargs_types.begin(), Data_Tree(Class));
+    CArgs = CallArgsTy(cargs_types);
     if (IsOperator) {
         if (this->Types.size()==ctx_offset)
             LogErrorS(parser_struct->line, "Operator function prototype has no args.");
@@ -2010,6 +2022,12 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         else
             this->Name = this->Types[ctx_offset].Type +"_" + this->Name;
     }
+
+    if (Class!=""&&begins_with(BaseName, Class))
+        ClassNativeMethods[Class].push_back(BaseName);
+    
+
+
 
     // if (begins_with(this->Name, "layout")) {
     //     std::cout << "----SET VERSION FOR " << this->Name << "\n";
@@ -2035,8 +2053,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     }
 
 
-
-    
 
 
     Function_Arg_Names[this->Name] = std::move(arg_names);
@@ -2133,6 +2149,7 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
   if (!from_assignment&&(inner_dt.is_array||inner_dt.is_buffer))
       return Data_Tree(inner_dt.Type);
+
   
   if (from_assignment || has_slice(indices) ||\
           !in_vec(compound_type, compound_tokens))
@@ -2464,6 +2481,7 @@ void NameableCall::Checks() {
     if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get())) {
         Data_Tree inner_dt = this->Inner->GetDataTree(true);
         is_tile=inner_dt.IsBuffered();
+        idx_stmt->IsTile=is_tile;
         if (is_tile) {
             int args_size = Args.size();
             int idxs_size = idx_stmt->Idx->Idxs.size();
@@ -2488,12 +2506,18 @@ void NameableCall::Checks() {
  
   is_nsk_fn = in_str(Callee, native_methods);
   int sent_args = this->Args.size();
+  bool is_native_method=false, is_method=false;
   if(Depth>1 && !FromLib) {
       sent_args++;
       std::string first_arg_dt = this->Inner->GetDataTree().Type; 
       // check is data method
+
+      is_method = (begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
+      is_native_method = (ClassNativeMethods.count(first_arg_dt)>0&&in_vec(Callee, ClassNativeMethods[first_arg_dt]));
       is_nsk_fn = is_nsk_fn ||\
-       (Classes.count(first_arg_dt)==0&&begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
+       (!is_native_method&&begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
+      // is_nsk_fn = is_nsk_fn ||\
+       // (Classes.count(first_arg_dt)==0&&begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
   }
 
 
@@ -2507,11 +2531,12 @@ void NameableCall::Checks() {
       arg_type_check_offset--;
 
 
-  if (is_obj)
+  if (is_obj||(is_method&&!is_native_method))
       Types.push_back(Inner->GetDataTree());
   for (auto &arg : Args)
       Types.push_back(arg->GetDataTree());
   CArgs = CallArgsTy(Types);
+
 
 
 

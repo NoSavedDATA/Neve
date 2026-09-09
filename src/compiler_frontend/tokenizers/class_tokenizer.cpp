@@ -101,7 +101,7 @@ int TokenizerClass::getToken() {
         return class_tok_import;
     if (IdentifierStr=="ctor")
         return class_tok_ctor;
-    if (IdentifierStr=="def")
+    if (IdentifierStr=="def"||IdentifierStr=="kernel"||IdentifierStr=="gpu")
         return class_tok_def;
     return class_tok_identifier;
   }

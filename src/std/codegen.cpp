@@ -73,6 +73,11 @@ Data_Tree map_get_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<
   return dt;
 }
 
+Data_Tree shfl_sync_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
+    return Args[0]->GetDataTree();
+}
+
+
 Value *DT_charv_Create(Parser_Struct * parser_struct, Function *TheFunction,
                       std::string name, std::string type, Data_Tree data_type,
                       Value *scope_struct, Value *initial_value,
@@ -392,27 +397,40 @@ Value *c_memchr(Parser_Struct * parser_struct, Function *TheFunction,
     return ret;
 }
 
-Value *shfl_sync(Parser_Struct * parser_struct, Function *TheFunction,
+Value *shfl_sync(Parser_Struct *parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {
 
     Value *mask = ConstantInt::get(intTy, 0xFFFFFFFF);
-    Value *width  = ConstantInt::get(intTy, 31);
-
+    Value *width = ConstantInt::get(intTy, 31);
     Value *delta = Builder->CreateIntCast(ArgsV[1], intTy, false);
-    Value *pred  = ConstantInt::get(Type::getInt1Ty(*TheContext), 1);
 
-    Function *shfl =
-        Intrinsic::getDeclaration(
-            PtxModule.get(),
-            Intrinsic::nvvm_shfl_sync_bfly_f32);
-            // Intrinsic::nvvm_shfl_sync_down_f32);
+    Value *valToShuffle = ArgsV[0];
+    Type *valType = valToShuffle->getType();
+    
+    Intrinsic::ID shfl_id;
+    bool needsTruncation = false;
 
-    // shfl->print(llvm::errs());
+    if (args_type[0].Type=="float")
+        shfl_id = Intrinsic::nvvm_shfl_sync_bfly_f32;
+    else {
+        shfl_id = Intrinsic::nvvm_shfl_sync_bfly_i32;
+        if (valType->isIntegerTy() && valType->getIntegerBitWidth() < 32) {
+            valToShuffle = Builder->CreateZExt(valToShuffle, intTy);
+            needsTruncation = true;
+        }
+    }
 
-    Value *res = Builder->CreateCall(shfl, {mask, ArgsV[0], delta, width});
+    Function *shfl = Intrinsic::getDeclaration(PtxModule.get(), shfl_id);
+    
+    Value *res = Builder->CreateCall(shfl, {mask, valToShuffle, delta, width});
+
+    if (needsTruncation)
+        res = Builder->CreateTrunc(res, valType);
+
     return res;
 }
+
 Value *cp_async16(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {

@@ -29,6 +29,7 @@ struct Data_Tree {
     bool IsInteger() const;
     bool IsBuffered() const;
     bool HasGeneric() const;
+    bool IsLayoutUnpack(Data_Tree R) const;
     bool Has(std::string type) const;
 };
 

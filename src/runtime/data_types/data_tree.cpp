@@ -26,6 +26,12 @@ bool Data_Tree::HasGeneric() const {
     return has_generic;
 }
 
+bool Data_Tree::IsLayoutUnpack(Data_Tree R) const {
+    std::string other_type = R.Type;
+    return (other_type=="layout"&&R.Nested_Data.size()>0&&R.Nested_Data[0].Type==Type);
+}
+
+
 bool Data_Tree::Has(std::string type) const {
     if (type==Type)
         return true;
@@ -165,80 +171,82 @@ bool CheckChannel(const Data_Tree *L_ptr, Data_Tree R) {
 int Data_Tree::Compare(Data_Tree other_tree) const {    
     int comparisons = 0;
 
+    std::string other_type = other_tree.Type;
 
     if(is_generic||other_tree.is_generic)
         return 0;
 
-    if(Type=="void"||other_tree.Type=="void")
+    if(Type=="void"||other_type=="void")
         return 0;
 
-    if(Type=="Function"||other_tree.Type=="Function")
+    if(Type=="Function"||other_type=="Function")
         return 0;
 
-    if(Type=="nullptr" && (!in_vec(other_tree.Type, primary_data_tokens)||other_tree.is_array))
+    if(Type=="nullptr" && (!in_vec(other_type, primary_data_tokens)||other_tree.is_array))
         return 0;
 
-    if((!in_vec(Type, primary_data_tokens)||is_array) && other_tree.Type=="nullptr")
+    if((!in_vec(Type, primary_data_tokens)||is_array) && other_type=="nullptr")
         return 0;
+
 
     if((is_array||is_buffer)!=(other_tree.is_array||other_tree.is_buffer)&&
-        Type!="any"&&other_tree.Type!="any")
+        Type!="any"&&other_type!="any")
         return 1;
 
 
-    if(Type=="vec"&&other_tree.Type=="vec")
+    if(Type=="vec"&&other_type=="vec")
         return CompareVec(this, other_tree);
 
 
 
     if (IsBuffered()&&other_tree.IsBuffered())
-        return Type!=other_tree.Type;
+        return Type!=other_type;
 
     if(in_vec(Type, primary_data_tokens) && !IsBuffered() \
             && !other_tree.IsBuffered() && \
-            in_str(other_tree.Type, primary_data_tokens) &&\
-         CheckIsEquivalent(Type, other_tree.Type))
+            in_str(other_type, primary_data_tokens) &&\
+         CheckIsEquivalent(Type, other_type))
         return 0;
 
 
 
     
 
-    if(Type=="any"||other_tree.Type=="any")
+    if(Type=="any"||other_type=="any")
         return 0;
 
-    if(Type=="charv"||other_tree.Type=="charv")
+    if(Type=="charv"||other_type=="charv")
         return 0;
 
-    if(Type=="array"&&other_tree.Type=="array")
+    if(Type=="array"&&other_type=="array")
         return CompareArrays(this, other_tree);
 
     if(Type=="map"&&Nested_Data.size()==0)
         return 0;
-    if(Type!="map"&&other_tree.Type=="map"&&CompareMap(other_tree))
+    if(Type!="map"&&other_type=="map"&&CompareMap(other_tree))
         return 0;
 
-    if(Type=="map"&&other_tree.Type!="map"&&Nested_Data[1].Type==other_tree.Type)
+    if(Type=="map"&&other_type!="map"&&Nested_Data[1].Type==other_type)
         return 0;
 
     if(Type=="map"&&!other_tree.IsComposite())
         return Nested_Data[1].Compare(other_tree);
 
-    if(in_vec(Type, compound_tokens)&&!in_vec(other_tree.Type, compound_tokens))
+    if(in_vec(Type, compound_tokens)&&!in_vec(other_type, compound_tokens))
         return Nested_Data[0].Compare(other_tree);
 
  
-    if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
+    if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_type))
         return comparisons+1;
      
     if(!CompareListTuple(this, other_tree))
         return comparisons+1;
 
-    if ((Type=="list"||Type=="array")&&other_tree.Type=="tuple"||CheckChannel(this, other_tree))
+    if ((Type=="list"||Type=="array")&&other_type=="tuple"||CheckChannel(this, other_tree))
         return comparisons;
 
     if(Nested_Data.size()!=other_tree.Nested_Data.size()){
-        if ((Type=="list"&&other_tree.Type=="list")&&(Nested_Data.size()>0&&other_tree.Nested_Data.size()==0))
+        if ((Type=="list"&&other_type=="list")&&(Nested_Data.size()>0&&other_tree.Nested_Data.size()==0))
             return comparisons;
 
         // LogErrorC(-1, "Nested data has different size: " + std::to_string(Nested_Data.size()) + \
@@ -249,8 +257,13 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
             comparisons += Nested_Data[i].Compare(other_tree.Nested_Data[i]);
     }
 
+
+    if (IsLayoutUnpack(other_tree))
+        return 0;
+
     return comparisons;
 }
+
 
 void Data_Tree::Print(bool break_line) const {
     std::string str = toString();

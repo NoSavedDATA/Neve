@@ -34,7 +34,7 @@ class ExprAST {
     bool NameSolveToLast = true;
     bool isMessage = false;
     int Line=-1;
-    Parser_Struct *parser_struct;
+    Parser_Struct *parser_struct=nullptr;
   
     Data_Tree data_type = Data_Tree("");
 
@@ -612,7 +612,7 @@ class NameableCall : public Nameable {
 class NameableIdx : public Nameable {
   public:
   std::unique_ptr<IndexExprAST> Idx;
-  bool IsAppend=false, IsBracket=false;
+  bool IsAppend=false, IsBracket=false, IsTile=false;
 
   NameableIdx(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx, bool);
 

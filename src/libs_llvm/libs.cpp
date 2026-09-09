@@ -1092,13 +1092,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("get_barrier", get_barrierTy);
 
-	FunctionType *str_CopyTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
-
 	FunctionType *str_eqTy= FunctionType::get(
 		Type::getInt1Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},

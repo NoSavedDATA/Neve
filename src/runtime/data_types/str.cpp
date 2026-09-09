@@ -28,11 +28,11 @@ DT_str::DT_str(char *str, int size) : str(str), size(size) {}
 
   
 
-extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
-  // std::cout << "Copying string: " << str << ".\n";
-  char *ret = CopyString(scope_struct, str);
-  return ret;
-}
+// extern "C" char *str_CopyOld(Scope_Struct *scope_struct, char *str) {
+//   // std::cout << "Copying string: " << str << ".\n";
+//   char *ret = CopyString(scope_struct, str);
+//   return ret;
+// }
 
 
 extern "C" bool str_eq(Scope_Struct *scope_struct, char *a, char *b, int l_size, int r_size) {

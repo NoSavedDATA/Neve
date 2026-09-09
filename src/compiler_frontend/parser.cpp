@@ -49,9 +49,8 @@ void print_caller() {
 
 
 std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
-
+std::map<std::string, std::vector<std::string>> ClassNativeMethods;
 std::map<std::string, std::map<std::string, std::unique_ptr<ExprAST>>> ArgsInit;
-
 std::map<std::string, std::map<std::string, int>> ChannelDirections;
 
 
@@ -1537,8 +1536,7 @@ std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct *parser_struct, std::string 
 
 
   // Get the Notes vector
-  if (CurTok == '[')
-  {
+  if (CurTok == '[') {
     return LogErrorBreakLine(parser_struct->line, "Cannot use notes inside a var data type.");
   }
 
@@ -1567,8 +1565,7 @@ std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct *parser_struct, std::string 
 
 
     std::unique_ptr<ExprAST> Init;
-    if (CurTok == '=' || CurTok == tok_arrow)
-    {
+    if (CurTok == '=' || CurTok == tok_arrow) {
       bool is_message = CurTok==tok_arrow;
       getNextToken(); // eat the '='.
       Init = ParseExpression(parser_struct, class_name);
@@ -2795,7 +2792,6 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
   } 
 
   return std::make_unique<FunctionAST>(parser_struct, std::move(Proto), std::move(Body));
-  
 }
 
 

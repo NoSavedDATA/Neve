@@ -33,6 +33,9 @@ Data_Tree map_values_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&,
 Data_Tree map_get_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&,\
                     std::unique_ptr<Nameable> &);
 
+Data_Tree shfl_sync_ret(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args);
+
+
 Value *DT_charv_Create(Parser_Struct * parser_struct, Function *TheFunction,
                       std::string, std::string type, Data_Tree data_type,
                       Value *scope_struct, Value *initial_value,

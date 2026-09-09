@@ -519,12 +519,12 @@ void build_dicts() {
 
 
   // shfl_sync
-  // function_return_overwrite["shfl_sync"] = swap_bit_ret;
-  functions_return_data_type["shfl_sync"] = Data_Tree("float");
+  function_return_overwrite["shfl_sync"] = shfl_sync_ret;
   Function_Arg_DataTypes["shfl_sync"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["shfl_sync"]["1"] = Data_Tree("int");
   Function_Arg_Names["shfl_sync"] = {"0", "1"};
   Function_Required_Arg_Count["shfl_sync"] = 2;
+
   // cp_async16
   functions_return_data_type["cp_async16"] = Data_Tree("void");
   Function_Arg_DataTypes["cp_async16"]["0"] = Data_Tree("any");
