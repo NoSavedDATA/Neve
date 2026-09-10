@@ -2491,9 +2491,9 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
         } else if (L_dt.Type=="layout") {// layout<float, 3,4,...>
-            std::cout << "STORING: " << "\n";
-            L_dt.Print();
-            R_dt.Print();
+            // std::cout << "STORING: " << "\n";
+            // L_dt.Print();
+            // R_dt.Print();
             L_dt = LHS->GetDataTree(true);
             llvm::Type *Ty = get_type_from_data(parser_struct, Data_Tree(L_dt.Nested_Data[0]));
             

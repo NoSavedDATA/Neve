@@ -896,8 +896,9 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
   // if (begins_with(function_name, "layout"))
   //   PtxModule->print(llvm::errs(), nullptr);
-  if (verifyFunction(*TheFunction, &errs()))
-    errs() << "Invalid function!\n";
+
+  // if (verifyFunction(*TheFunction, &errs()))
+  //   errs() << "Invalid function!\n";
 
 
   return TheFunction;

@@ -1457,11 +1457,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       }
   }
 
-  if (LType=="layout"&&Op=='=') {
-      std::cout << "=" << "\n";
-    L_dt.Print();
-    R_dt.Print();
-  }
 
 
   if (LType=="char")
@@ -2245,10 +2240,6 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 
   Data_Tree ret = functions_return_data_type[Callee];
 
-  if(ret.Type=="layout") {
-      std::cout << "Callee return layout " << "\n";
-      ret.Print();
-  }
    
 
   std::string callee = (begins_with(Callee, "map_keys")) ? "map_keys" : Callee;

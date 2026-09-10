@@ -67,8 +67,12 @@ This adds neve to bin/neve
 
 # Implementations
 
+
+[Deep Learning in 1.4k lines](https://github.com/NoSavedDATA/Neve_benchmarks)
+
+[Byte-Pair Encoding](https://github.com/NoSavedDATA/Neve_Byte_Pair_Encoding)
+
 [File reader (std lib)](https://github.com/NoSavedDATA/Neve/blob/main/lib/std_lib/file_lib.nv)
 
 [Csv Parser](https://github.com/NoSavedDATA/Neve_CSV)
 
-[Byte-Pair Encoding](https://github.com/NoSavedDATA/Neve_Byte_Pair_Encoding)
