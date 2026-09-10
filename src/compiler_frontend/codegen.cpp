@@ -88,10 +88,8 @@ llvm::Type *get_type_from_data(Parser_Struct *parser_struct, Data_Tree dt) {
   }
   else if (type=="tuple") {
     std::string dt_str = dt.toString();
-    if (tuple_cache.count(dt_str)>0) {
-        std::cout << "CACHED TUPLE Data_Tree" << dt_str << "\n";
+    if (tuple_cache.count(dt_str)>0)
         return tuple_cache[dt_str];
-    }
     std::vector<llvm::Type *> tupleTypes;
     for (auto dt : dt.Nested_Data)
         tupleTypes.push_back(get_type_from_data(parser_struct, dt));
@@ -666,7 +664,7 @@ inline Value *Load_Array(std::string &function_name, Value *var) {
     return Builder->CreateLoad(int8PtrTy, vec_gep);
 }
 
-inline void Check_Is_Array_Inbounds(Parser_Struct *parser_struct, Value *var, Value *idx) {
+inline void Check_Is_Array_Inbounds(Value *scope_struct, Parser_Struct *parser_struct, Value *var, Value *idx) {
     // return;
     Value *vec_gep = Builder->CreateStructGEP(struct_types["array"], var, 0);
     Value *size = Builder->CreateLoad(intTy, vec_gep);
@@ -681,7 +679,7 @@ inline void Check_Is_Array_Inbounds(Parser_Struct *parser_struct, Value *var, Va
     Builder->CreateCondBr(in_bounds, okBB, bad_sizeBB);
 
     Builder->SetInsertPoint(bad_sizeBB);
-    call("array_bad_idx", {const_int(parser_struct->line), idx, size});
+    call("array_bad_idx", {scope_struct, const_int(parser_struct->line), idx, size});
     Builder->CreateUnreachable();
 
     Builder->SetInsertPoint(okBB);
@@ -962,7 +960,13 @@ Value *Load_Pointer_Stack(Value *scope_struct, std::string function_name, std::s
     return Builder->CreateLoad(int8PtrTy, void_ptr_gep);
 }
 
-void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val) {
+void Set_Pointer_Stack(Value *scope_struct, Parser_Struct *parser_struct, std::string var_name, Value *val) {
+    if (!parser_struct)
+        return;
+    if (parser_struct->gpu!=0)
+        return;
+
+    std::string function_name = parser_struct->function_name;
     // p2t("SET " + var_name);
     // call("print_void_ptr", {val});
     if (function_pointers[function_name].count(var_name)==0) {
@@ -1140,6 +1144,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
         const std::string &VarName = VarNames[i].first; 
         ExprAST *Init = VarNames[i].second.get();
+
 
 
         bool is_self = GetSelf();
@@ -1332,6 +1337,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     block_values[ThenPostBB] = function_values[parser_struct->function_name];
 
 
+
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ThenV)
         return nullptr;
@@ -1461,7 +1467,9 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->SetInsertPoint(ElseBB);
 
 
-    function_values[parser_struct->function_name] = old_values;
+    // function_values[parser_struct->function_name] = old_values;
+    // function_allocas[parser_struct->function_name] = old_allocas;
+
     Value *ElseV;
     for (auto &else_body : Else)
         ElseV = else_body->codegen(scope_struct);
@@ -2198,7 +2206,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             StoreVal(TheFunction, parser_struct->function_name, Lname, Val_indexed, ldt);
 
             if (!in_vec(list_LType, primary_data_tokens))
-                Set_Pointer_Stack(scope_struct, parser_struct->function_name, Lname, Val_indexed);
+                Set_Pointer_Stack(scope_struct, parser_struct, Lname, Val_indexed);
         }
         return; 
     }
@@ -2223,7 +2231,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
         Data_Tree dt = LHSV->GetDataTree(true);
         std::string type = UnmangleVec(dt);
 
-        Value *idx = Idx_Calc_Codegen(parser_struct, LHSV->Inner->GetName(), type, vec_ptr, LHSV->Idx, dt, scope_struct); //StoreIdx
+        Value *idx = Idx_Calc_Codegen(parser_struct, LHSV->Inner->GetName(), type, vec_ptr, LHSV->Idx, dt, scope_struct);
 
 
         if(type=="map") {
@@ -2447,7 +2455,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             StructType *st = struct_types["array"];
             std::string elem_type = dt.Nested_Data[0].Type;
 
-            Check_Is_Array_Inbounds(parser_struct, vec_ptr, idx);
+            Check_Is_Array_Inbounds(scope_struct, parser_struct, vec_ptr, idx);
 
             if (elem_type=="float"&&RType=="int")
                 Val = Builder->CreateSIToFP(Val, floatTy);
@@ -2492,6 +2500,11 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
         } else  {
+            std::cout << "L" << "\n";
+            L_dt.Print();
+            std::cout << "R" << "\n";
+            R_dt.Print();
+            std::cout << "Op: " << Operation << "\n";
             call(type+"_Store_Idx", {vec_ptr, idx, Val, scope_struct});
         }
 
@@ -2530,7 +2543,7 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
                 Value *unpacked_val = Val;
                 if (RType=="str")
                     unpacked_val = Builder->CreateExtractValue(Val, {0});
-                Set_Pointer_Stack(scope_struct, parser_struct->function_name, Lname, unpacked_val);
+                Set_Pointer_Stack(scope_struct, parser_struct, Lname, unpacked_val);
             }
 
             StoreVal(TheFunction, parser_struct->function_name, Lname, Val, L_dt);
@@ -2573,6 +2586,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     Value *R = RHS->codegen(scope_struct);
     if (cast_R_to=="int_to_float")
         R = Builder->CreateSIToFP(R, floatTy, "lfp");
+    if (cast_R_to=="bool_to_float")
+        R = Builder->CreateUIToFP(R, floatTy, "bool_to_float");
+    if (cast_R_to=="bool_to_int")
+        R = Builder->CreateZExt(R, intTy, "lfp");
 
     if (cast_R_to=="to_int")
         R = Builder->CreateIntCast(R, intTy, true);
@@ -2924,8 +2941,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateSRem(L, R, "remtmp");  // Signed remainder
                 break;
             case tok_int_div:
-                ret = Builder->CreateSDiv(L, R, "divtmp");  // Signed division
+                ret = Builder->CreateSDiv(L, R, "rounddiv");  // Signed division
                 break;
+            case tok_ceil_div: {
+                Value *v_minus_one = Builder->CreateSub(R, const_int(1));
+                ret = Builder->CreateSDiv(
+                                Builder->CreateAdd(L, v_minus_one),
+                                R, "ceildiv");
+                break;
+               }
             case '<':
                 ret = Builder->CreateICmpSLT(L, R, "cmptmp");
                 break;
@@ -2933,6 +2957,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateICmpSGT(L, R, "cmptmp");
                 break;
             case tok_equal:
+                if (parser_struct->function_name=="tensor_gpu_view") {
+
+                call("print_int", {L});
+                call("print_int", {R});
+                }
                 ret = Builder->CreateICmpEQ(L, R, "cmptmp");
                 break;
             case tok_diff:
@@ -3615,6 +3644,11 @@ Value *RetExprAST::codegen(Value *scope_struct) {
         return ret;
     }
 
+
+    if(Vars.size()==0) {
+      Builder->CreateRetVoid(); 
+      return const_int(0);
+    }
 
     if(Vars.size()==1) { 
         Value *ret = Vars[0]->codegen(scope_struct);
@@ -4644,6 +4678,11 @@ Value *Nameable::codegen(Value *scope_struct) {
         }
         if (parser_struct->cvalues.ints.count(Name)>0)
             return const_int(parser_struct->cvalues.ints[Name]);
+        for (auto &[name, val] : function_values[parser_struct->function_name]) {
+            if (parser_struct->function_name=="avgpool2d_kernel")
+            std::cout << "has " << name << "\n";
+        }
+        
         return getFunctionCheck(Name);
     }
 
@@ -4926,7 +4965,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         }
 
         // v[i]
-        Check_Is_Array_Inbounds(parser_struct, loaded_var, idx);
+        Check_Is_Array_Inbounds(scope_struct, parser_struct, loaded_var, idx);
         Value *vec = Load_Array(parser_struct->function_name, loaded_var);
         Value *element = Builder->CreateGEP(elemTy, vec, idx);
         return Builder->CreateLoad(elemTy, element, "elem"); 
@@ -4988,7 +5027,7 @@ Value *getValAddress(Function *TheFunction, Parser_Struct *parser_struct, Value 
 }
 
 
-Value *callgpu(Function *TheFunction, Parser_Struct *parser_struct, std::string fn,
+Value *callgpu(Function *TheFunction, Value *scope_struct, Parser_Struct *parser_struct, std::string fn,
                       Value *gx, Value *gy, Value *gz, Value *bx, Value *by, Value *bz,
                       Value *smem,
                       const std::vector<Value *> &args, std::vector<Data_Tree> &Types,
@@ -5041,7 +5080,12 @@ Value *callgpu(Function *TheFunction, Parser_Struct *parser_struct, std::string 
     );
     
 
+    Value *tid = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 1);
+    tid = Builder->CreateLoad(intTy, tid);
+        
+
     call("neve_gpu_launch", {global_str(fn), global_str(ptx),
+                                tid,
                                 gx, gy, gz, bx, by, bz,
                                 smem,
                                 ArgBase
@@ -5086,7 +5130,7 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
 
 
     std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
-    callgpu(TheFunction, parser_struct, fn_name,
+    callgpu(TheFunction, scope_struct, parser_struct, fn_name,
             gx, gy, gz, bx, by, bz,
             smem,
             ArgsV_slice, ArgTypes,

@@ -42,6 +42,7 @@ extern "C" int prebuild() {
   BinopPrecedence['*'] = 39;
   BinopPrecedence['/'] = 40;
   BinopPrecedence[tok_int_div] = 40;
+  BinopPrecedence[tok_ceil_div] = 40;
   BinopPrecedence[tok_reduce] = 41;
   BinopPrecedence[tok_mapit] = 41;
   BinopPrecedence[tok_scan] = 41;
@@ -218,7 +219,7 @@ extern "C" int prebuild() {
             {'>', "higher"}, {tok_plus_eq, "plus_eq"}, {tok_equal, "equal"}, {'|', "bitor"},
             {tok_lshift, "lshift"}, {tok_rshift, "rshift"},
             {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
-            {77, "error"}, {tok_arrow, "message"}, {tok_and, "and"}, {tok_not, "not"}, {tok_or, "or"},
+            {77, "error"}, {tok_ceil_div, "ceildiv"}, {tok_arrow, "message"}, {tok_and, "and"}, {tok_not, "not"}, {tok_or, "or"},
             {tok_xor, "xor"}, {tok_offby, "offby"}};
 
     for (auto pair : op_map)

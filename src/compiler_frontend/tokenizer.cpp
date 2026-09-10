@@ -168,7 +168,7 @@ std::map<int, std::string> token_to_string = {
   { tok_int_div, "//" },
   { tok_higher_eq, ">=" },
   { tok_minor_eq, "<=" },
-  { tok_mod, "//" },
+  { tok_ceil_div, "/|"},
 
 
   { static_cast<int>(','), "," },
@@ -206,7 +206,7 @@ std::map<int, std::string> token_to_string = {
 
 
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal,
-                         tok_diff, tok_rshift, tok_lshift, tok_int_div,
+                         tok_diff, tok_rshift, tok_lshift, tok_ceil_div, tok_int_div,
                          tok_plus_plus, tok_arrow, 
                          tok_higher_eq, tok_minor_eq, tok_offby};
 
@@ -532,7 +532,6 @@ static int get_token(bool block) {
 
 
   LastChar = tokenizer->get();
-  int otherChar = LastChar;
 
 
   if(ThisChar=='<' && LastChar=='-') {
@@ -552,10 +551,6 @@ static int get_token(bool block) {
     LastChar = tokenizer->get();
     return tok_minus_eq;
   }
-  if(ThisChar=='/' && LastChar=='=') {
-    LastChar = tokenizer->get();
-    return tok_div_eq;
-  }
   if(ThisChar=='+' && LastChar=='+') {
     LastChar = tokenizer->get();
     return tok_plus_plus;
@@ -570,26 +565,34 @@ static int get_token(bool block) {
     return tok_rshift;
   }
 
-  if (ThisChar=='=' && otherChar=='=') {
+  if (ThisChar=='=' && LastChar=='=') {
     LastChar = tokenizer->get();
     return tok_equal;
   }
-  if (ThisChar=='!' && otherChar=='=') {
+  if (ThisChar=='!' && LastChar=='=') {
     LastChar = tokenizer->get();
     return tok_diff;
   }
-  if (ThisChar=='>' && otherChar=='=') {
+  if (ThisChar=='>' && LastChar=='=') {
     LastChar = tokenizer->get();
     return tok_higher_eq;
   }
-  if (ThisChar=='<' && otherChar=='=') {
+  if (ThisChar=='<' && LastChar=='=') {
     LastChar = tokenizer->get();
     return tok_minor_eq;
   }
 
-  if((ThisChar=='/')&&(otherChar == '/')) {
+  if((ThisChar=='/')&&(LastChar == '/')) {
     LastChar = tokenizer->get();
     return tok_int_div;
+  }
+  if(ThisChar=='/' && LastChar=='=') {
+    LastChar = tokenizer->get();
+    return tok_div_eq;
+  }
+  if(ThisChar=='/' && LastChar=='|') {
+    LastChar = tokenizer->get();
+    return tok_ceil_div;
   }
 
   //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";
@@ -617,8 +620,7 @@ void get_tok_until_space() {
   {
     // std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << std::to_string(int(tokenizer->cur_c)) << ".\n";
     char c=' ';
-    while(c!=10)
-    {
+    while(c!=10) {
       int _c = c;
       c = tokenizer->get();
 

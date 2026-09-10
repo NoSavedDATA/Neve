@@ -803,7 +803,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct *parser_struct, std::string c
     // prev_vars = data_typeVars[parser_struct->function_name];
     getNextToken(); //eat else
     if(CurTok != tok_space)
-      LogError(parser_struct->line, "else requer barra de espaço.");
+      LogError(parser_struct->line, "else requires a line break");
     getNextToken();
 
     while(true) {
@@ -1938,6 +1938,11 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct *parser_struct, std::string 
 
   std::unique_ptr<ExprAST> expr;
 
+
+  if (CurTok==tok_space)  {
+    getNextToken();
+    return make_unique<RetExprAST>(std::move(Vars), parser_struct);
+  }
   
   while(true) {
     if (CurTok==tok_number) {

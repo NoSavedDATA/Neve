@@ -177,15 +177,6 @@ void ExprAST::SetCValues(Parser_Struct *parser_struct) {
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
-// void BinaryExprAST::SetCValues(Parser_Struct *parser_struct) {
-//     if (!this->parser_struct)
-//         return;
-//     this->parser_struct->function_name = parser_struct->function_name;
-//     this->parser_struct->cvalues = parser_struct->cvalues;
-//     std::cout << "SET BINARY TO " << parser_struct->function_name << "\n";
-//     LHS->SetCValues(parser_struct);
-//     RHS->SetCValues(parser_struct);
-// }
 
 void ForExprAST::SetCValues(Parser_Struct *parser_struct) {
     this->parser_struct->function_name = parser_struct->function_name;
@@ -744,7 +735,6 @@ NewTupleExprAST::NewTupleExprAST(
     : Values(std::move(Values)) {}
 
 void NewVecExprAST::Checks() {
-
   GetDataTree();
 }
 
@@ -772,7 +762,8 @@ IntervalLoopExprAST::IntervalLoopExprAST(
         loop_parser_struct->loop_depth++;
         last_parser_struct = loop_parser_struct;
 
-        std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(last_parser_struct, var_name, 1);
+        std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(last_parser_struct,
+                                                                         var_name, 1);
         nameable->AddNested(std::make_unique<NameableRoot>(last_parser_struct));
 
         std::unique_ptr<ExprAST> EndCond = std::make_unique<BinaryExprAST>(
@@ -1482,16 +1473,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     LType = "buffer_"+LType;
   if (R_dt.is_array)
     RType = "buffer_"+RType;
-  // if (L_dt.Type=="layout") {
-  //   if (L_dt.Nested_Data.size()==0)
-  //       LogErrorC(parser_struct->line, "Op " + operation + " with unspecialized layout");
-  //   LType = "layout_"+L_dt.Nested_Data[0].Type;
-  // }
-  // if (R_dt.Type=="layout") {
-  //   if (R_dt.Nested_Data.size()==0)
-  //       LogErrorC(parser_struct->line, "Op " + operation + " with unspecialized layout");
-  //   RType = "layout_"+R_dt.Nested_Data[0].Type;
-  // }
 
   bool has_generic = (L_dt.Type=="layout"||R_dt.Type=="layout");
   Elements = LType + "_" + RType;    
@@ -1509,6 +1490,14 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   }
   if (Elements=="float_int") {
     Elements = "float_float"; 
+  }
+  if (Elements=="float_bool") {
+    Elements = "float_float"; 
+    cast_R_to="bool_to_float";
+  }
+  if (Elements=="int_bool") {
+    Elements = "int_int"; 
+    cast_R_to="bool_to_int";
   }
   if (in_vec(LType, {"str", "charv"})) {
       if (RType!="int"&&in_vec(RType, int_types)) {

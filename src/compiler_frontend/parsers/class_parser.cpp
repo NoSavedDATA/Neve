@@ -67,17 +67,17 @@ static Data_Tree ParseDataTree(std::unique_ptr<TokenizerClass> &class_tokenizer,
     }
 
     if (tok=='<') {
-        tok = class_tokenizer->getToken();
+        tok = class_tokenizer->getToken(); // eat <
         ty.Nested_Data.push_back(ParseDataTree(class_tokenizer, tok));
 
         while (tok==',') {
             tok = class_tokenizer->getToken();
             ty.Nested_Data.push_back(ParseDataTree(class_tokenizer, tok));
         }
-        class_tokenizer->getToken(); // eat >
+        if (tok!='>')
+            LogErrorC(-1, "Composite data type expected >");
+        tok = class_tokenizer->getToken(); // eat >
     }
-    // std::cout << "\n\ntype:" << "\n";
-    // ty.Print();
 
     return ty;
 }
@@ -95,10 +95,6 @@ static void ParseDef(std::unique_ptr<TokenizerClass> &class_tokenizer, std::stri
 
     tok = class_tokenizer->getToken(); // eat name
 
-    // std::cout << "fn " << fn_name << "\n";
-    // std::cout << "ret" << "\n";
-    // type.Print();
-    // std::cout << "\n";
     
 
     Function_Arg_Names[fn_name].push_back("scope_struct");

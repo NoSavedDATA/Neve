@@ -941,6 +941,21 @@ void set_functions_args_type() {
 		Function_Arg_Names["array_size"].push_back("0");
 		Function_Arg_Names["array_size"].push_back("1");
 		
+		Function_Arg_Types["array_bad_idx"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_bad_idx"]["1"] = "int";
+		Function_Arg_Types["array_bad_idx"]["2"] = "int";
+		Function_Arg_Types["array_bad_idx"]["3"] = "int";
+		
+		Function_Arg_DataTypes["array_bad_idx"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_bad_idx"]["1"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_bad_idx"]["2"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_bad_idx"]["3"] = Data_Tree("int");
+		
+		Function_Arg_Names["array_bad_idx"].push_back("0");
+		Function_Arg_Names["array_bad_idx"].push_back("1");
+		Function_Arg_Names["array_bad_idx"].push_back("2");
+		Function_Arg_Names["array_bad_idx"].push_back("3");
+		
 		Function_Arg_Types["array_double_size"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_double_size"]["1"] = "array";
 		

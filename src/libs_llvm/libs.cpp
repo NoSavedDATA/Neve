@@ -1304,7 +1304,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *array_bad_idxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
-		{Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("array_bad_idx", array_bad_idxTy);

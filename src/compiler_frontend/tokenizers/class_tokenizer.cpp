@@ -130,11 +130,9 @@ int TokenizerClass::getToken() {
 
   
 
-  // Check for end of file.  Don't eat the EOF.
   if (LastChar == EOF)
     return class_tok_eof;
 
-  // Otherwise, just return the character as its ascii value.
   int ThisChar = LastChar;
 
 

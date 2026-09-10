@@ -125,6 +125,7 @@ enum Token {
     tok_mult_eq = -87,
     tok_div_eq = -88,
     tok_plus_plus = -89,
+    tok_ceil_div = -103,
 
 
     tok_space = -14,

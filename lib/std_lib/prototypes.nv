@@ -34,6 +34,8 @@ proto bool map_has_int(map<int,any>, int)
 proto bool map_has_str(map<str,any>, str)
 proto bool map_has_void_ptr(map<any,any>, any)
 
+proto int map_clear(any)
+
 operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby
 operation float[] layout_float_int_offby

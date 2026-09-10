@@ -120,8 +120,9 @@ extern "C" int array_size(Scope_Struct *scope_struct, DT_array *vec) {
 
 
 
-extern "C" int array_bad_idx(int line, int idx, int size) {
-    LogErrorC(line, "Tried to index array at " + std::to_string(idx) + ", but the array size is: " + std::to_string(size));
+extern "C" int array_bad_idx(Scope_Struct *scope_struct, int line, int idx, int size) {
+    LogErrorC(line, "Thread " + std::to_string(scope_struct->thread_id) + " - Tried to index array at " + std::to_string(idx) + ", but the array size is: " + std::to_string(size));
+    // LogErrorC(line, "Tried to index array at " + std::to_string(idx) + ", but the array size is: " + std::to_string(size));
     std::exit(0);
     return 0;
 }

@@ -1,7 +1,8 @@
 CXX := clang++-21 -std=c++17
 LLVM_CONFIG := llvm-config-21 --libs all
 
-MAIN_CXXFLAGS := -rdynamic -fno-exceptions -march=native -mavx -mavx2 -O3 -ffast-math
+MAIN_CXXFLAGS := -rdynamic -fno-exceptions -march=native -mavx -mavx2 -O3 -g -ffast-math
+# MAIN_CXXFLAGS := -rdynamic -fno-exceptions -march=native -mavx -mavx2 -O3 -ffast-math
 OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -finline-functions -funroll-loops -w -flto
 SYSTEM_LIBS := -latomic -ldl -lrt -pthread #-fsanitize=thread -g -O1 -fno-omit-frame-pointer
 
