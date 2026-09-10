@@ -106,8 +106,11 @@ bool GC_Arena::get_is_marked(void *node_ptr, uint64_t mark_bit) {
         char *arena_addr = (char*)arena;
         char *p = static_cast<char*>(node_ptr);
         
-        if (!check_is_in_bounds(arena_addr, p))
+        if (!check_is_in_bounds(arena_addr, p)) {
+            // std::cout << "GET IS MARKED NOT IN BOUNDS" << "\n";
             return true;
+        }
+
         long arena_offset = p - arena_addr;
         int page  =  (arena_offset / GC_page_size) % pages_per_arena;
  
@@ -125,8 +128,10 @@ bool GC_Arena::mark_obj(void *node_ptr, uint16_t &type, uint64_t mark_bit) {
         char *arena_addr = (char*)arena;
         char *p = static_cast<char*>(node_ptr);
         
-        if (!check_is_in_bounds(arena_addr, p))
+        if (!check_is_in_bounds(arena_addr, p)) {
+            // std::cout << "MARK NOT IN BOUNDS" << "\n";
             return false;
+        }
         
         long arena_offset = p - arena_addr;
         int page  =  (arena_offset / GC_page_size) % pages_per_arena;

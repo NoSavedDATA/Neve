@@ -2192,9 +2192,6 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
 
             Value *Val_indexed = Builder->CreateExtractValue(Val, {static_cast<unsigned>(i)});
 
-            // Function *F = CurModule->getFunction(copy_fn);
-            // if (F)
-            //   Val_indexed = callret(copy_fn, {scope_struct, Val_indexed});
 
             Function *F = CurModule->getFunction(store_trigger);
             if (F) {
@@ -2494,13 +2491,16 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
         } else if (L_dt.Type=="layout") {// layout<float, 3,4,...>
+            std::cout << "STORING: " << "\n";
+            L_dt.Print();
+            R_dt.Print();
             L_dt = LHS->GetDataTree(true);
             llvm::Type *Ty = get_type_from_data(parser_struct, Data_Tree(L_dt.Nested_Data[0]));
             
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
-        } else  {
-            std::cout << "L" << "\n";
+        } else {
+            std::cout << "Store_Idx\nL" << "\n";
             L_dt.Print();
             std::cout << "R" << "\n";
             R_dt.Print();
@@ -3014,7 +3014,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
     if (is_store_sugar) {
-        BinaryStore(parser_struct, scope_struct, '=', Operation, LHS, LHS, ret, L_dt, L_dt);
+        // std::cout << "SUGAR" << "\n";
+        // LHS->GetDataTree(true).Print();
+        // R_dt.Print();
+        BinaryStore(parser_struct, scope_struct,
+                    '=', Operation, LHS, LHS,
+                    ret, LHS->GetDataTree(true), L_dt);
         return const_int(0);
     }
 

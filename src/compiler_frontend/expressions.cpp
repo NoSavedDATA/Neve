@@ -1441,13 +1441,33 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   if ((LType=="list"||RType=="list") && Op!='=')
     LogErrorS(parser_struct->line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
 
+
+  
+
+  if (LType=="layout") {
+      if (auto *stmt = dynamic_cast<NameableIdx*>(LHS.get())) {
+        L_dt = stmt->GetLayoutDT(L_dt, Op=='=');
+        LType = UnmangleVec(L_dt);
+      }
+  }
+  if (RType=="layout") {
+      if (auto *stmt = dynamic_cast<NameableIdx*>(RHS.get())) {
+        R_dt = stmt->GetLayoutDT(R_dt, Op=='=');
+        RType = UnmangleVec(R_dt);
+      }
+  }
+
+  if (LType=="layout"&&Op=='=') {
+      std::cout << "=" << "\n";
+    L_dt.Print();
+    R_dt.Print();
+  }
+
+
   if (LType=="char")
       LType = "i8";
   if (RType=="char")
       RType = "i8";
-
-  
-
 
 
   Elements = LType + "_" + RType;    
@@ -2117,6 +2137,18 @@ bool has_slice(std::vector<DimSlice> &indices) {
     for (auto &idx : indices)
         has_slice |= idx.is_slice;
     return has_slice;
+}
+
+Data_Tree NameableIdx::GetLayoutDT(Data_Tree dt, bool from_assignment) {
+    if (from_assignment||IsTile)
+        return dt;
+
+    auto dims = dt.FilterLayoutDims();
+
+    if (Idx->Idxs.size()==dims.size())
+        return dt.Nested_Data[0];
+
+    return dt;
 }
 
 Data_Tree NameableIdx::GetDataTree(bool from_assignment) {

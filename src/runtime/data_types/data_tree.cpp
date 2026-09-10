@@ -43,6 +43,17 @@ bool Data_Tree::Has(std::string type) const {
 }
 
 
+std::vector<Data_Tree> Data_Tree::FilterLayoutDims() const {
+    if (Type!="layout")
+        LogErrorC(-1, "FilterLayoutDims expected layout, got " + Type);
+
+    std::vector<Data_Tree> dts;
+    for (int i=1; i<Nested_Data.size(); ++i) {
+        if (Nested_Data[i].Type!="smem")
+            dts.push_back(Nested_Data[i]);
+    }
+    return dts;
+}
 
 
 bool Data_Tree::IsPrimary() const {

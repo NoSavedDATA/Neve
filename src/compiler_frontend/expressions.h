@@ -618,6 +618,7 @@ class NameableIdx : public Nameable {
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  Data_Tree GetLayoutDT(Data_Tree dt, bool from_assignment=false);
 };
 
 

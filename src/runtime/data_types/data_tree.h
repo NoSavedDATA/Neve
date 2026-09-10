@@ -31,6 +31,7 @@ struct Data_Tree {
     bool HasGeneric() const;
     bool IsLayoutUnpack(Data_Tree R) const;
     bool Has(std::string type) const;
+    std::vector<Data_Tree> FilterLayoutDims() const;
 };
 
 
