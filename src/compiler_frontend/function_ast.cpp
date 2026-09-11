@@ -1020,8 +1020,8 @@ Function *FunctionAST::codegen() {
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (current_codegen_function=="bar_1")
-        // TheModule->print(llvm::errs(), nullptr);
+    // if (ends_with(current_codegen_function,"_train"))
+    //     TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;
   } 

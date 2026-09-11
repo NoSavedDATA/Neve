@@ -434,10 +434,9 @@ std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Pars
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
+
         if (!CompareDTs(CArgs.dts, templ.dts))
             continue;
-
-
 
         fn_ast = tpair.second.get();
         FnCompiledValues cvalues;
@@ -445,6 +444,20 @@ std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Pars
 
         return templ.dyn_args;
     }
+
+    int i=0;
+    std::cout << "\nFound" << "\n";
+    for (auto &tpair : Template_FnAST[fn]) {
+        if (i>3) {
+            std::cout << "...\n";
+            break;
+        }
+        print_dt_vec(tpair.first.dts);
+    } 
+    std::cout << "\nSent" << "\n";
+    print_dt_vec(CArgs.dts);
+    LogErrorS(parser_struct->line, "Could not match arguments for "+fn);
+
 }
 
 
@@ -527,12 +540,12 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout) {
     found = true;
     for (auto cargs : FnVersion[fn]) {
-        if(CompareDTs(CArgs.dts, cargs.dts, accept_layout) && CArgs.cvalues==cargs.cvalues) {
-            // if(begins_with(fn, "layout")) {
-            //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
-            //     print_dt_vec(CArgs.dts);
-            //     print_dt_vec(cargs.dts);
-            // }
+        // if(ends_with(fn, "_set")) {
+        //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
+        //     print_dt_vec(CArgs.dts);
+        //     print_dt_vec(cargs.dts);
+        // }
+        if(CompareDTs(cargs.dts, CArgs.dts, accept_layout) && CArgs.cvalues==cargs.cvalues) {
             return cargs.version_str;
         }
     }
@@ -1443,7 +1456,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
 
   
-
   if (LType=="layout") {
       if (auto *stmt = dynamic_cast<NameableIdx*>(LHS.get())) {
         L_dt = stmt->GetLayoutDT(L_dt, Op=='=');

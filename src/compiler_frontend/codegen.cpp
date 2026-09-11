@@ -1429,6 +1429,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->SetInsertPoint(ThenBB);
 
     auto old_values = function_values[parser_struct->function_name];
+    auto old_allocas = function_allocas[parser_struct->function_name];
 
 
     Value *ThenV;
@@ -1467,8 +1468,8 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->SetInsertPoint(ElseBB);
 
 
-    // function_values[parser_struct->function_name] = old_values;
-    // function_allocas[parser_struct->function_name] = old_allocas;
+    function_values[parser_struct->function_name] = old_values;
+    function_allocas[parser_struct->function_name] = old_allocas;
 
     Value *ElseV;
     for (auto &else_body : Else)
