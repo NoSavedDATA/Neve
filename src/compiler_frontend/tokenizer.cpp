@@ -56,6 +56,7 @@ std::map<int, std::string> token_to_string = {
   { tok_luthi, "lut_hi" },
 
   { tok_new, "tok new" },
+  { tok_own, "tok own" },
 
 
   // functional
@@ -248,7 +249,9 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"break", tok_break},
                                              {"continue", tok_continue},
                                              {"offby", tok_offby},
-                                             {"new", tok_new}};
+                                             {"new", tok_new},
+                                             {"own", tok_own}
+                                    };
 std::vector<int> functional_tokens = {tok_reduce, tok_scan, tok_mapit, tok_filter};
 
 std::string IdentifierStr; // Filled in if tok_identifier

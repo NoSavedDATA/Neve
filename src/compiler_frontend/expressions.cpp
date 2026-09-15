@@ -37,9 +37,18 @@ std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string,
 std::unordered_map<std::string,int> FnLastVersion;
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
+// std::map<std::string, std::vector<std::string>> function_owns;
+std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns;
+std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
+std::unordered_map<std::string,int> function_own_ret_count;
+std::unordered_map<std::string,int> fn_owns;
+
+
+
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
 //===----------------------------------------------------------------------===//
+void ExprAST::Checks() {}
 void ExprAST::SetType(std::string Type) {
   this->Type=Type;
   this->ReturnType=Type;
@@ -168,6 +177,98 @@ void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee) {
 //   nlohmann::json j;
 //   return j;
 // }
+//
+//
+
+void ExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+}
+
+void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body) 
+        expr->Traverse(fn);
+}
+
+void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Then) 
+        expr->Traverse(fn);
+    for (auto &expr : Else) 
+        expr->Traverse(fn);
+}
+
+
+void ForEachExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body)
+        expr->Traverse(fn);
+}
+
+void WhileExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body)
+        expr->Traverse(fn);
+}
+
+void AsyncExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body)
+        expr->Traverse(fn);
+}
+
+void AsyncsExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body)
+        expr->Traverse(fn);
+}
+void SpawnExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Body)
+        expr->Traverse(fn);
+}
+
+void MainExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Bodies)
+        expr->Traverse(fn);
+}
+
+void UnkVarExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &var : VarNames)
+        var.second->Traverse(fn);
+}
+void DataExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &var : VarNames)
+        var.second->Traverse(fn);
+}
+void BinaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    LHS->Traverse(fn);
+    RHS->Traverse(fn);
+}
+void UnaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    Operand->Traverse(fn);
+}
+void RetExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &var : Vars)
+        var->Traverse(fn);
+}
+
+void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+        if (!this->HasInit[i]) { // callee init
+            if (!VarNames[i].second)
+                continue;
+            VarNames[i].second->Traverse(fn);
+        }
+    }
+}
+
  
 
 void ExprAST::SetCValues(Parser_Struct *parser_struct) {
@@ -223,6 +324,9 @@ void AsyncFnPriorExprAST::SetCValues(Parser_Struct *parser_struct) {
     this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
+
+
+
 
 
 
@@ -720,7 +824,7 @@ Data_Tree VariableListExprAST::GetDataTree(bool from_assignment) {
 }
 
 VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<Nameable>> ExprList)
-                      : ExprList(std::move(ExprList)) {
+            : ExprList(std::move(ExprList)) {
   this->SetIsList(true);
 } 
 
@@ -771,8 +875,8 @@ IntervalLoopExprAST::IntervalLoopExprAST(
         std::string var_name = this->VarNames[i]->GetName();
         Parser_Struct *loop_parser_struct = last_parser_struct->Copy();
 
-        // todo loop_depth is inversed
-        loop_parser_struct->loop_depth++;
+        // todo scope_depth is inversed
+        loop_parser_struct->scope_depth++;
         last_parser_struct = loop_parser_struct;
 
         std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(last_parser_struct,
@@ -828,7 +932,7 @@ void ObjectExprAST::Checks() {
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
         if (this->HasInit[i]) { // callee init
           Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
-        }
+        }  
     }
 }
 
@@ -843,6 +947,16 @@ ObjectExprAST::ObjectExprAST(
 {
     this->parser_struct = parser_struct;
 
+    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+        if (!this->HasInit[i]) {
+            std::string name = this->VarNames[i].first;
+            if(!this->VarNames[i].second)
+                continue;
+            int owned_id = this->VarNames[i].second->GetIsOwned();
+            if (owned_id>=-1) 
+                function_owns[parser_struct->function_name][name] = owned_id;
+        }
+    }
 }
 
 
@@ -933,6 +1047,9 @@ void UnkVarExprAST::Checks() {
 
     data_typeVars[parser_struct->function_name][VarName] = dt;
   }
+
+
+
 }
 
 UnkVarExprAST::UnkVarExprAST(
@@ -943,6 +1060,12 @@ UnkVarExprAST::UnkVarExprAST(
   : VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {
   this->parser_struct = parser_struct;
+
+  for(auto &[name, expr] : this->VarNames) {
+    int owned_id = expr->GetIsOwned();
+    if (owned_id>=-1)
+        function_owns[parser_struct->function_name][name] = owned_id;
+  }
 }
 
 bool UnkVarExprAST::GetNeedGCSafePoint() {
@@ -1027,12 +1150,6 @@ void DataExprAST::Checks() {
 
     Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct);
 
-    // if (!HasNotes&&\
-    //     (Object_toClass[parser_struct->function_name].count(VarName)>0||\
-    //      data_typeVars[parser_struct->function_name].count(VarName)>0)) {
-    //     LogErrorS(parser_struct->line, "Redefinition of " +  VarName);
-    //     continue;
-    // }
 
     data_typeVars[parser_struct->function_name][VarName] = data_type;
     typeVars[parser_struct->function_name][IdentifierStr] = data_type.Type;
@@ -1051,6 +1168,7 @@ void DataExprAST::Checks() {
       }
     }
   }
+
 }
   
 DataExprAST::DataExprAST(
@@ -1075,6 +1193,11 @@ DataExprAST::DataExprAST(
       data_type.Nested_Data.push_back(Data_Tree(std::to_string(size)));
   }
 
+  for(auto &[name, expr] : this->VarNames) {
+    int owned_id = expr->GetIsOwned();
+    if (owned_id>=-1)
+        function_owns[parser_struct->function_name][name] = owned_id;
+  }
 }
 
 
@@ -1098,17 +1221,20 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
         return data_type;
     }
 
-    // Other data types
+    // Other data types (DT_<data>)
     Data_Tree new_dt = functions_return_data_type[Callee];
     data_type = new_dt;
     return new_dt;
 }
 
-NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
-            : DataName(DataName), Args(std::move(Args)) {
+NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, bool is_own)
+            : DataName(DataName), Args(std::move(Args)), IsOwn(is_own) {
     this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
     GetDataTree();
+
+    if (this->IsOwn)
+        OwnedId = (*parser_struct->owned_id)++;
 }
 
 bool NewExprAST::GetNeedGCSafePoint() {
@@ -1712,6 +1838,15 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS, Parser_Struct *parser_struct)
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
   this->parser_struct = parser_struct;
+
+  int owned_id = this->RHS->GetIsOwned();
+  if (Op=='='&& owned_id>=-1) {
+    if (auto *nameable = dynamic_cast<Nameable*>(this->LHS.get())) {
+        if (nameable->Depth==1) {
+            function_owns[parser_struct->function_name][nameable->GetName()] = owned_id;
+        }
+    }
+  }
 }
   
   
@@ -1744,8 +1879,8 @@ void RetExprAST::Checks() {
 }
 
 
-RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct *parser_struct)
-    : Vars(std::move(Vars)) {
+RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct *parser_struct, bool clear_owned)
+    : Vars(std::move(Vars)), ClearOwned(clear_owned) {
     this->parser_struct = parser_struct;
 }
     
@@ -1806,6 +1941,8 @@ GCSafePointExprAST::GCSafePointExprAST(Parser_Struct *parser_struct) {
 void ForExprAST::Checks() {
   typeVars[parser_struct->function_name][VarName] = Start->GetDataTree().Type;
   data_typeVars[parser_struct->function_name][VarName] = Start->GetDataTree();
+  for (auto &body : Body)
+      body->Checks();
 }
 
 void ForEachExprAST::Checks() {
@@ -1816,9 +1953,18 @@ void ForEachExprAST::Checks() {
   }
   data_typeVars[parser_struct->function_name][VarName] = data_type.Nested_Data[0];
   Type = data_type.Nested_Data[0].Type;
+  for (auto &body : Body)
+      body->Checks();
 }
-  
-  /// IfExprAST - Expression class for if/then/else.
+
+void IfExprAST::Checks() {
+    for (auto &body : Then)
+        body->Checks();
+    for (auto &body : Else)
+        body->Checks();
+}  
+
+/// IfExprAST - Expression class for if/then/else.
 IfExprAST::IfExprAST(Parser_Struct *parser_struct,
           std::unique_ptr<ExprAST> Cond,
           std::vector<std::unique_ptr<ExprAST>> Then,
@@ -1848,8 +1994,11 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
     typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
 }
 
+void WhileExprAST::Checks() {
+  for (auto &body : Body)
+      body->Checks();
+}
 
-  
   /// WhileExprAST - Expression class for while.
 WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
   : Cond(std::move(Cond)), Body(std::move(Body)) {
@@ -1952,7 +2101,10 @@ FinishExprAST::FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
   
   
   
-  
+void LockExprAST::Checks() {
+    for (auto &body : Bodies)
+        body->Checks();
+}
   /// LockExprAST
 LockExprAST::LockExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
             std::string Name)
@@ -2407,6 +2559,9 @@ NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameabl
   
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];
+
+  if (function_own_ret_count.count(Callee)>0)
+    OwnedId = (*parser_struct->owned_id)++;
 }
 
 

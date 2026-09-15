@@ -107,11 +107,19 @@ void Generate_Struct_Types() {
     // Scope_Struct
     StructType *Scope_Struct_Type = StructType::create(
         *TheContext,
-        {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize),
-         intTy, int8PtrTy, 
-         PointerType::getUnqual(GC_Struct_Type),
-         ArrayType::get(int8Ty, PrintBufferSize),
-         intTy},
+        {intTy, // 0
+         intTy, // 1
+         ArrayType::get(int8PtrTy, ContextStackSize), // 2
+         intTy, // 3
+         int8PtrTy, // 4
+         PointerType::getUnqual(GC_Struct_Type), // 5
+         ArrayType::get(int8Ty, PrintBufferSize), // 6
+         intTy, // 7
+         int8PtrTy, // 8 - ownedpool
+         int8PtrTy, // 9 - retpool
+         intTy, // 10 - retpool offset
+         intTy, // 11 - retpool stride
+         },
         "st.scope_struct"
     );
     struct_types["GC"] = GC_Struct_Type;

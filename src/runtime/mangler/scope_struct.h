@@ -24,10 +24,13 @@ struct Scope_Struct {
 
     char print_buffer[PrintBufferSize];
     int tN=0;
+    void *owned_pool=nullptr;
+    void *ret_pool=nullptr;
+    int ret_pool_offset=0, ret_pool_stride=0;
+
 
     std::vector<GC_Node> root_nodes;
 
-    Scope_Struct *previous_scope=nullptr;
 
     char *first_arg = nullptr;
     char *scope = nullptr;

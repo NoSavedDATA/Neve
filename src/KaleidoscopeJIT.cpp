@@ -30,22 +30,55 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include <execution>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include "KaleidoscopeJIT.h"
 #include "compiler_frontend/expressions.h"
+#include "compiler_frontend/ownership.h"
 #include "compiler_frontend/function_ast.h"
 #include "compiler_frontend/modules.h"
+#include "runtime/compiler_frontend/global_vars.h"
+#include "runtime/compiler_frontend/logging_v.h"
 #include "llvm/Support/Error.h"
 
-static llvm::ExitOnError ExitOnErr;
 
 class PrototypeAST;
 class ExprAST;
 
+
+// void GetOwnedValues(ExprAST *expr, int &last_offset) {
+//     if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
+//         if (new_expr->IsOwn) {
+//             new_expr->OwnedPoolOffset = last_offset;
+//             last_offset += ClassSize[new_expr->DataName];
+//         }
+//     }
+// }
+//   // Set own pool
+//   int last_offset=0;
+//   for (auto &body : Body) {
+//     body->Traverse([&last_offset](ExprAST *node) {
+//         GetOwnedValues(node, last_offset);
+//     });
+//   }
+ 
+
+
+
 /// FunctionAST - This class represents a function definition itself.
 FunctionAST::FunctionAST(Parser_Struct *parser_struct, std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body)
-        : parser_struct(parser_struct), Proto(std::move(Proto)), Body(std::move(Body)) {}
+        : parser_struct(parser_struct), Proto(std::move(Proto)), Body(std::move(Body)) {
+
+    if (!parser_struct)
+        return;
+    if (!parser_struct->has_own)
+        return;
+    EscapeAnalysis(parser_struct,
+                   parser_struct->function_name, this->Body);
+}
   
 
 
@@ -66,6 +99,7 @@ std::string KaleidoscopeJIT::MangleName(const std::string &Name) {
 }
 
 llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
+    fn_map[F->getName()] = F.get();
     fn_vec.push_back(std::move(F));
     return llvm::Error::success(); 
 }
@@ -73,11 +107,11 @@ llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
 llvm::Error KaleidoscopeJIT::genAST() {
 
     for (int i=fn_vec.size()-1;i>=0;--i) {
-
         fn_vec[i]->codegen();
     }
 
     fn_vec.clear();
+    fn_map.clear();
     return llvm::Error::success();
 }
 

@@ -54,8 +54,6 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy) {
 
     asyncs_count = scope_to_copy->asyncs_count;
     
-    previous_scope = scope_to_copy;
-
     gc = scope_to_copy->gc;
     tN = scope_to_copy->asyncs_count;
 }

@@ -2,10 +2,12 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
 
+#include <execution>
 #include <memory>
 #include <string>
 #include <map>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 
@@ -22,7 +24,9 @@
 #include "include.h"
 #include "logging.h"
 #include "modules.h"
+#include "ownership.h"
 #include "parser.h"
+#include "scope.h"
 
 
 
@@ -42,6 +46,7 @@ std::map<std::string, std::map<std::string, Value *>> function_pointers;
 std::vector<std::string> prebuild_functions;
 std::unordered_map<std::string, llvm::Type*> str_toTy;
 std::unordered_map<std::string, Function *> async_fn;
+std::map<int,Value*> fn_owned_ret_memory;
 std::string current_codegen_function;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
@@ -53,11 +58,12 @@ std::unordered_map<std::string, int> Global_Uniques_Idx;
 
 std::vector<Value *> thread_pointers;
 
+
 PointerType *floatPtrTy, *int8PtrTy, *int1PtrTy;
 llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64Ty, *m256Ty, *boolTy, *voidTy;
 
 
-Value *stack_top_value, *cur_self=nullptr;
+Value *stack_top_value;
 
 
 
@@ -437,6 +443,11 @@ Value *LoadVal(std::string fn_name, std::string name, Data_Tree dt) {
     // return Builder->CreateLoad(get_type_from_data(dt), function_allocas[fn_name][name]);
 }
 
+
+
+
+
+
 Value *NumberExprAST::codegen(Value *scope_struct) {
   if (!ShallCodegen)
     return const_float(0.0f);
@@ -687,31 +698,6 @@ inline void Check_Is_Array_Inbounds(Value *scope_struct, Parser_Struct *parser_s
 
 
 
-inline Value *swap_scope_obj(Value *scope_struct, Value *obj) {
-    StructType *st = struct_types["scope_struct"];
-    Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
-    Value *previous_obj = Builder->CreateLoad(int8PtrTy, obj_gep);
-    Builder->CreateStore(obj, obj_gep);
-    return previous_obj;
-}
-
-inline void set_scope_obj(Value *scope_struct, Value *obj) {
-    StructType *st = struct_types["scope_struct"];
-    Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
-    Builder->CreateStore(obj, obj_gep);
-    cur_self = nullptr;
-}
-
-inline Value *get_scope_obj(Value *scope_struct) {
-    // if (!cur_self) {
-        StructType *st = struct_types["scope_struct"]; 
-        Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
-        cur_self = Builder->CreateLoad(int8PtrTy, obj_gep);
-        // Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
-    // }
-    return cur_self;
-    // return Builder->CreateLoad(int8PtrTy, cur_self);
-}
 
 void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const Parser_Struct *parser_struct) {
   return;
@@ -1342,6 +1328,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     if (!ThenV)
         return nullptr;
     if (!ThenTerminated) {
+        Clear_Owned_Values(scope_struct, Then);
         ThenPostBB = Builder->GetInsertBlock();
         block_values[ThenPostBB] = function_values[parser_struct->function_name];
         Builder->CreateBr(MergeBB);
@@ -1369,8 +1356,10 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ElseV)
         return nullptr;
-    if (!ElseTerminated)
+    if (!ElseTerminated) {
+        Clear_Owned_Values(scope_struct, Else);
         Builder->CreateBr(MergeBB);
+    }
 
 
     if (ThenTerminated && ElseTerminated)
@@ -1442,12 +1431,14 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
             auto bb = Builder->GetInsertBlock();
             block_values[bb] = function_values[parser_struct->function_name];
             BreakBB.push_back(bb);
+            Clear_Owned_Values(scope_struct, Then);
             Builder->CreateBr(LoopAfter);
         }
         else if (auto *stmt = dynamic_cast<ContinueExprAST*>(then_body.get())) {
             auto bb = Builder->GetInsertBlock();
             block_values[bb] = function_values[parser_struct->function_name];
             ContinueBB.push_back(bb);
+            Clear_Owned_Values(scope_struct, Then);
             Builder->CreateBr(IncBB);
         }
         else
@@ -1461,8 +1452,10 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     // if (!ThenV) { // may still have else
     //     return nullptr;
     // }
-    if (!ThenTerminated)
+    if (!ThenTerminated) {
+        Clear_Owned_Values(scope_struct, Then);
         Builder->CreateBr(MergeBB);
+    }
 
     // Emit else block.
     Builder->SetInsertPoint(ElseBB);
@@ -1486,8 +1479,10 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
     if (!ElseV)
         return nullptr;
-    if (!ElseTerminated)
+    if (!ElseTerminated) {
+        Clear_Owned_Values(scope_struct, Else);
         Builder->CreateBr(MergeBB);
+    }
 
 
     if (ThenTerminated && ElseTerminated)
@@ -1579,20 +1574,26 @@ void SetBreakPHIS(Parser_Struct *parser_struct, std::vector<std::string> &assign
     }
 }
 
+
+
+
 void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> Body,
         BasicBlock *LoopBB, BasicBlock *IncBB, BasicBlock *AfterBB,
         std::map<std::string, Value*> &break_values_snapshot,
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {  
     // Handle break stmt
     
-
     for (auto &body : Body) {
         if (auto *if_stmt = dynamic_cast<IfExprAST*>(body.get()))
             if_stmt->codegen_from_loop(scope_struct, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
         else
             body->codegen(scope_struct);
     }
+
+    Clear_Owned_Values(scope_struct, Body);
 }
+
+
 
 void Get_Recursive_Assign_Statements(const std::vector<std::unique_ptr<ExprAST>> &stmt, std::vector<std::string> &assigned_vars) {
 
@@ -1664,6 +1665,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
     std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
+
+
 
     // Possible phi for each value
     auto old_function_values = function_values[parser_struct->function_name];
@@ -3646,12 +3649,14 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
     if (!ShallCodegen) {
         Value *ret = const_float(0.0f);
+        FreeOwnedPoolRet(scope_struct, parser_struct, ClearOwned);
         Builder->CreateRet(ret);
         return ret;
     }
 
 
     if(Vars.size()==0) {
+      FreeOwnedPoolRet(scope_struct, parser_struct, ClearOwned);
       Builder->CreateRetVoid(); 
       return const_int(0);
     }
@@ -3662,6 +3667,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
         if (returning_type.Type=="int" && return_expected_type.Type=="float")
             ret = Builder->CreateSIToFP(ret, floatTy, "lfp");
 
+        FreeOwnedPoolRet(scope_struct, parser_struct, ClearOwned);
         Builder->CreateRet(ret);
 
         return ret;
@@ -3699,6 +3705,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
         ret_val = Builder->CreateInsertValue(ret_val, Vars[i]->codegen(scope_struct),
                                              {static_cast<unsigned>(i)});
 
+    FreeOwnedPoolRet(scope_struct, parser_struct, ClearOwned);
     Builder->CreateRet(ret_val);
 
     return ret_val;
@@ -3969,27 +3976,53 @@ Value *NewExprAST::codegen(Value *scope_struct) {
             cast<PointerType>(int8PtrTy)
             );
 
+
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     std::vector<Value *> ArgsV = {scope_struct};
 
     if (Args.size()>0) {
         std::vector<Data_Tree> ArgTypes;
-        ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes, scope_struct, \
+        ArgsV = Codegen_Argument_List(parser_struct, 
+                std::move(ArgsV), Args, ArgTypes, scope_struct,
                 Callee, !is_high_level_obj, 1);
     }
 
     if(!Check_ArgsV_Count(Callee, ArgsV, parser_struct, 1))
         return const_float(0);
 
-    if(in_str(Callee, vararg_methods))
+    if(in_vec(Callee, vararg_methods))
         ArgsV.push_back(const_int(TERMINATE_VARARG));
 
 
 
     if (is_high_level_obj) {
         Value *previous_obj = get_scope_obj(scope_struct);
-        Value *ptr = callret("allocate_pool", {scope_struct, const_int(ClassSize[DataName]),\
-                                               const_int16(data_name_to_type()[DataName])});
+
+        
+        if (!IsOwn) {
+            // new - GC arena alloc
+            ptr = callret("allocate_pool", 
+                            {scope_struct,
+                             const_int(ClassSize[DataName]),\
+                             const_int16(data_name_to_type()[DataName])
+                             });
+        } else if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
+            // own - escaped
+            std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
+            ptr = fn_owned_ret_memory[OwnedId];
+            p2t(parser_struct->function_name + " | " + std::to_string(OwnedId) + " has ret");
+            print_scope_escape_retoffset(scope_struct);
+            call("print_void_ptr", {ptr});
+        } else {
+            // own
+            // std::cout << "codegen owned " << OwnedPoolOffset << "\n";
+            Value *ownedpool = get_scope_owned_pool(scope_struct);
+            ptr = Builder->CreateGEP(
+                        int8Ty, ownedpool, const_int(OwnedPoolOffset)
+                   ); 
+            OwnedValues.push_back({Data_Tree(DataName), ptr});
+        }
+
         StructType *st = struct_types["class_"+DataName]; 
         for (auto attr : ClassAttrsName[DataName]) {
           Data_Tree dt = data_typeVars[DataName][attr];
@@ -5289,7 +5322,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     int target_args_size=Args.size()+1;
 
-    Value *previous_obj, *previous_stack_top;
+    Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool;
 
     if (Callee=="array_append")
         return codegen_append(scope_struct);
@@ -5304,6 +5337,12 @@ Value *NameableCall::codegen(Value *scope_struct) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
         previous_stack_top = Load_Stack_Top(parser_struct->function_name);
+        previous_owned_pool = get_scope_owned_pool(scope_struct);
+        if(OwnedPoolOffset>=0) {
+            std::string ret = GetDataTree().Type;
+            set_scope_retpool(scope_struct, previous_owned_pool,
+                    ClassSize[ret], OwnedPoolOffset);
+        }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }
 
@@ -5359,8 +5398,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (shall_swap)
         previous_obj = swap_scope_obj(scope_struct, obj_ptr); 
 
-    if (has_obj_overwrite) // last time that cur fn values are used
-        cur_self = nullptr;
 
 
 
@@ -5393,12 +5430,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
         ret = callret(Callee, ArgsV);
   }
   
-  cur_self = nullptr;
 
   if (has_obj_overwrite) // Retrieve previous object
     set_scope_obj(scope_struct, previous_obj);
-  if (may_allocate)
+  if (may_allocate) {
       Set_Stack_Top(scope_struct, parser_struct->function_name);
+      set_scope_owned_pool(scope_struct, previous_owned_pool);
+  }
   
 
   // if(ReturnType=="")

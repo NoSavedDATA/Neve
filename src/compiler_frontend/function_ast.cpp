@@ -25,7 +25,12 @@
 
 // #include "../../lsp/json.hpp"
 #include "../include.h"
+#include "codegen.h"
+#include "expressions.h"
+#include "modules.h"
+#include "ownership.h"
 #include "parser.h"
+#include "scope.h"
 
 ExitOnError ExitOnErr;
 std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
@@ -950,7 +955,6 @@ Function *FunctionAST::codegen() {
   Builder->SetInsertPoint(BB);
 
 
-  current_codegen_function = function_name;
   //   LogBlue("Execute function: " + function_name);
   
 
@@ -960,8 +964,8 @@ Function *FunctionAST::codegen() {
   if(function_name=="__anon_expr") {
     scope_struct = callret("scope_struct_CreateFirst", {}); 
     call("scope_struct_Alloc_GC", {scope_struct});
-    function_values[current_codegen_function]["QQ_stack_top"] = const_int(0);
-    fn_stack_offset[current_codegen_function] = 0;
+    function_values[function_name]["QQ_stack_top"] = const_int(0);
+    fn_stack_offset[function_name] = 0;
   }
   
   
@@ -981,12 +985,12 @@ Function *FunctionAST::codegen() {
         StructType *st = struct_types["scope_struct"];
         scope_struct = &Arg;
         Value *stack_top_value_gep = Builder->CreateStructGEP(st, scope_struct, 3); 
-        function_values[current_codegen_function]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
-        fn_stack_offset[current_codegen_function] = 0;
+        function_values[function_name]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
+        fn_stack_offset[function_name] = 0;
     } else {
-        function_values[current_codegen_function][arg_name] = &Arg;
-        StoreVal(TheFunction, current_codegen_function, arg_name, &Arg,
-                    data_typeVars[current_codegen_function][arg_name]);
+        function_values[function_name][arg_name] = &Arg;
+        StoreVal(TheFunction, function_name, arg_name, &Arg,
+                    data_typeVars[function_name][arg_name]);
     }
    
   }
@@ -997,30 +1001,44 @@ Function *FunctionAST::codegen() {
     scope_struct = callret("scope_struct_CreateFirst", {}); 
     call("prebuild", {});
     call("scope_struct_Alloc_GC", {scope_struct});
-    function_values[current_codegen_function]["QQ_stack_top"] = const_int(0);
-    fn_stack_offset[current_codegen_function] = 0;
+    function_values[function_name]["QQ_stack_top"] = const_int(0);
+    fn_stack_offset[function_name] = 0;
   }
 
+
+  // Solve templates
   for (auto &body : Body) {
     if (idx>=0) {// is comp specialization
         body->SetCValues(parser_struct);
     }
-
-    RetVal = body->codegen(scope_struct);
+    body->Checks();
   }
 
-  cur_self = nullptr;
+  SetFnOwn(parser_struct, scope_struct, function_name, Body);
+
+
+  // Codegen
+  for (auto &body : Body) {
+
+    if (auto *stmt = dynamic_cast<RetExprAST*>(body.get()))
+        Clear_Owned_Values(scope_struct, Body);
+    RetVal = body->codegen(scope_struct);
+  }
+  OwnedValues.clear();
+  fn_owned_ret_memory.clear();
+
 
   if (RetVal) {
-    // Finish off the function.
     if(!Builder->GetInsertBlock()->getTerminator()) {
+        Clear_Owned_Values(scope_struct, Body);
+        FreeOwnedPool(scope_struct, parser_struct);
         Builder->CreateRet(RetVal); 
     }
 
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (ends_with(current_codegen_function,"_train"))
+    // if (ends_with(function_name,"_train"))
     //     TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;

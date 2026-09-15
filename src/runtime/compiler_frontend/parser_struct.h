@@ -3,6 +3,7 @@
 
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "../data_types/data_tree.h"
@@ -90,16 +91,18 @@ struct Parser_Struct {
   std::string function_name="";
   std::string prev_function_name="";
   std::string parse_fn="";
-  bool can_be_string=false;
+  bool can_be_string=false, has_own=false;
   bool can_be_list=false, has_compiled_args=false;
+  std::shared_ptr<int> owned_id = std::make_shared<int>(0);
   int gpu=0;
   int line=0;
-  int loop_depth=0;
+  int scope_depth=0;
   int control_flow_depth=0;
   FnCompiledValues cvalues;
-  Parser_Struct *Copy();
   std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
   std::unordered_map<std::string, int> dyn_args_dict;
+
+  Parser_Struct *Copy();
 };
 
 extern std::unordered_map<std::string,std::unordered_map<FnCompiledValues,int,CompValHasher,CompValEqual>> Fn_Compiled_Version;

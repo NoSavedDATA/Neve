@@ -76,6 +76,7 @@ namespace orc {
 class KaleidoscopeJIT {
 public:
     std::vector<std::unique_ptr<FunctionAST>> fn_vec;
+    std::unordered_map<std::string,FunctionAST*> fn_map;
     
     llvm::orc::MangleAndInterner Mangle;
     static Expected<std::unique_ptr<KaleidoscopeJIT>> Create();

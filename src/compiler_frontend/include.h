@@ -8,8 +8,19 @@
 #include "../nsk_cpp.h"
 #include "tokenizers/include.h"
 #include "parsers/include.h"
-#include "codegen.h"
 #include "expressions.h"
+
+// #include "../threads/include.h"
+#include "../KaleidoscopeJIT.h"
+
+extern PointerType *floatPtrTy, *int8PtrTy, *int1PtrTy;
+extern llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64Ty, *m256Ty, *boolTy, *voidTy;
+
+extern Value *stack, *stack_top_value, *cur_self;
+
+#include "scope.h"
+#include "ownership.h"
+#include "codegen.h"
 #include "function_ast.h"
 #include "libs_parser.h"
 #include "logging.h"
@@ -17,8 +28,6 @@
 #include "parser.h"
 #include "tokenizer.h"
 
-// #include "../threads/include.h"
-#include "../KaleidoscopeJIT.h"
 
 
 
@@ -54,10 +63,6 @@ extern std::map<std::string, std::string> stringMethods;
 extern std::unique_ptr<KaleidoscopeJIT> TheJIT;
 extern ExitOnError ExitOnErr;
 
-extern PointerType *floatPtrTy, *int8PtrTy, *int1PtrTy;
-extern llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64Ty, *m256Ty, *boolTy, *voidTy;
-
-extern Value *stack, *stack_top_value, *cur_self;
 
 
 

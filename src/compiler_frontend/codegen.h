@@ -19,18 +19,24 @@ using namespace llvm;
 
 
 
-extern std::map<std::string, int> fn_stack_offset;
+extern std::map<std::string,int> fn_stack_offset;
 extern std::vector<Value *> thread_pointers;
 extern std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
-extern std::map<std::string, std::map<std::string, Value *>> function_values;
-extern std::map<std::string, std::map<Value *, Value *>> function_vecs;
-extern std::map<std::string, std::map<std::string, Value *>> function_pointers;
+extern std::map<std::string,std::map<std::string, Value *>> function_values;
+extern std::map<std::string,std::map<Value *, Value *>> function_vecs;
+extern std::map<std::string,std::map<std::string, Value *>> function_pointers;
 extern std::unordered_map<std::string, llvm::Type*> str_toTy;
 extern std::string current_codegen_function;
+
+extern std::map<int,Value*> fn_owned_ret_memory;
 
 
 
 extern bool seen_var_attr;
+
+
+
+
 
 
 Value *VoidPtr_toValue(void *vec);
@@ -54,6 +60,7 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
 void StoreVal(Function *TheFunction, std::string fn_name, std::string name, Value *val, Data_Tree dt);
 Value *LoadVal(std::string fn_name, std::string name, Data_Tree dt);
 
+void FreeOwnedPool(Value *scope_struct, Parser_Struct*);
 
 
 Type *get_type_from_str(std::string type);

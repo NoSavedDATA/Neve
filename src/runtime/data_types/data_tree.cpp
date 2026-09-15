@@ -61,6 +61,11 @@ bool Data_Tree::IsPrimary() const {
                 &&!in_vec(Type, compound_tokens);
 }
 
+bool Data_Tree::IsFromArena() const {
+    return in_vec(Type, {"array", "map"}) || Classes.count(Type)>0;
+}
+
+
 bool Data_Tree::IsInteger() const {
     return in_vec(Type, int_types);
 }
