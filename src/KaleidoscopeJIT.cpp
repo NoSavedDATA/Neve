@@ -74,7 +74,7 @@ FunctionAST::FunctionAST(Parser_Struct *parser_struct, std::unique_ptr<Prototype
 
     if (!parser_struct)
         return;
-    if (!parser_struct->has_own)
+    if (!parser_struct->has_own())
         return;
     EscapeAnalysis(parser_struct,
                    parser_struct->function_name, this->Body);

@@ -4008,14 +4008,11 @@ Value *NewExprAST::codegen(Value *scope_struct) {
                              });
         } else if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
             // own - escaped
-            std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
+            // std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
             ptr = fn_owned_ret_memory[OwnedId];
-            p2t(parser_struct->function_name + " | " + std::to_string(OwnedId) + " has ret");
-            print_scope_escape_retoffset(scope_struct);
-            call("print_void_ptr", {ptr});
         } else {
             // own
-            // std::cout << "codegen owned " << OwnedPoolOffset << "\n";
+            // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
             Value *ownedpool = get_scope_owned_pool(scope_struct);
             ptr = Builder->CreateGEP(
                         int8Ty, ownedpool, const_int(OwnedPoolOffset)
@@ -5342,6 +5339,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
             std::string ret = GetDataTree().Type;
             set_scope_retpool(scope_struct, previous_owned_pool,
                     ClassSize[ret], OwnedPoolOffset);
+            p2t("recover prev retpool");
         }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }

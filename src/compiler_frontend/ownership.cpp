@@ -58,7 +58,7 @@ void Clear_Owned_Values(Value *scope_struct, std::vector<std::unique_ptr<ExprAST
 void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
   if (!parser_struct||!scope_struct)
     return;
-  if (!parser_struct->has_own)
+  if (!parser_struct->has_own())
     return;
 
   call("free", {
@@ -102,11 +102,8 @@ int Nameable::GetIsOwned() {
 int NameableCall::GetIsOwned() {
     if (OwnedPoolOffset>=0)
         return OwnedId;
-    if (function_callee_escapes.count(Callee)>0) {
-
-        std::cout << "------middle: " << Callee << "\n";
+    if (function_callee_escapes.count(Callee)>0)
         return -1;
-    }
     return -2;
 }
 
@@ -126,7 +123,6 @@ void GetOwnedRet(Parser_Struct *parser_struct, ExprAST *expr,
                  int &own_ret_count, int &new_ret) {
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
-        std::cout << "test " << callee << "\n";
         if (function_own_ret_count.count(callee)==0) {
             if (fn_owns.count(callee)==0)
                 return;
@@ -135,7 +131,6 @@ void GetOwnedRet(Parser_Struct *parser_struct, ExprAST *expr,
         }
         // owned_ids.push_back(callexpr->OwnedId);
         owned_callee_ids.push_back(callexpr->OwnedId);
-        std::cout << "ADD " << callee << " | " << function_own_ret_count[callee] << "\n";
         own_ret_count+=function_own_ret_count[callee];
         return;
     }
@@ -143,12 +138,10 @@ void GetOwnedRet(Parser_Struct *parser_struct, ExprAST *expr,
     if (auto *ret_expr = dynamic_cast<RetExprAST*>(expr)) {
         for (auto &var : ret_expr->Vars) {
             int owned_id = var->GetIsOwned();
-            std::cout << "ret got " << owned_id << "\n";
 
 
             // todo: can change to >=0?
             if (owned_id>=-1) {
-                std::cout << parser_struct->function_name << " push " << owned_id << "\n";
                 owned_ids.push_back(owned_id);
                 own_ret_count++;
             }
@@ -174,7 +167,6 @@ void EscapeAnalysis(Parser_Struct *parser_struct, std::string fn_name,
     int new_ret=0, own_ret_count=0;
 
     for (auto &body : Body) {
-        std::cout << fn_name << " -> " << typeid(*body).name() << "\n";
       body->Traverse([parser_struct, &owned_ids, &owned_callee_ids, &own_ret_count, &new_ret](ExprAST *node) {
         GetOwnedRet(parser_struct, node,
                     owned_ids, owned_callee_ids,
@@ -182,7 +174,6 @@ void EscapeAnalysis(Parser_Struct *parser_struct, std::string fn_name,
       });
     }
 
-    std::cout << fn_name << " own_ret_count " << own_ret_count << " | " << new_ret << "\n";
     if (own_ret_count>0&&new_ret>0) {
         LogError(parser_struct->line, "Ambiguous return for \"" + fn_name + "\". Cannot return GC arena and owned pointers from the same function.");
     }
@@ -210,12 +201,9 @@ void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
         if (function_own_ret_count.count(callee)==0)
             return;
         int size = function_own_ret_count[callee];
-        std::cout << "\n----\nfrom " << fn_name << " to fn " << callee << " has " << size  << " slots\n";
-        std::cout << "pre " << last_offset << "\n";
         callexpr->OwnedPoolOffset = last_offset;
         callexpr->OwnedPoolCap = size;
         last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-        std::cout << "post " << last_offset << "\n";
     }
 }
 
@@ -223,7 +211,7 @@ void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
 void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
         std::string fn_name, 
         std::vector<std::unique_ptr<ExprAST>> &Body) {
-    if(!parser_struct->has_own)
+    if(!parser_struct->has_own())
         return;
 
     // Set own pool
@@ -234,7 +222,7 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
         });
     }
     bool has_owned_pool = last_offset>0;
-    std::cout << "owned pool size " << last_offset << " | " << fn_name << "\n";
+
     if (has_owned_pool) {
       Value *ownedpool = callret("malloc", {const_int(last_offset)});
       set_scope_owned_pool(scope_struct, ownedpool);

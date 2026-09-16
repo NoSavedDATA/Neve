@@ -87,8 +87,6 @@ inline void print_scope_escape_retoffset(
             st, scope_struct, 10
           );
     Value *offset = Builder->CreateLoad(intTy,retpool_offset_gep);
-
-    call("print_int", {offset});
 }
 
 
@@ -116,8 +114,6 @@ inline Value *get_scope_escape_retoffset(
     Value *next_offset = Builder->CreateAdd(offset, stride);
     Builder->CreateStore(next_offset, retpool_offset_gep);
 
-
     Value *ret = Builder->CreateGEP(int8Ty, retpool, offset);
-    call("print_void_ptr", {ret});
     return ret;
 }

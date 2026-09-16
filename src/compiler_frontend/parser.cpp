@@ -95,7 +95,6 @@ Parser_Struct *Parser_Struct::Copy() {
   copy->has_compiled_args=has_compiled_args;
   copy->gpu=gpu;
   copy->line=line;
-  copy->has_own=has_own;
   copy->owned_id=owned_id;
   copy->scope_depth=scope_depth;
   copy->control_flow_depth=control_flow_depth;
@@ -1809,7 +1808,6 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string
 
 std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string class_name, bool is_own=false) {
     getNextToken(); // eat new/own
-    parser_struct->has_own = parser_struct->has_own || is_own;
 
     if(CurTok!=tok_data&&Classes.count(IdentifierStr)==0) {
         if (!(tokenizer->has_lib_file && CurTok==tok_identifier))
@@ -2802,7 +2800,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
     Body.push_back(std::move(body));
   }
 
-  if (parser_struct->has_own)
+  if (parser_struct->has_own())
       fn_owns[parser_struct->function_name] = 1;
 
   //std::cout << "function number of expressions: " << Body.size() << "\n";

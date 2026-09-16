@@ -91,7 +91,7 @@ struct Parser_Struct {
   std::string function_name="";
   std::string prev_function_name="";
   std::string parse_fn="";
-  bool can_be_string=false, has_own=false;
+  bool can_be_string=false;
   bool can_be_list=false, has_compiled_args=false;
   std::shared_ptr<int> owned_id = std::make_shared<int>(0);
   int gpu=0;
@@ -103,6 +103,9 @@ struct Parser_Struct {
   std::unordered_map<std::string, int> dyn_args_dict;
 
   Parser_Struct *Copy();
+  bool has_own() {
+    return *owned_id>0;
+  }
 };
 
 extern std::unordered_map<std::string,std::unordered_map<FnCompiledValues,int,CompValHasher,CompValEqual>> Fn_Compiled_Version;

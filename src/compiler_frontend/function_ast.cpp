@@ -1014,6 +1014,7 @@ Function *FunctionAST::codegen() {
     body->Checks();
   }
 
+
   SetFnOwn(parser_struct, scope_struct, function_name, Body);
 
 
