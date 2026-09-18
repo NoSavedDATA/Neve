@@ -72,8 +72,11 @@ FunctionAST::FunctionAST(Parser_Struct *parser_struct, std::unique_ptr<Prototype
                 std::vector<std::unique_ptr<ExprAST>> Body)
         : parser_struct(parser_struct), Proto(std::move(Proto)), Body(std::move(Body)) {
 
+
     if (!parser_struct)
         return;
+    BorrowChecker(parser_struct,
+                   parser_struct->function_name, this->Body);
     if (!parser_struct->has_own())
         return;
     EscapeAnalysis(parser_struct,
@@ -101,6 +104,14 @@ std::string KaleidoscopeJIT::MangleName(const std::string &Name) {
 llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
     fn_map[F->getName()] = F.get();
     fn_vec.push_back(std::move(F));
+    return llvm::Error::success(); 
+}
+
+
+llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
+    Template_FnAST[F->getProto().getName()][F->getProto().CArgs] = F.get();
+    fn_map[F->getName()] = F.get();
+    fn_generic_vec.push_back(std::move(F));
     return llvm::Error::success(); 
 }
 

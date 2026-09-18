@@ -13,7 +13,7 @@
 #include "data_tree.h"
 
 
-std::map<std::string, Data_Tree> functions_return_data_type;
+std::map<std::string, Data_Tree> fn_ret_dt;
 
 
 Data_Tree::Data_Tree(std::string Type, std::vector<Data_Tree> Nested_Data) : Type(Type), Nested_Data(std::move(Nested_Data)) {}
@@ -282,6 +282,10 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
 
 
 void Data_Tree::Print(bool break_line) const {
+    if (is_own)
+        std::cout << "owned ";
+    if (is_borrow)
+        std::cout << "borrow& ";
     std::string str = toString();
     std::cout << str;
     if (is_buffer)

@@ -250,6 +250,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"continue", tok_continue},
                                              {"offby", tok_offby},
                                              {"new", tok_new},
+                                             {"owned", tok_owned},
                                              {"own", tok_own}
                                     };
 std::vector<int> functional_tokens = {tok_reduce, tok_scan, tok_mapit, tok_filter};

@@ -180,7 +180,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
                 type = "str_vec";
             }
 
-            Function_Arg_Names[Name].push_back(ArgNames[i]);
+            fn_argnames[Name].push_back(ArgNames[i]);
             Function_Arg_Types[Name][ArgNames[i]] = type;
 
             Data_Tree dt = Data_Tree(type);
@@ -217,7 +217,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         return_dt = LibDT;
     else
         return_dt = Data_Tree(fn_return_type_str);
-    functions_return_data_type[Name] = return_dt;
+    fn_ret_dt[Name] = return_dt;
 
     FunctionType *llvm_function = FunctionType::get(
         fn_return_type,
@@ -269,14 +269,14 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
             nsk_data_type = "str_vec";
 
         if (HasRetOverwrite)
-            functions_return_data_type[Name] = LibDT;
+            fn_ret_dt[Name] = LibDT;
         else if(ends_with(nsk_data_type, "_vec")) {
             Data_Tree vec_type = Data_Tree("vec");
             vec_type.Nested_Data.push_back(Data_Tree(remove_substring(nsk_data_type, "_vec")));
-            functions_return_data_type[Name] = vec_type;
+            fn_ret_dt[Name] = vec_type;
         }
         else
-            functions_return_data_type[Name] = Data_Tree(nsk_data_type);
+            fn_ret_dt[Name] = Data_Tree(nsk_data_type);
         functions_return_type[Name] = nsk_data_type;
     }
 
@@ -723,11 +723,11 @@ void LibParser::ParseExtern() {
 
     if (ends_with(fn_name, "_Create")) {
         if (has_ret_overwrite)
-            functions_return_data_type[fn_name] = lib_dt;
+            fn_ret_dt[fn_name] = lib_dt;
         else
-            functions_return_data_type[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
+            fn_ret_dt[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
         // else if (begins_with(return_type, "DT_"))
-        //     functions_return_data_type[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
+        //     fn_ret_dt[fn_name] = Data_Tree(remove_substring(return_type, "DT_"));
         // else {
         //     LogError(-1, "Create function " + fn_name + " must return a DT_ data type");
         //     std::exit(0);
@@ -756,7 +756,7 @@ void LLVMFunction::HandleCreate(void *func) {
     struct_create_fn[dtype] = fn;
 }
 void LLVMFunction::HandleStandard(void *func) {
-    functions_return_data_type[Name] = ReturnType;
+    fn_ret_dt[Name] = ReturnType;
     native_methods.push_back(Name);
 
     using CalleeFn = Value*(*)(Parser_Struct*, Function *, std::string, Data_Tree, std::vector<Data_Tree>&, Value*, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*>&); 
@@ -799,7 +799,7 @@ void LLVMFunction::Process(void *func) {
             break;
     }
 
-    Function_Arg_Names[Name].push_back("0");
+    fn_argnames[Name].push_back("0");
     Function_Arg_DataTypes[Name]["0"] = Data_Tree("Scope_Struct");
 
     std::vector<Data_Tree> dts;
@@ -807,7 +807,7 @@ void LLVMFunction::Process(void *func) {
     for (auto &arg_type : ArgTypes) {
         std::string arg_name = ArgNames[i++];
 
-        Function_Arg_Names[Name].push_back(arg_name);
+        fn_argnames[Name].push_back(arg_name);
         Function_Arg_DataTypes[Name][arg_name] = arg_type;
         dts.push_back(arg_type);
     }

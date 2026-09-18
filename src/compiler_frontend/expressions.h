@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -35,6 +36,7 @@ class ExprAST {
     bool NameSolveToLast = true;
     bool isMessage = false;
     int Line=-1;
+    uint64_t BranchId=2;
     Parser_Struct *parser_struct=nullptr;
   
     Data_Tree data_type = Data_Tree("");
@@ -87,6 +89,7 @@ class ExprAST {
     virtual bool GetIsMsg(); 
     virtual void SetCValues(Parser_Struct *);
 
+    virtual int GetMemId(); 
 
 
     virtual bool GetNeedGCSafePoint();
@@ -111,6 +114,7 @@ struct CallArgsTy {
     FnCompiledValues cvalues;
     std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
     std::unordered_map<std::string, int> dyn_args_dict;
+    std::vector<std::tuple<Data_Tree, std::string, int>> borrows;
 
     CallArgsTy(std::vector<Data_Tree> dts);
     CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *stmt=nullptr);
@@ -349,7 +353,6 @@ class IntervalLoopExprAST : public ExprAST {
   public:
     Parser_Struct *parser_struct;
     std::vector<std::unique_ptr<ExprAST>> Starts, Ends, Body, VarNames;
-    std::unique_ptr<ExprAST> ForLoop;
     bool Check = false;
     
     IntervalLoopExprAST(
@@ -357,10 +360,12 @@ class IntervalLoopExprAST : public ExprAST {
         std::vector<std::unique_ptr<ExprAST>> Starts,
         std::vector<std::unique_ptr<ExprAST>> Ends,
         std::vector<std::unique_ptr<ExprAST>> Body,
-        std::vector<std::unique_ptr<ExprAST>> VarNames);
+        std::vector<std::unique_ptr<ExprAST>> VarNames,
+        uint64_t scope_depth, uint64_t control_stmt_id);
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
 };
 
 class NewVecExprAST : public ExprAST {
@@ -425,13 +430,13 @@ class DataExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
     Data_Tree data_type;
-    bool HasNotes, IsStruct, DtHasCreateFn;
+    bool HasNotes, IsStruct, DtHasCreateFn, IsOwned;
     std::string dt_type, create_fn; 
 
     DataExprAST(
       Parser_Struct *,
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::string Type, Data_Tree, bool, bool,
+      std::string Type, Data_Tree, bool, bool, bool,
       std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
@@ -445,9 +450,10 @@ class NewExprAST : public ExprAST {
   public:
     std::string DataName, Callee;
     std::vector<std::unique_ptr<ExprAST>> Args;
-    bool is_high_level_obj=false, IsOwn=false;
+    bool is_high_level_obj=false, IsOwn=false, checked=false;
     Data_Tree data_type=Data_Tree("");
-    int OwnedPoolOffset=-1, OwnedId=-2, OwnedRetPoolOffset=-1;
+    int MemId=0, OwnedPoolOffset=-1,
+        OwnedId=-2, OwnedRetPoolOffset=-1;
     Value *ptr=nullptr;
 
     NewExprAST(
@@ -458,6 +464,9 @@ class NewExprAST : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   int GetIsOwned() override;
+  int GetMemId() override;
+  void AllocPtr(Value *ptr);
+  void Checks();
 };
 
 
@@ -495,6 +504,7 @@ public:
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
+  int GetMemId() override;
 };
   
   
@@ -521,6 +531,7 @@ public:
   // void SetCValues(Parser_Struct *parser_struct);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
+  int GetMemId() override;
 };
 
 
@@ -560,7 +571,7 @@ class Nameable : public ExprAST {
   public:
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
-  int Depth=1;
+  int Depth=1, MemId=-2;
   bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true; 
 
   Nameable(Parser_Struct *);
@@ -576,9 +587,11 @@ class Nameable : public ExprAST {
   Nameable *Obj();
 
   int GetIsOwned() override;
+  int GetMemId() override;
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -611,7 +624,7 @@ class NameableCall : public Nameable {
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
   bool is_tile = false;
   int arg_type_check_offset=1, owned_ret_size=0; 
-  int OwnedId=-2, OwnedPoolOffset=-1, OwnedPoolCap=0;
+  int MemId=0, OwnedId=-2, OwnedPoolOffset=-1, OwnedPoolCap=0;
   size_t hash=0;
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, ReturnType="";
@@ -628,6 +641,8 @@ class NameableCall : public Nameable {
   bool GetNeedGCSafePoint() override;
   void Checks() override;
   int GetIsOwned() override;
+  int GetMemId() override;
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -641,6 +656,7 @@ class NameableIdx : public Nameable {
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   Data_Tree GetLayoutDT(Data_Tree dt, bool from_assignment=false);
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -809,7 +825,8 @@ class IfExprAST : public ExprAST {
     IfExprAST(Parser_Struct *,
               std::unique_ptr<ExprAST> Cond,
               std::vector<std::unique_ptr<ExprAST>> Then,
-              std::vector<std::unique_ptr<ExprAST>> Else);
+              std::vector<std::unique_ptr<ExprAST>> Else,
+              uint64_t scope_depth, uint64_t control_stmt_id, uint64_t branch_id);
 
   Value *codegen(Value *scope_struct) override;
   Value *codegen_from_loop(Value *, BasicBlock *, BasicBlock *, BasicBlock *,
@@ -830,7 +847,9 @@ class ForExprAST : public ExprAST {
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *);
+              std::vector<std::unique_ptr<ExprAST>> Body,
+              Parser_Struct *,
+              uint64_t scope_depth, uint64_t control_stmt_id);
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
@@ -846,7 +865,9 @@ class ForEachExprAST : public ExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *);
+              std::vector<std::unique_ptr<ExprAST>> Body,
+              Parser_Struct *,
+              uint64_t scope_depth, uint64_t control_stmt_id);
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
@@ -860,7 +881,10 @@ class WhileExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
-    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *);
+    WhileExprAST(std::unique_ptr<ExprAST> Cond,
+            std::vector<std::unique_ptr<ExprAST>> Body,
+            Parser_Struct *,
+            uint64_t scope_depth, uint64_t control_stmt_id);
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct *) override;
@@ -951,6 +975,7 @@ class FinishExprAST : public ExprAST {
 
 
   Value* codegen(Value *scope_struct) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -1103,6 +1128,7 @@ class MainExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Checks();
 };
 
 
@@ -1179,8 +1205,11 @@ struct Arg_Pair {
 };
 
 
+
+void bt(int cut=8);
+
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
-std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout=true);
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout=true, bool match_own=true);
 void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         CallArgsTy CArgs, bool &found, bool is_op=false);
@@ -1188,15 +1217,27 @@ void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);
 
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
 
-extern std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns;
+extern std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 extern std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
-extern std::unordered_map<std::string, int> function_own_ret_count;
+
+extern std::unordered_map<std::string,
+       std::unordered_map<int,
+            std::vector<uint64_t>>> fn_borrows;
+
+extern std::unordered_map<std::string,
+       std::vector<int>> fn_bad_borrows;
 
 
+extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_owns;
+
+extern std::unordered_map<std::string, std::vector<int>> fn_rets;
+
+
+extern std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
-extern std::unordered_map<std::string,int> fn_owns;
 
 
+void FunctionChecks(std::string);

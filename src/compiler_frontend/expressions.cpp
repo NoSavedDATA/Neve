@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <execution>
+#include <execinfo.h>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -23,6 +25,8 @@
 #include "logging.h"
 #include "modules.h"
 
+#define MASK_16 0xFFFFULL
+
 
 using namespace llvm;
 namespace fs = std::filesystem;
@@ -35,14 +39,34 @@ std::map<std::string, std::vector<std::string>> lib_submodules;
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
 std::unordered_map<std::string,int> FnLastVersion;
+std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
-// std::map<std::string, std::vector<std::string>> function_owns;
-std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns;
+std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
-std::unordered_map<std::string,int> function_own_ret_count;
-std::unordered_map<std::string,int> fn_owns;
+std::unordered_map<std::string,
+       std::vector<int>> fn_bad_borrows;
+std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
+std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_owns;
 
+std::unordered_map<std::string,std::vector<int>> fn_rets;
+
+
+
+void bt(int cut) {
+    void* callstack[128];
+    int frames = backtrace(callstack, 128);
+    char** strs = backtrace_symbols(callstack, frames);
+
+    int cut_at = std::min(frames, cut);
+    
+    if (strs != nullptr) {
+        for (int i = 0; i < cut_at; ++i) {
+            std::cout << strs[i] << "\n\n";
+        }
+        free(strs);
+    }
+}
 
 
 //===----------------------------------------------------------------------===//
@@ -135,6 +159,29 @@ bool ExprAST::GetIsList() {
 }
 
 
+
+void ExprTieBranch(Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<ExprAST>> &Body,
+        int branchid) {
+    for (auto &body : Body) {
+        int cstmtid = (body->BranchId >> 32)&MASK_16;
+        if (cstmtid!=branchid)
+            cstmt_parents[parser_struct->function_name][cstmtid] = branchid;
+    }
+}
+
+void ExprSetBranch(ExprAST *expr, uint64_t branch_id) {
+    if (expr->BranchId<=2)
+        expr->BranchId = branch_id;
+    else {
+        uint64_t branch = (expr->BranchId << 48) >> 48;
+        if (branch<=2) {
+            expr->BranchId = ((expr->BranchId>>16)<<16) | ((branch_id<<48)>>48);
+        }
+    }
+}
+
+
 bool ExprAST::GetNeedGCSafePoint() {
     return false;
 }
@@ -143,13 +190,71 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
 }
 
 
-std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy CArgs) {
+bool MatchBorrows(Parser_Struct *parser_struct,
+        std::string Callee, CallArgsTy &CArgs) {
+    if (fn_arg_memid.count(Callee)==0)
+        return false;
+
+    bool has_borrow = false;
+    std::vector<std::string> argnames;
+    
+    int i=0;
+    for (auto &argname : fn_argnames[Callee]) {
+        if (argname=="scope_struct")
+            continue;
+        argnames.push_back(argname);
+        if (i>=CArgs.dts.size()) // todo: this break is skipping default args
+            break;
+
+        Data_Tree &dt = CArgs.dts[i++];
+        if (!dt.is_own&&!dt.is_borrow)
+            continue;
+
+        int arg_memid = fn_arg_memid[Callee][argname];
+        if (fn_borrows[Callee].count(arg_memid)) {
+            
+            auto &borrow_branches = fn_borrows[Callee][arg_memid];
+            uint64_t first_borrow = borrow_branches[0];
+            for (int j=1; j<borrow_branches.size(); j++) {
+                if (first_borrow!=borrow_branches[j])
+                    LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+            }
+
+            dt.is_own=false;
+            dt.is_borrow=true;
+            has_borrow = true;
+            CArgs.borrows.push_back({
+                    dt, argname, arg_memid
+                });
+        }
+    }
+ 
+    if (has_borrow) {
+        CArgs.args = argnames;
+        CArgs.template_ret = fn_ret_dt[Callee];
+        CArgs.template_ret.Print();
+    }
+    
+
+    return has_borrow;
+}
+
+
+std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy &CArgs) {
+
+  bool has_borrow = MatchBorrows(parser_struct, Callee, CArgs);
+
   bool found = true;
-  Callee = GetFnVersion(parser_struct, Callee, CArgs, found);
+  Callee = GetFnVersion(parser_struct, Callee, CArgs, found, true, true);
 
   if (!found) {
-      if (FnTemplates.count(Callee)>0)
+      if (Template_FnAST.count(Callee)>0)
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      else if (has_borrow) {
+        Template_FnAST[Callee][CArgs] = TheJIT->fn_map[Callee];
+        Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      }
+
       
 
       if (!found) {
@@ -182,6 +287,17 @@ void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee) {
 
 void ExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
+}
+
+void FinishExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Bodies) 
+        expr->Traverse(fn);
+}
+
+void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    Body[0]->Traverse(fn);
 }
 
 void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
@@ -260,6 +376,7 @@ void RetExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 }
 
 void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
         if (!this->HasInit[i]) { // callee init
             if (!VarNames[i].second)
@@ -268,6 +385,27 @@ void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
         }
     }
 }
+
+void Nameable::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    if (Depth>1)
+        Inner->Traverse(fn);
+}
+
+void NameableIdx::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    Inner->Traverse(fn);
+}
+
+
+void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &var : Args)
+        var->Traverse(fn);
+    if (Depth>1)
+        Inner->Traverse(fn);
+}
+
 
  
 
@@ -378,13 +516,18 @@ void AddFnVersion(std::string fn, CallArgsTy CArgs, int idx) {
     FnVersion[fn].push_back(CArgs);
 }
 
-bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_layout=true) {
+bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_layout=true, bool match_borrows=false) {
     if(l.size()!=r.size())
         return false;
     for (int i=0; i<l.size(); ++i) {
         // std::cout << "COMPARE" << "\n";
         // l[i].Print();
         // r[i].Print();
+        //
+        if (l[i].Type=="any"||r[i].Type=="any")
+            continue;
+        if (match_borrows&&l[i].is_borrow!=r[i].is_borrow)
+            return false;
         if (!accept_layout&&l[i].Type=="layout")
             return false;
         if (l[i].Compare(r[i])>0)
@@ -421,7 +564,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     ReturnType = CArgs.template_ret;
 
     
-    functions_return_data_type[this->Name] = CArgs.template_ret;
+    fn_ret_dt[this->Name] = CArgs.template_ret;
     native_fn.push_back(this->Name);
 
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
@@ -434,7 +577,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     int required_args = this->Args.size()-ctx_offset;
     Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
     Function_Arg_Count[this->Name] = required_args;
-    Function_Arg_Names[this->Name] = this->Args;
+    fn_argnames[this->Name] = this->Args;
 }
 
 
@@ -539,10 +682,10 @@ std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Pars
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
 
-        if (!CompareDTs(CArgs.dts, templ.dts))
+        if (!CompareDTs(CArgs.dts, templ.dts, true, false))
             continue;
 
-        fn_ast = tpair.second.get();
+        fn_ast = tpair.second;
         FnCompiledValues cvalues;
         AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
 
@@ -573,15 +716,19 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
-        if (!CompareDTs(CArgs.dts, templ.dts))
+        if (!CompareDTs(CArgs.dts, templ.dts, true, true))
             continue;
 
 
-
-        fn_ast = tpair.second.get();
+        fn_ast = tpair.second;
         FnCompiledValues cvalues;
         AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
 
+
+
+        // std::cout << "assign for " << "\n";
+        // print_dt_vec(CArgs.dts);
+        // print_dt_vec(templ.dts);
 
 
         if (is_op)
@@ -597,6 +744,9 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         } else
             idx = FnLastVersion[fn]++;
 
+
+        if (fn!="base_name")
+            fn_borrows[fn] = fn_borrows[base_name];
         
         fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
         CArgs.version = idx;
@@ -607,10 +757,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         
         CArgs.args = templ.args;
         CArgs.template_ret = templ.template_ret;
-        functions_return_data_type[fn] = CArgs.template_ret;
+        fn_ret_dt[fn] = CArgs.template_ret;
 
-        
-        auto proto = std::make_unique<PrototypeAST>(parser_struct, base_name, fn,
+
+        auto proto = std::make_unique<PrototypeAST>(parser_struct,
+                        base_name, fn,
                         CArgs, templ);
 
 
@@ -641,15 +792,15 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 }
 
 
-std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout) {
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout, bool match_owned) {
     found = true;
     for (auto cargs : FnVersion[fn]) {
-        // if(ends_with(fn, "_set")) {
+        // if(fn=="bar") {
         //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
         //     print_dt_vec(CArgs.dts);
         //     print_dt_vec(cargs.dts);
         // }
-        if(CompareDTs(cargs.dts, CArgs.dts, accept_layout) && CArgs.cvalues==cargs.cvalues) {
+        if(CompareDTs(cargs.dts, CArgs.dts, accept_layout, match_owned) && CArgs.cvalues==cargs.cvalues) {
             return cargs.version_str;
         }
     }
@@ -698,12 +849,12 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
     int tgt_arg = i + arg_offset;
 
 
-    if(Function_Arg_Names.count(fn_name)==0) {
+    if(fn_argnames.count(fn_name)==0) {
         LogErrorS(parser_struct->line, "Function " + fn_name + " does not require arguments.");
         return;
     }
-    if(tgt_arg>=Function_Arg_Names[fn_name].size()) {
-        LogErrorS(parser_struct->line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(Function_Arg_Names[fn_name].size()));
+    if(tgt_arg>=fn_argnames[fn_name].size()) {
+        LogErrorS(parser_struct->line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(fn_argnames[fn_name].size()));
         return;
     }
 
@@ -712,7 +863,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
 
       if (Function_Arg_DataTypes.count(fn_name)>0) {   
 
-        Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
+        Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][fn_argnames[fn_name][tgt_arg]];
 
 
 
@@ -724,7 +875,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
           std::cout << "\nPassed\n   ";
           data_type.Print();
           std::cout << "\n\n";
-          LogErrorS(line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ".");
+          LogErrorS(line, "Got an incorrect type for argument " + fn_argnames[fn_name][tgt_arg] + " of function " + fn_name + ".");
         } 
       }
     }
@@ -860,7 +1011,8 @@ IntervalLoopExprAST::IntervalLoopExprAST(
         std::vector<std::unique_ptr<ExprAST>> Starts,
         std::vector<std::unique_ptr<ExprAST>> Ends,
         std::vector<std::unique_ptr<ExprAST>> Body,
-        std::vector<std::unique_ptr<ExprAST>> VarNames)
+        std::vector<std::unique_ptr<ExprAST>> VarNames,
+        uint64_t scope_depth, uint64_t control_stmt_id)
         : Starts(std::move(Starts)), Ends(std::move(Ends)),
           VarNames(std::move(VarNames)) {
 
@@ -894,11 +1046,13 @@ IntervalLoopExprAST::IntervalLoopExprAST(
                 var_name, std::move(this->Starts[i]),
                 std::move(EndCond),
                 std::make_unique<IntExprAST>(1),
-                std::move(Body), loop_parser_struct
+                std::move(Body), loop_parser_struct,
+                scope_depth, control_stmt_id
             ));
         Body = std::move(Loop);
     }
     this->Body = std::move(Body);
+
 }
 
 void IntervalLoopExprAST::Checks() {
@@ -930,7 +1084,11 @@ NewDictExprAST::NewDictExprAST(
   
 void ObjectExprAST::Checks() {
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+
+        std::string name = this->VarNames[i].first;
+        data_typeVars[parser_struct->function_name][name] = Data_Tree(ClassName);
         if (this->HasInit[i]) { // callee init
+                                //
           Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
         }  
     }
@@ -955,6 +1113,9 @@ ObjectExprAST::ObjectExprAST(
             int owned_id = this->VarNames[i].second->GetIsOwned();
             if (owned_id>=-1) 
                 function_owns[parser_struct->function_name][name] = owned_id;
+            int memid = this->VarNames[i].second->GetMemId();
+            if (memid > -2)
+                fn_memid[parser_struct->function_name][name] = memid;
         }
     }
 }
@@ -1065,6 +1226,9 @@ UnkVarExprAST::UnkVarExprAST(
     int owned_id = expr->GetIsOwned();
     if (owned_id>=-1)
         function_owns[parser_struct->function_name][name] = owned_id;
+    int memid = expr->GetMemId();
+    if (memid > -2)
+        fn_memid[parser_struct->function_name][name] = memid; 
   }
 }
 
@@ -1175,8 +1339,9 @@ DataExprAST::DataExprAST(
   Parser_Struct *parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type, Data_Tree data_type, bool HasNotes, bool IsStruct,
+  bool IsOwned,
   std::vector<std::unique_ptr<ExprAST>> Notes)
-  : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
+  : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsOwned(IsOwned), IsStruct(IsStruct),
                 Notes(std::move(Notes)) {   
   this->parser_struct = parser_struct;
   dt_type = "DT_"+data_type.Type;  
@@ -1194,9 +1359,17 @@ DataExprAST::DataExprAST(
   }
 
   for(auto &[name, expr] : this->VarNames) {
+    if (IsOwned) {
+        function_owns[parser_struct->function_name][name]=(*parser_struct->owned_id)++;
+        fn_memid[parser_struct->function_name][name] = (*parser_struct->mem_id)++;
+    }
+
     int owned_id = expr->GetIsOwned();
     if (owned_id>=-1)
         function_owns[parser_struct->function_name][name] = owned_id;
+    int memid = expr->GetMemId();
+    if (memid > -2)
+        fn_memid[parser_struct->function_name][name] = memid;
   }
 }
 
@@ -1212,29 +1385,40 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
         return data_type;
 
     // High-level class
-    if (functions_return_data_type.count(Callee)==0) {
+    if (fn_ret_dt.count(Callee)==0) {
         Callee = DataName + "___init__";
         if (Classes.count(DataName)==0)
             LogErrorS(parser_struct->line, "New not implemented for data type " + DataName);
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
+        data_type.is_own = IsOwn;
         return data_type;
     }
 
     // Other data types (DT_<data>)
-    Data_Tree new_dt = functions_return_data_type[Callee];
+    Data_Tree new_dt = fn_ret_dt[Callee];
     data_type = new_dt;
+    data_type.is_own = IsOwn;
     return new_dt;
+}
+
+void NewExprAST::Checks() {
+    if (checked)
+        return;
+    checked=true;
+    GetDataTree();
 }
 
 NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, bool is_own)
             : DataName(DataName), Args(std::move(Args)), IsOwn(is_own) {
     this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
-    GetDataTree();
+    // GetDataTree();
+
 
     if (this->IsOwn)
         OwnedId = (*parser_struct->owned_id)++;
+    MemId = (*parser_struct->mem_id)++;
 }
 
 bool NewExprAST::GetNeedGCSafePoint() {
@@ -1688,8 +1872,8 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       return R_dt;
   else if (ops_type_return.count(Operation)>0)
     return Data_Tree(ops_type_return[Operation]);
-  else if (functions_return_data_type.count(Operation)&&!has_generic) {
-    Data_Tree dt = functions_return_data_type[Operation];
+  else if (fn_ret_dt.count(Operation)&&!has_generic) {
+    Data_Tree dt = fn_ret_dt[Operation];
     return dt;
   }
   else if (elements_type_return.count(Elements)>0)
@@ -1703,7 +1887,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       if (Op!='=') {
           std::string fn = (has_generic) ? Operation : operation; 
 
-          if (FnTemplates.count(fn)>0) {
+          if (Template_FnAST.count(fn)>0) {
             bool found;
             is_fused = (Parent!=nullptr&&Op=='@');
 
@@ -1720,8 +1904,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
             CallArgsTy CArgs = CallArgsTy(Types);
             CArgs.cvalues = GetSubmitedCValues();
-            // Operation = GetFnVersion(parser_struct, Operation, CArgs, found, false);
-            Operation = GetFnVersion(parser_struct, Operation, CArgs, found);
+            Operation = GetFnVersion(parser_struct, Operation, CArgs, found, true, true);
 
             if (!found) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic);
@@ -1729,7 +1912,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
             DynamicArgs = GetDynamicArgs(parser_struct, fn, CArgs, found);
 
             if (found)
-                return functions_return_data_type[Operation];
+                return fn_ret_dt[Operation];
           }
           LogErrorS(parser_struct->line, "Operation function " + Operation + " not found.");
       }
@@ -1839,11 +2022,15 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
   this->parser_struct = parser_struct;
 
-  int owned_id = this->RHS->GetIsOwned();
-  if (Op=='='&& owned_id>=-1) {
+  int memid = this->RHS->GetMemId();
+  if (Op=='='&& memid>=-1) {
     if (auto *nameable = dynamic_cast<Nameable*>(this->LHS.get())) {
         if (nameable->Depth==1) {
-            function_owns[parser_struct->function_name][nameable->GetName()] = owned_id;
+            std::string name = nameable->GetName(); 
+          int owned_id = this->RHS->GetIsOwned();
+          if (owned_id > -2)
+            function_owns[parser_struct->function_name][name] = owned_id;
+          fn_memid[parser_struct->function_name][name] = memid;
         }
     }
   }
@@ -1868,7 +2055,7 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
 
 void RetExprAST::Checks() {
-    return_expected_type = functions_return_data_type[parser_struct->function_name];
+    return_expected_type = fn_ret_dt[parser_struct->function_name];
 
     if (this->Vars.size()==1) {
         returning_type = this->Vars[0]->GetDataTree();
@@ -1968,41 +2155,118 @@ void IfExprAST::Checks() {
 IfExprAST::IfExprAST(Parser_Struct *parser_struct,
           std::unique_ptr<ExprAST> Cond,
           std::vector<std::unique_ptr<ExprAST>> Then,
-          std::vector<std::unique_ptr<ExprAST>> Else)
+          std::vector<std::unique_ptr<ExprAST>> Else,
+          uint64_t scope_depth, uint64_t control_stmt_id, uint64_t branch_id)
     : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {
   this->parser_struct = parser_struct;
+  uint64_t cap = (this->Else.size()==0) ? 1 : 2;
+
+  uint64_t depth = scope_depth+1;
+  branch_id = (depth<<48) | (control_stmt_id << 32) | (cap << 16) | branch_id;
+  BranchId = branch_id;
+
+
+
+  for (auto &body : this->Then) {
+      if (body->BranchId>2)
+          continue;
+      // no skip, may overwrite the if branch if not found
+      body->Traverse([&branch_id](ExprAST *node) {
+        ExprSetBranch(node, branch_id);
+      });
+  }
+  for (auto &body : this->Else) {
+      body->Traverse([&branch_id](ExprAST *node) {
+        ExprSetBranch(node, branch_id);
+      });
+  }
+
+
+  ExprTieBranch(parser_struct, this->Then, control_stmt_id);
+  ExprTieBranch(parser_struct, this->Else, control_stmt_id);
 }
   
   
 /// ForExprAST - Expression class for for.
 ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
           std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
+          std::vector<std::unique_ptr<ExprAST>> Body,
+          Parser_Struct *parser_struct,
+          uint64_t scope_depth, uint64_t control_stmt_id)
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
       Step(std::move(Step)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+
+  uint64_t depth = scope_depth+1;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  BranchId = branch_id;
+
+
+  for (auto &body : this->Body) {
+      if (body->BranchId>2)
+          continue;
+      body->Traverse([&branch_id](ExprAST *node) {
+        ExprSetBranch(node, branch_id);
+      });
+  }
+
+  ExprTieBranch(parser_struct, this->Body, control_stmt_id);
 }
 
   
 
 /// ForExprAST - Expression class for for.
-ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
+ForEachExprAST::ForEachExprAST(const std::string &VarName,
+          std::unique_ptr<ExprAST> Vec,
+          std::vector<std::unique_ptr<ExprAST>> Body, 
+          Parser_Struct *parser_struct,
+          uint64_t scope_depth, uint64_t control_stmt_id)
     : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
     this->data_type = data_type;
     typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
+
+  uint64_t depth = scope_depth+1;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  BranchId = branch_id;
+
+  for (auto &body : this->Body) {
+      if (body->BranchId>2)
+          continue;
+      body->Traverse([&branch_id](ExprAST *node) {
+        ExprSetBranch(node, branch_id);
+      });
+  }
+
+    ExprTieBranch(parser_struct, this->Body, control_stmt_id);
 }
 
+void MainExprAST::Checks() {
+  for (auto &body : Bodies)
+      body->Checks();
+}
 void WhileExprAST::Checks() {
   for (auto &body : Body)
       body->Checks();
 }
 
   /// WhileExprAST - Expression class for while.
-WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
+WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct,
+        uint64_t scope_depth, uint64_t control_stmt_id)
   : Cond(std::move(Cond)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+
+  uint64_t depth = scope_depth+1;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  BranchId = branch_id;
+  for (auto &body : this->Body) {
+      if (body->BranchId>2)
+          continue;
+      body->Traverse([&branch_id](ExprAST *node) {
+        ExprSetBranch(node, branch_id);
+      });
+  }
+  ExprTieBranch(parser_struct, this->Body, control_stmt_id);
 }
 
 BreakExprAST::BreakExprAST() {}
@@ -2201,12 +2465,10 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     //     std::cout << "----SET VERSION FOR " << this->Name << "\n";
     //     std::cout << "generic " << is_generic << "\n";
     // }
-    if (!IsOperator)  {
+    if (!IsOperator)
         version = SetFnVersion(this->Name, CArgs, overwrite);
-    }
-    if (version!=0) {
+    if (version!=0)
         this->Name += "_"+std::to_string(version);
-    }
 
 
     std::vector<std::string> arg_names;
@@ -2218,18 +2480,24 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         data_typeVars[this->Name][arg_name] = arg;
         typeVars[this->Name][arg_name] = arg.Type;
         CArgs.args.push_back(arg_name);
+
+        if (arg.IsFromArena()) {
+          int MemId = (*parser_struct->mem_id)++;
+          fn_memid[this->Name][arg_name] = MemId;
+          fn_arg_memid[this->Name][arg_name] = MemId;
+        }
     }
 
 
 
 
-    Function_Arg_Names[this->Name] = std::move(arg_names);
+    fn_argnames[this->Name] = std::move(arg_names);
     int required_args = arg_count-ctx_offset;
     Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
     Function_Arg_Count[this->Name] = required_args;
     native_fn.push_back(this->Name);
 
-    functions_return_data_type[this->Name] = ReturnType;
+    fn_ret_dt[this->Name] = ReturnType;
     CArgs.template_ret = ReturnType;
 
 
@@ -2402,7 +2670,7 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
     return data_type;
   }
 
-  Data_Tree ret = functions_return_data_type[Callee];
+  Data_Tree ret = fn_ret_dt[Callee];
 
    
 
@@ -2467,7 +2735,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = data_typeVars[parser_struct->function_name][Name];
         return data_type;
     }
-    else if(functions_return_data_type.count(Name)>0||function_return_overwrite.count(Name)>0) {
+    else if(fn_ret_dt.count(Name)>0||function_return_overwrite.count(Name)>0) {
         data_type = Data_Tree("function");
         return data_type;
     }
@@ -2481,6 +2749,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     else if (FnTemplates.count(Name)>0)
         return Data_Tree("generic_fn");
     else {
+        bt(10);
         LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->function_name + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }
@@ -2523,6 +2792,10 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
   this->Line = parser_struct->line;
   if (IsUnique && !in_vec(Name, Global_Uniques))
       Global_Uniques.push_back(Name);
+  if (Depth==1) {
+      if (fn_memid[parser_struct->function_name].count(Name)>0)
+          MemId = fn_memid[parser_struct->function_name][Name];
+  }
 }
 
 
@@ -2562,6 +2835,7 @@ NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameabl
 
   if (function_own_ret_count.count(Callee)>0)
     OwnedId = (*parser_struct->owned_id)++;
+  MemId = (*parser_struct->mem_id)++;
 }
 
 
@@ -2584,17 +2858,24 @@ void NameableCall::Checks() {
       FromLib=true; //example_lib.sum  
       Callee = this->Inner->GetLibCallee();
     }
-    else {  
+    else {
       Data_Tree inner_dt = this->Inner->Inner->GetDataTree();
       if(data_typeVars[inner_dt.Type].find(Callee)!=data_typeVars[inner_dt.Type].end()) { // self.linear1(x)  
         Callee = UnmangleVec(data_typeVars[inner_dt.Type][Callee]);
       }
       else { // x.view()
         this->Inner = std::move(this->Inner->Inner);
-        Callee = UnmangleVec(inner_dt) + "_" + Callee;
+        std::string inner_ty = UnmangleVec(inner_dt); 
+        if (Callee=="append"&&inner_ty!="array")
+            LogErrorC(parser_struct->line, "Can only append to array");
+        Callee = inner_ty + "_" + Callee;
       }
     } 
   }
+
+  if (Callee=="append")
+     LogErrorC(parser_struct->line, "Can only use append function with arrays.");
+
 
   if (!in_vec(Callee, {"i8", "i64", "i16"})) {
       Data_Tree fdt = this->Inner->GetDataTree();
@@ -2642,7 +2923,7 @@ void NameableCall::Checks() {
 
 
   // // check if exists
-  // if (functions_return_data_type.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
+  // if (fn_ret_dt.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
   //       &&method_return_overwrite.count(Callee)==0&&\
   //         Callee!="array_append"\
   //         &&!this->isSelf&&!is_first_citizen) {
@@ -2676,7 +2957,7 @@ void NameableCall::Checks() {
 
   // vararg
   if (in_vec(Callee, vararg_methods)&&!in_vec(Callee, {"print", "printl"})) {
-      std::string last_arg = Function_Arg_Names[Callee][Function_Arg_Names[Callee].size()-1];
+      std::string last_arg = fn_argnames[Callee][fn_argnames[Callee].size()-1];
       if (Function_Arg_Types[Callee][last_arg]=="int")
           this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
       else
@@ -2719,15 +3000,17 @@ void NameableCall::Checks() {
 
 
 
-  bool needs_version = !(in_vec(Callee, vararg_methods)||Callee=="Unnamed"||\
-          data_typeVars[parser_struct->function_name].count(Callee)>0&&
-          data_typeVars[parser_struct->function_name][Callee].Type=="Function");
+  bool needs_version =\
+        !(in_vec(Callee, vararg_methods)
+        ||Callee=="Unnamed"
+        ||data_typeVars[parser_struct->function_name].count(Callee)>0
+        &&data_typeVars[parser_struct->function_name][Callee].Type=="Function");
 
 
 
   if (needs_version) {
       std::string base_callee = Callee;
-
+      
       Callee = SolveTemplate(parser_struct, Callee, CArgs);
       if (Callee!=base_callee && gpu_fn.count(base_callee)>0)
         gpu_fn[Callee] = 1;
@@ -2735,6 +3018,7 @@ void NameableCall::Checks() {
       TemplateSolveCompiledArgs(Callee, base_callee);
   }
   
+  std::cout << "(checks) " << Callee << "\n";
 }
 
 
@@ -2746,4 +3030,17 @@ PositionalArgExprAST::PositionalArgExprAST(Parser_Struct *parser_struct, const s
 
 Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
     return Inner->GetDataTree(false);
+}
+
+
+void FunctionChecks(std::string fn_name) {
+    if (TheJIT->fn_map.count(fn_name)>0) {
+        std::cout << "CHECK " << fn_name << "\n";
+      FunctionAST *fn = TheJIT->fn_map[fn_name];
+      for (auto &body : fn->Body) {
+          body->Traverse([](ExprAST *node) {
+              node->Checks();
+          });
+      }
+    }
 }

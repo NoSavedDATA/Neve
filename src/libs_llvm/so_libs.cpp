@@ -24,7 +24,7 @@ void Generate_Lib_Functions() {
 
 
 
-    for(auto pair : functions_return_data_type) {
+    for(auto pair : fn_ret_dt) {
         std::string ret = pair.second.Type;
         if(Lib_Functions_Return.count(pair.first)==0) continue;
 

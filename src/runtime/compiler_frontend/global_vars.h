@@ -20,7 +20,7 @@ extern std::map<std::string, int> Function_Arg_Count;
 extern std::map<std::string, int> Function_Required_Arg_Count;
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
-extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
+extern std::map<std::string, std::vector<std::string>> fn_argnames;
 
 extern std::map<std::string, std::string> elements_type_return, ops_type_return;
 extern std::map<int, std::string> op_map;
@@ -64,6 +64,6 @@ extern std::vector<std::string> Global_Uniques;
 
 extern std::map<std::string, std::vector<std::string>> Equivalent_Types;
 
-extern std::vector<std::string> data_tokens, constants, compound_tokens, primary_data_tokens;
+extern std::vector<std::string> data_tokens, constants, composites, compound_tokens, primary_data_tokens;
 extern std::vector<uint16_t> primary_data_types;
 extern std::vector<uint16_t> compound_types;

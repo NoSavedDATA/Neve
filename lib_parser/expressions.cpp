@@ -98,12 +98,12 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
             std::string vec_type = remove_substring(return_type, "_vec");
             std::string data_str = "\n\tData_Tree " + function_name+"_vec = Data_Tree(\"vec\");\n";
             data_str += "\t"+function_name+"_vec.Nested_Data.push_back(Data_Tree(\"" + vec_type + "\"));\n";
-            data_str += "\tfunctions_return_data_type[\""+function_name+"\"] = " + function_name+"_vec;\n";
+            data_str += "\tfn_ret_dt[\""+function_name+"\"] = " + function_name+"_vec;\n";
 
             lib_info->return_data_string = lib_info->return_data_string + data_str; 
         }
         else
-            lib_info->return_data_string = lib_info->return_data_string + "\tfunctions_return_data_type[\"" + function_name \
+            lib_info->return_data_string = lib_info->return_data_string + "\tfn_ret_dt[\"" + function_name \
                                                                         + "\"] = Data_Tree(\"" + return_type + "\");\n";
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
     }
@@ -148,7 +148,7 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
             if (begins_with(arg_type, "DT_"))
                 arg_type = remove_substring(arg_type, "DT_");
             
-            arg_names_line = arg_names_line + "\n\tFunction_Arg_Names[\"" + FunctionName + "\"].push_back(\"" + arg_name + "\");";
+            arg_names_line = arg_names_line + "\n\tfn_argnames[\"" + FunctionName + "\"].push_back(\"" + arg_name + "\");";
 
             arg_types_line = arg_types_line + "\n\tFunction_Arg_Types[\"" + FunctionName + "\"][\"" + arg_name + "\"] = \"" + arg_type + "\";";
 

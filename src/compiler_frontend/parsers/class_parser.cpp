@@ -91,13 +91,13 @@ static void ParseDef(std::unique_ptr<TokenizerClass> &class_tokenizer, std::stri
     type = ParseDataTree(class_tokenizer, tok); // eat dt
     
     std::string fn_name = class_name + "_" + class_tokenizer->IdentifierStr;
-    functions_return_data_type[fn_name] = type;
+    fn_ret_dt[fn_name] = type;
 
     tok = class_tokenizer->getToken(); // eat name
 
     
 
-    Function_Arg_Names[fn_name].push_back("scope_struct");
+    fn_argnames[fn_name].push_back("scope_struct");
     Function_Arg_DataTypes[fn_name]["scope_struct"] = Data_Tree("Scope_Struct");
 
     if (tok=='<') {
@@ -140,7 +140,7 @@ static void ParseDef(std::unique_ptr<TokenizerClass> &class_tokenizer, std::stri
         tok = class_tokenizer->getToken(); 
 
         
-        Function_Arg_Names[fn_name].push_back(var_name);
+        fn_argnames[fn_name].push_back(var_name);
         Function_Arg_DataTypes[fn_name][var_name] = ty;
 
         

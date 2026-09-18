@@ -22,6 +22,9 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
+#include <execution>
+#include <memory>
+#include <unordered_map>
 
 // #include "../../lsp/json.hpp"
 #include "../include.h"
@@ -882,10 +885,16 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
   for (auto &body : Body) {
+      body->Traverse([](ExprAST *node) {
+          node->Checks();
+      });
+  }
+
+
+  for (auto &body : Body) {
     // if (idx>=0) // is comp specialization
     body->SetCValues(parser_struct);
     // }
-      // std::cout << "\n(codegen_gpu) " << fn_name << "\n";
     // std::cout << "(gpu)" << typeid(*body).name() << "\n";
     // std::cout << "idx: " << idx << "\n";
     // std::cout << "codegen " << parser_struct->function_name << "\n";
@@ -916,6 +925,17 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
 
+void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid) {
+
+    if (in_vec(memid, fn_bad_borrows[fn_name]))
+        LogErrorC(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+    for (auto branch : fn_borrows[fn_name][memid]) {
+        if (branch==1)
+            LogErrorC(parser_struct->line, "Tried to move an readTy borrowed to a function.");
+    }
+}
+
+
 
 
 
@@ -931,16 +951,22 @@ Function *FunctionAST::codegen() {
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
-  auto &P = *Proto;
 
-    
+  PrototypeAST *P;
+  if (!Proto) {
+    P = FunctionProtos[parser_struct->function_name].get();
+  }
+  else {
+    P = Proto.get();
+    FunctionProtos[Proto->getName()] = std::move(Proto);
+  }
 
-  int idx = P.CArgs.version;
-  FunctionProtos[Proto->getName()] = std::move(Proto);
-  // FunctionProtos[Proto->getName()] = Proto.get();
-  std::string function_name = P.getName();
+
+
+  int idx = P->CArgs.version;
+
+  std::string function_name = P->getName();
   parser_struct->function_name = function_name;
-
 
 
 
@@ -974,7 +1000,7 @@ Function *FunctionAST::codegen() {
 
   float val;
   int i = 0;
-  int args_count = P.Args.size();
+  int args_count = P->Args.size();
   auto it = TheFunction->arg_begin();
   for (int i=0; i<args_count; ++i, ++it) {
     llvm::Argument &Arg = *it;
@@ -991,9 +1017,11 @@ Function *FunctionAST::codegen() {
         function_values[function_name][arg_name] = &Arg;
         StoreVal(TheFunction, function_name, arg_name, &Arg,
                     data_typeVars[function_name][arg_name]);
+        Data_Tree &dt = data_typeVars[function_name][arg_name];
     }
-   
   }
+
+
   
   Value *RetVal;
 
@@ -1007,11 +1035,35 @@ Function *FunctionAST::codegen() {
 
 
   // Solve templates
+  std::unordered_map<int, int> ownid_to_memid;
   for (auto &body : Body) {
     if (idx>=0) {// is comp specialization
         body->SetCValues(parser_struct);
     }
-    body->Checks();
+    // body->Traverse([&ownid_to_memid](ExprAST *node) {
+    //       node->Checks();
+    //       if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
+    //         ownid_to_memid[stmt->OwnedId] = stmt->MemId;
+    //       }
+    // });
+  }
+
+
+    // std::cout << "BorrowChecker " << function_name << "\n";
+  // BorrowChecker(parser_struct,
+    //             function_name, this->Body);
+
+
+
+  if (P->BaseName=="__anon_expr"||P->BaseName=="test")
+      std::cout << "FN: " << P->BaseName << "\n";
+
+  for (auto &[_, memid] : ownid_to_memid)
+      EvaluateBorrow(parser_struct, P->BaseName, memid);
+
+  for (auto &[dt, name, memid] : P->CArgs.borrows) {
+    std::cout << "handle borrow " << P->BaseName << function_name << " | " << name << " | " << memid << "\n";
+    EvaluateBorrow(parser_struct, P->BaseName, memid);
   }
 
 
@@ -1020,7 +1072,7 @@ Function *FunctionAST::codegen() {
 
   // Codegen
   for (auto &body : Body) {
-
+    // std::cout << "(fn_ast codegen)" << typeid(*body).name() << "\n";
     if (auto *stmt = dynamic_cast<RetExprAST*>(body.get()))
         Clear_Owned_Values(scope_struct, Body);
     RetVal = body->codegen(scope_struct);

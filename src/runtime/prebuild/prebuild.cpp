@@ -126,28 +126,28 @@ extern "C" int prebuild() {
 
     Data_Tree aux = Data_Tree("array");
     aux.Nested_Data.push_back(Data_Tree("int"));
-    functions_return_data_type["randint_array"] = aux;
-    functions_return_data_type["arange_int"] = aux;
-    functions_return_data_type["array_int_add"] = aux;
-    functions_return_data_type["zeros_int"] = aux;
-    functions_return_data_type["ones_int"] = aux;
+    fn_ret_dt["randint_array"] = aux;
+    fn_ret_dt["arange_int"] = aux;
+    fn_ret_dt["array_int_add"] = aux;
+    fn_ret_dt["zeros_int"] = aux;
+    fn_ret_dt["ones_int"] = aux;
     aux.Nested_Data[0] = Data_Tree("float");
-    functions_return_data_type["randfloat_array"] = aux;
-    functions_return_data_type["arange_float"] = aux;
-    functions_return_data_type["array_float_add"] = aux;
-    functions_return_data_type["zeros_float"] = aux;
-    functions_return_data_type["ones_float"] = aux;
+    fn_ret_dt["randfloat_array"] = aux;
+    fn_ret_dt["arange_float"] = aux;
+    fn_ret_dt["array_float_add"] = aux;
+    fn_ret_dt["zeros_float"] = aux;
+    fn_ret_dt["ones_float"] = aux;
 
     Data_Tree split_str_dt = Data_Tree("array");
     split_str_dt.Nested_Data.push_back(Data_Tree("str")); 
-    functions_return_data_type["str_split"] = split_str_dt;
+    fn_ret_dt["str_split"] = split_str_dt;
 
 
 
 
   
   
-    functions_return_data_type["scope_struct_Sweep"] = Data_Tree("float");
+    fn_ret_dt["scope_struct_Sweep"] = Data_Tree("float");
 
 
 
@@ -228,7 +228,7 @@ extern "C" int prebuild() {
 
 
 
-    // functions_return_data_type
+    // fn_ret_dt
     //                  {"buffer_float_int_offby", "any"},
     //                  {"buffer_float_i64_offby", "any"},
 

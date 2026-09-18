@@ -16,9 +16,9 @@
 DT_array::DT_array() {}
 
 
-void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type) {
-    // std::cout << "New of size " << size << "\n";
-    ctx->stw_wait();
+void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type, int memTy) {
+    if (memTy==0)
+        ctx->stw_wait();
     __atomic_store_n(&this->virtual_size, size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->elem_size, elem_size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->type, type, __ATOMIC_RELEASE);
@@ -26,9 +26,13 @@ void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t
     size = ((size + 7) / 8)*8;
     if (size<8)
         size = 8;
-    __atomic_store_n(&this->size, size, __ATOMIC_RELEASE);
 
-    __atomic_store_n(&this->data, cache_pop(size*elem_size, tid), __ATOMIC_RELEASE);
+    void *mem = (memTy==0)
+        ? cache_pop(size*elem_size, tid)
+        : malloc(size*elem_size);
+
+    __atomic_store_n(&this->size, size, __ATOMIC_RELEASE);
+    __atomic_store_n(&this->data, mem, __ATOMIC_RELEASE);
 }
 
 void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
@@ -46,17 +50,39 @@ void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
 }
 
 
-extern "C" DT_array *array_Create(Scope_Struct *scope_struct, uint16_t elem_type) { 
-  int elem_size;
+extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
+        uint16_t elem_type, int memTy) { 
+  // std::cout << "array_Create: " << memTy << "\n";
+  int elem_size = (data_type_to_size.count(elem_type)>0)
+      ? data_type_to_size[elem_type]
+      : 8;
 
-  if(data_type_to_size.count(elem_type)>0)
-      elem_size = data_type_to_size[elem_type];
-  else
-      elem_size = 8;
 
-  DT_array *vec = newT<DT_array>(scope_struct, "array");
-  vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, elem_type);
+  DT_array *vec;
+
+  switch (memTy) {
+      case 0:
+          vec = newT<DT_array>(scope_struct, "array");
+          break;
+      case 1:
+          std::cout << "AS OWN" << "\n";
+          vec = (DT_array*)malloc(sizeof(DT_array));
+          break;
+      case 2:
+          std::cout << "AS BORROW" << "\n";
+          vec = (DT_array*)malloc(sizeof(DT_array));
+          break;
+      default:
+          
+          break;
+  }
+
+  vec->New(scope_struct,
+          8, elem_size, scope_struct->thread_id,
+          elem_type, memTy);
+
   __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
   return vec;
 }
 
@@ -202,6 +228,7 @@ extern "C" DT_array *array_int_NewVec(Scope_Struct *scope_struct, int first, ...
   } while(x!=TERMINATE_VARARG);
   va_end(args);
   // std::cout << "new vec: " << vec << "\n";
+  // std::cout << "virtual size:  " << vec->virtual_size << "\n";
   return vec;
 }
 
@@ -262,6 +289,7 @@ extern "C" DT_array *array_void_NewVec(Scope_Struct *scope_struct, void *first, 
   } while(x!=nullptr);
   va_end(args);
   // std::cout << "new vec: " << vec << "\n";
+  // std::cout << "virtual size:  " << vec->virtual_size << "\n";
   return vec;
 }
 

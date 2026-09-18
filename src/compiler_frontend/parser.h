@@ -130,7 +130,7 @@ std::unique_ptr<ExprAST> ParseStrVecExpr(Parser_Struct *parser_struct);
    
 std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct *parser_struct, std::string class_name="");
 
-std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string class_name="", bool is_owned=false); 
 
 
     

@@ -76,6 +76,7 @@ namespace orc {
 class KaleidoscopeJIT {
 public:
     std::vector<std::unique_ptr<FunctionAST>> fn_vec;
+    std::vector<std::unique_ptr<FunctionAST>> fn_generic_vec;
     std::unordered_map<std::string,FunctionAST*> fn_map;
     
     llvm::orc::MangleAndInterner Mangle;
@@ -87,6 +88,7 @@ public:
     std::string MangleName(const std::string &Name);
 
     Error addAST(std::unique_ptr<FunctionAST> AST); 
+    Error addGeneric(std::unique_ptr<FunctionAST> AST); 
     Error genAST(); 
 
     const DataLayout &getDataLayout() const {

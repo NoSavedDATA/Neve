@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <iostream>
 
+#include "compiler_frontend/modules.h"
 #include "include.h"
 
 
@@ -80,7 +81,7 @@ LCG rng(generate_custom_seed());
 
 
 std::vector<std::unique_ptr<FunctionAST>> AllFunctions;
-std::unordered_map<std::string,std::unordered_map<CallArgsTy,std::unique_ptr<FunctionAST>,ArgsHasher,ArgsEqual>> Template_FnAST;
+std::unordered_map<std::string,std::unordered_map<CallArgsTy,FunctionAST*,ArgsHasher,ArgsEqual>> Template_FnAST;
 std::unordered_map<std::string, std::unique_ptr<FunctionAST>> GpuFunctions;
 
 // Vars
@@ -110,7 +111,7 @@ void register_version(std::string fn) {
 }
 
 void register_call_args_ty() {
-    for (auto &fn : functions_return_data_type)
+    for (auto &fn : fn_ret_dt)
         register_version(fn.first);
     for (auto &fn : function_return_overwrite)
         register_version(fn.first);
@@ -152,7 +153,7 @@ void HandleDefinition() {
   Parser_Struct *parser_struct = new Parser_Struct();
   if (auto FnAST = ParseDefinition(parser_struct)) {
     if (FnAST->getProto().is_generic) {
-        Template_FnAST[FnAST->getProto().getName()][FnAST->getProto().CArgs] = std::move(FnAST);
+        TheJIT->addGeneric(std::move(FnAST));
         return;
     }
 
@@ -178,7 +179,7 @@ void HandleGpuDef() {
   if (auto FnAST = ParseDefinition(parser_struct)) {
     std::string fn_name = FnAST->getProto().getName();
     if (FnAST->getProto().is_generic) {
-        Template_FnAST[FnAST->getProto().getName()][FnAST->getProto().CArgs] = std::move(FnAST);
+        TheJIT->addGeneric(std::move(FnAST));
         return;
     }
 
@@ -215,6 +216,10 @@ void HandleClass() {
 void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 
     auto Err = TheJIT->addAST(std::move(FnAST));
+
+    std::cout << "MAIN" << "\n";
+    FunctionChecks("__anon_expr");
+
     TheJIT->genAST();
     // TheModule->print(llvm::errs(), nullptr);
    
@@ -232,6 +237,10 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     Err = TheJIT->JIT->addIRModule(std::move(TSM));
     if (Err)
         ExitOnErr(std::move(Err));
+
+
+
+
     auto Sym = TheJIT->JIT->lookup("__anon_expr");
     auto *FP = Sym->toPtr<float (*)()>();
     float Result = FP();
@@ -372,13 +381,13 @@ void build_dicts() {
   // DT_charv
   Function_Arg_DataTypes["charv_Create"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["charv_Create"]["1"] = Data_Tree("int");
-  Function_Arg_Names["charv_Create"] = {"0", "1"};
+  fn_argnames["charv_Create"] = {"0", "1"};
 
   // DT_vec
   Function_Arg_DataTypes["vec_Create"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["vec_Create"]["1"] = Data_Tree("int");
   Function_Arg_DataTypes["vec_Create"]["2"] = Data_Tree("int");
-  Function_Arg_Names["vec_Create"] = {"0", "1", "2"};
+  fn_argnames["vec_Create"] = {"0", "1", "2"};
 
 
 
@@ -387,7 +396,7 @@ void build_dicts() {
   Function_Arg_DataTypes["min"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["min"]["1"] = Data_Tree("any");
   Function_Arg_DataTypes["min"]["2"] = Data_Tree("any");
-  Function_Arg_Names["min"] = {"0", "1", "2"};
+  fn_argnames["min"] = {"0", "1", "2"};
   Function_Required_Arg_Count["min"] = 2;
 
   // max
@@ -395,112 +404,112 @@ void build_dicts() {
   Function_Arg_DataTypes["max"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["max"]["1"] = Data_Tree("any");
   Function_Arg_DataTypes["max"]["2"] = Data_Tree("any");
-  Function_Arg_Names["max"] = {"0", "1", "2"};
+  fn_argnames["max"] = {"0", "1", "2"};
   Function_Required_Arg_Count["max"] = 2;
 
 
 
   // c_open
-  functions_return_data_type["c_open"] = Data_Tree("int");
+  fn_ret_dt["c_open"] = Data_Tree("int");
   Function_Arg_DataTypes["c_open"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["c_open"]["1"] = Data_Tree("str");
-  Function_Arg_Names["c_open"] = {"0", "1"};
+  fn_argnames["c_open"] = {"0", "1"};
   Function_Required_Arg_Count["c_open"] = 1;
 
   // c_read
-  functions_return_data_type["c_read"] = Data_Tree("i64");
+  fn_ret_dt["c_read"] = Data_Tree("i64");
   Function_Arg_DataTypes["c_read"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["c_read"]["1"] = Data_Tree("int");
   Function_Arg_DataTypes["c_read"]["2"] = Data_Tree("charv");
   Function_Arg_DataTypes["c_read"]["3"] = Data_Tree("int");
-  Function_Arg_Names["c_read"] = {"0", "1", "2", "3"};
+  fn_argnames["c_read"] = {"0", "1", "2", "3"};
   Function_Required_Arg_Count["c_read"] = 3;
 
 
 
   // c_strlen
-  functions_return_data_type["c_strlen"] = Data_Tree("i64");
+  fn_ret_dt["c_strlen"] = Data_Tree("i64");
   Function_Arg_DataTypes["c_strlen"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["c_strlen"]["1"] = Data_Tree("str");
-  Function_Arg_Names["c_strlen"] = {"0", "1"};
+  fn_argnames["c_strlen"] = {"0", "1"};
   Function_Required_Arg_Count["c_strlen"] = 1;
 
 
 
   // str_set
-  functions_return_data_type["str_set"] = Data_Tree("int");
+  fn_ret_dt["str_set"] = Data_Tree("int");
   Function_Arg_DataTypes["str_set"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["str_set"]["1"] = Data_Tree("str");
   Function_Arg_DataTypes["str_set"]["2"] = Data_Tree("int");
   Function_Arg_DataTypes["str_set"]["3"] = Data_Tree("int");
-  Function_Arg_Names["str_set"] = {"0", "1", "2", "3"};
+  fn_argnames["str_set"] = {"0", "1", "2", "3"};
   Function_Required_Arg_Count["str_set"] = 3;
 
   // str_offset
-  functions_return_data_type["str_offset"] = Data_Tree("str");
+  fn_ret_dt["str_offset"] = Data_Tree("str");
   Function_Arg_DataTypes["str_offset"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["str_offset"]["1"] = Data_Tree("str");
   Function_Arg_DataTypes["str_offset"]["2"] = Data_Tree("int");
-  Function_Arg_Names["str_offset"] = {"0", "1", "2"};
+  fn_argnames["str_offset"] = {"0", "1", "2"};
   Function_Required_Arg_Count["str_offset"] = 2;
 
   // err
-  functions_return_data_type["err"] = Data_Tree("int");
+  fn_ret_dt["err"] = Data_Tree("int");
   Function_Arg_DataTypes["err"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["err"]["1"] = Data_Tree("str");
-  Function_Arg_Names["err"] = {"0", "1"};
+  fn_argnames["err"] = {"0", "1"};
   Function_Required_Arg_Count["err"] = 1;
 
 
   
   // to_char
-  functions_return_data_type["to_char"] = Data_Tree("char");
+  fn_ret_dt["to_char"] = Data_Tree("char");
   Function_Arg_DataTypes["to_char"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["to_char"]["1"] = Data_Tree("any");
-  Function_Arg_Names["to_char"] = {"0", "1"};
+  fn_argnames["to_char"] = {"0", "1"};
   Function_Required_Arg_Count["to_char"] = 1;
   // i8
-  functions_return_data_type["i8"] = Data_Tree("i8");
+  fn_ret_dt["i8"] = Data_Tree("i8");
   Function_Arg_DataTypes["i8"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["i8"]["1"] = Data_Tree("any");
-  Function_Arg_Names["i8"] = {"0", "1"};
+  fn_argnames["i8"] = {"0", "1"};
   Function_Required_Arg_Count["i8"] = 1;
   // i16
-  functions_return_data_type["i16"] = Data_Tree("i16");
+  fn_ret_dt["i16"] = Data_Tree("i16");
   Function_Arg_DataTypes["i16"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["i16"]["1"] = Data_Tree("any");
-  Function_Arg_Names["i16"] = {"0", "1"};
+  fn_argnames["i16"] = {"0", "1"};
   Function_Required_Arg_Count["i16"] = 1;
   // int
-  functions_return_data_type["to_int"] = Data_Tree("int");
+  fn_ret_dt["to_int"] = Data_Tree("int");
   Function_Arg_DataTypes["to_int"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["to_int"]["1"] = Data_Tree("any");
-  Function_Arg_Names["to_int"] = {"0", "1"};
+  fn_argnames["to_int"] = {"0", "1"};
   Function_Required_Arg_Count["to_int"] = 1;
   // i64
-  functions_return_data_type["i64"] = Data_Tree("i64");
+  fn_ret_dt["i64"] = Data_Tree("i64");
   Function_Arg_DataTypes["i64"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["i64"]["1"] = Data_Tree("any");
-  Function_Arg_Names["i64"] = {"0", "1"};
+  fn_argnames["i64"] = {"0", "1"};
   Function_Required_Arg_Count["i64"] = 1;
   // bf16
-  functions_return_data_type["bf16"] = Data_Tree("bf16");
+  fn_ret_dt["bf16"] = Data_Tree("bf16");
   Function_Arg_DataTypes["bf16"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["bf16"]["1"] = Data_Tree("any");
-  Function_Arg_Names["bf16"] = {"0", "1"};
+  fn_argnames["bf16"] = {"0", "1"};
   Function_Required_Arg_Count["bf16"] = 1;
   // to_float
-  functions_return_data_type["to_float"] = Data_Tree("float");
+  fn_ret_dt["to_float"] = Data_Tree("float");
   Function_Arg_DataTypes["to_float"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["to_float"]["1"] = Data_Tree("any");
-  Function_Arg_Names["to_float"] = {"0", "1"};
+  fn_argnames["to_float"] = {"0", "1"};
   Function_Required_Arg_Count["to_float"] = 1;
 
   // ctz
-  functions_return_data_type["ctz"] = Data_Tree("int");
+  fn_ret_dt["ctz"] = Data_Tree("int");
   Function_Arg_DataTypes["ctz"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["ctz"]["1"] = Data_Tree("any");
-  Function_Arg_Names["ctz"] = {"0", "1"};
+  fn_argnames["ctz"] = {"0", "1"};
   Function_Required_Arg_Count["ctz"] = 1;
 
   // swap_bit
@@ -508,13 +517,13 @@ void build_dicts() {
   Function_Arg_DataTypes["swap_bit"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["swap_bit"]["1"] = Data_Tree("any");
   Function_Arg_DataTypes["swap_bit"]["2"] = Data_Tree("int");
-  Function_Arg_Names["swap_bit"] = {"0", "1", "2"};
+  fn_argnames["swap_bit"] = {"0", "1", "2"};
   Function_Required_Arg_Count["swap_bit"] = 2;
 
-  functions_return_data_type["printff"] = Data_Tree("int");
+  fn_ret_dt["printff"] = Data_Tree("int");
   Function_Arg_DataTypes["printff"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["printff"]["1"] = Data_Tree("any");
-  Function_Arg_Names["printff"] = {"0", "1"};
+  fn_argnames["printff"] = {"0", "1"};
   Function_Required_Arg_Count["printff"] = 2;
 
 
@@ -522,63 +531,63 @@ void build_dicts() {
   function_return_overwrite["shfl_sync"] = shfl_sync_ret;
   Function_Arg_DataTypes["shfl_sync"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["shfl_sync"]["1"] = Data_Tree("int");
-  Function_Arg_Names["shfl_sync"] = {"0", "1"};
+  fn_argnames["shfl_sync"] = {"0", "1"};
   Function_Required_Arg_Count["shfl_sync"] = 2;
 
   // cp_async16
-  functions_return_data_type["cp_async16"] = Data_Tree("void");
+  fn_ret_dt["cp_async16"] = Data_Tree("void");
   Function_Arg_DataTypes["cp_async16"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["cp_async16"]["1"] = Data_Tree("any");
-  Function_Arg_Names["cp_async16"] = {"0", "1"};
+  fn_argnames["cp_async16"] = {"0", "1"};
   Function_Required_Arg_Count["cp_async16"] = 2;
   // cp_commit_group
-  functions_return_data_type["cp_commit_group"] = Data_Tree("void");
+  fn_ret_dt["cp_commit_group"] = Data_Tree("void");
   Function_Required_Arg_Count["cp_commit_group"] = 0;
   // cp_wait_group
-  functions_return_data_type["cp_wait_group"] = Data_Tree("int");
+  fn_ret_dt["cp_wait_group"] = Data_Tree("int");
   Function_Arg_DataTypes["cp_wait_group"]["0"] = Data_Tree("int");
   Function_Required_Arg_Count["cp_wait_group"] = 1;
-  Function_Arg_Names["cp_wait_group"] = {"0"};
+  fn_argnames["cp_wait_group"] = {"0"};
   // cp_wait_all
-  functions_return_data_type["cp_wait_all"] = Data_Tree("void");
+  fn_ret_dt["cp_wait_all"] = Data_Tree("void");
   Function_Required_Arg_Count["cp_wait_all"] = 0;
   // ldmatrix_x4
   // Data_Tree ldmatrix_x4_dt = Data_Tree("int");
   // ldmatrix_x4_dt.Nested_Data.push_back(Data_Tree("4"));
   // ldmatrix_x4_dt.is_array = true;
-  functions_return_data_type["ldmatrix_x4"] = Data_Tree("any");
+  fn_ret_dt["ldmatrix_x4"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x4"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x4"]["1"] = Data_Tree("any");
   Function_Required_Arg_Count["ldmatrix_x4"] = 2;
-  Function_Arg_Names["ldmatrix_x4"] = {"0", "1"};
+  fn_argnames["ldmatrix_x4"] = {"0", "1"};
   // ldmatrix_x2
   // Data_Tree ldmatrix_x2_dt = Data_Tree("int");
   // ldmatrix_x2_dt.Nested_Data.push_back(Data_Tree("2"));
   // ldmatrix_x2_dt.is_array = true;
-  functions_return_data_type["ldmatrix_x2"] = Data_Tree("any");
+  fn_ret_dt["ldmatrix_x2"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x2"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x2"]["1"] = Data_Tree("any");
   Function_Required_Arg_Count["ldmatrix_x2"] = 2;
-  Function_Arg_Names["ldmatrix_x2"] = {"0", "1"};
+  fn_argnames["ldmatrix_x2"] = {"0", "1"};
 
-  functions_return_data_type["ldmatrix_x2T"] = Data_Tree("any");
+  fn_ret_dt["ldmatrix_x2T"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x2T"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["ldmatrix_x2T"]["1"] = Data_Tree("any");
   Function_Required_Arg_Count["ldmatrix_x2T"] = 2;
-  Function_Arg_Names["ldmatrix_x2T"] = {"0", "1"};
+  fn_argnames["ldmatrix_x2T"] = {"0", "1"};
 
   // mma_16x8x16
   // Data_Tree mma_16x8x16_dt = Data_Tree("int");
   // mma_16x8x16_dt.Nested_Data.push_back(Data_Tree("4"));
   // mma_16x8x16_dt.is_array = true;
-  functions_return_data_type["mma_16x8x16"] = Data_Tree("any");
+  fn_ret_dt["mma_16x8x16"] = Data_Tree("any");
   Function_Arg_DataTypes["mma_16x8x16"]["0"] = Data_Tree("any");
   Function_Arg_DataTypes["mma_16x8x16"]["1"] = Data_Tree("any");
   Function_Arg_DataTypes["mma_16x8x16"]["2"] = Data_Tree("any");
   Function_Required_Arg_Count["mma_16x8x16"] = 3;
-  Function_Arg_Names["mma_16x8x16"] = {"0", "1", "2"};
+  fn_argnames["mma_16x8x16"] = {"0", "1", "2"};
   // syncthreads
-  functions_return_data_type["syncthreads"] = Data_Tree("void");
+  fn_ret_dt["syncthreads"] = Data_Tree("void");
   Function_Required_Arg_Count["syncthreads"] = 0;
 
   // // simd_load
@@ -592,22 +601,22 @@ void build_dicts() {
   Function_Arg_DataTypes["vec_make"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["vec_make"]["1"] = Data_Tree("any");
   Function_Arg_DataTypes["vec_make"]["2"] = Data_Tree("int");
-  Function_Arg_Names["vec_make"] = {"0", "1", "2"};
+  fn_argnames["vec_make"] = {"0", "1", "2"};
   Function_Required_Arg_Count["vec_make"] = 2;
 
   // vec_movemask
-  functions_return_data_type["vec_movemask"] = Data_Tree("int");
+  fn_ret_dt["vec_movemask"] = Data_Tree("int");
   Function_Arg_DataTypes["vec_movemask"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["vec_movemask"]["1"] = Data_Tree("any");
-  Function_Arg_Names["vec_movemask"] = {"0", "1"};
+  fn_argnames["vec_movemask"] = {"0", "1"};
   Function_Required_Arg_Count["vec_movemask"] = 1;
 
 
   // vec_print
-  functions_return_data_type["vec_print"] = Data_Tree("int");
+  fn_ret_dt["vec_print"] = Data_Tree("int");
   Function_Arg_DataTypes["vec_print"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["vec_print"]["1"] = Data_Tree("vec");
-  Function_Arg_Names["vec_print"] = {"0", "1"};
+  fn_argnames["vec_print"] = {"0", "1"};
   Function_Required_Arg_Count["vec_print"] = 1;
 
 
@@ -628,7 +637,7 @@ void build_dicts() {
 
 
   // printl
-  functions_return_data_type["printl"] = Data_Tree("void");
+  fn_ret_dt["printl"] = Data_Tree("void");
   Function_Arg_DataTypes["printl"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["printl"]["1"] = Data_Tree("str");
   Function_Arg_DataTypes["printl"]["2"] = Data_Tree("str");
@@ -640,9 +649,9 @@ void build_dicts() {
   Function_Arg_DataTypes["printl"]["8"] = Data_Tree("str");
   Function_Arg_DataTypes["printl"]["9"] = Data_Tree("str");
   Function_Arg_DataTypes["printl"]["10"] = Data_Tree("str");
-  Function_Arg_Names["printl"] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
+  fn_argnames["printl"] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
   // print
-  functions_return_data_type["print"] = Data_Tree("void");
+  fn_ret_dt["print"] = Data_Tree("void");
   Function_Arg_DataTypes["print"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["print"]["1"] = Data_Tree("str");
   Function_Arg_DataTypes["print"]["2"] = Data_Tree("str");
@@ -654,7 +663,7 @@ void build_dicts() {
   Function_Arg_DataTypes["print"]["8"] = Data_Tree("str");
   Function_Arg_DataTypes["print"]["9"] = Data_Tree("str");
   Function_Arg_DataTypes["print"]["10"] = Data_Tree("str");
-  Function_Arg_Names["print"] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
+  fn_argnames["print"] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
 
   set_functions_return_type();
   set_functions_args_type();

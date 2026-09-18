@@ -34,7 +34,7 @@ extern std::unique_ptr<TargetMachine> CTM, PtxTM;
 
 extern std::map<std::string, std::vector<std::string>> ClassNativeMethods;
 
-extern std::unordered_map<std::string,std::unordered_map<CallArgsTy,std::unique_ptr<FunctionAST>,ArgsHasher,ArgsEqual>> Template_FnAST;
+extern std::unordered_map<std::string,std::unordered_map<CallArgsTy,FunctionAST*,ArgsHasher,ArgsEqual>> Template_FnAST;
 
 extern std::map<std::string, StructType*> struct_types;
 extern std::unordered_map<std::string, int> struct_type_size;

@@ -29,6 +29,10 @@ inline bool has_body(ExprAST *expr) {
 void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct);
 void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, bool);
 
+
+void BorrowChecker(Parser_Struct *parser_struct, std::string fn_name,
+            std::vector<std::unique_ptr<ExprAST>> &Body);
+
 void EscapeAnalysis(Parser_Struct *parser_struct, std::string fn_name,
             std::vector<std::unique_ptr<ExprAST>> &Body);
 

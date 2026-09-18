@@ -16,7 +16,7 @@ class DT_array {
         uint16_t type=0;
 
     DT_array();
-    void New(Scope_Struct*,int, int, int, uint16_t);
+    void New(Scope_Struct*,int, int, int, uint16_t, int memTy=0);
     void New(Scope_Struct*,int, int, uint16_t);
 };
 

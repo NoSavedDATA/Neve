@@ -11,7 +11,7 @@ struct Data_Tree {
     std::vector<Data_Tree> Nested_Data;
     std::string Type="";
     bool empty=true, is_array=false, is_buffer=false, retry=false,
-         is_generic=false, is_smem=false;
+         is_generic=false, is_smem=false, is_own=false, is_borrow=false;
     
     Data_Tree() = default;
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);
@@ -38,7 +38,7 @@ struct Data_Tree {
 
 
 
-extern std::map<std::string, Data_Tree> functions_return_data_type;
+extern std::map<std::string, Data_Tree> fn_ret_dt;
 
 
 Data_Tree GenericUnmangleType(Data_Tree dt, Data_Tree generic_dt);

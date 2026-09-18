@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <map>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -611,6 +612,7 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0) {
+    bt();
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -774,7 +776,6 @@ void MakeWriteBarrier(Parser_Struct *parser_struct, Function *TheFunction, Value
 
 
 Value *UnkVarExprAST::codegen(Value *scope_struct) {
-  Checks();
   if (not ShallCodegen)
     return const_float(0.0f);
 
@@ -994,14 +995,14 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
     int tgt_arg = i + arg_offset;
     // if (Function_Arg_DataTypes.count(fn_name)==0)
     //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no data types ");
-    // if (Function_Arg_Names.count(fn_name)==0)
+    // if (fn_argnames.count(fn_name)==0)
     //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no arg names ");
-    // if (tgt_arg>=Function_Arg_Names[fn_name].size())
+    // if (tgt_arg>=fn_argnames[fn_name].size())
     //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no target arg " + std::to_string(tgt_arg));
-    // if (Function_Arg_DataTypes[fn_name].count(Function_Arg_Names[fn_name][tgt_arg])==0)
+    // if (Function_Arg_DataTypes[fn_name].count(fn_argnames[fn_name][tgt_arg])==0)
     //     LogErrorC(parser_struct->line, "Function " + fn_name + " has no data types ");
 
-    Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
+    Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][fn_argnames[fn_name][tgt_arg]];
     std::string expected_type = expected_data_type.Type;
 
 
@@ -1068,7 +1069,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
       int c=i+1;
       
 
-      std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
+      std::vector<std::string> fn_args_name = fn_argnames[fn_name];
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg) {
@@ -1085,7 +1086,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
           int arg_idx = it-fn_args_name.begin();
 
           for (; c<arg_idx; ++c) {
-              std::string arg_name = Function_Arg_Names[fn_name][c];
+              std::string arg_name = fn_argnames[fn_name][c];
               Value *arg_default = ArgsInit[fn_name][arg_name]->codegen(scope_struct);
               ArgsV.push_back(arg_default);
           }
@@ -1120,7 +1121,6 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 
 
 Value *DataExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return const_float(0.0f);
 
@@ -1195,8 +1195,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                     std::vector<Value *> ArgsV = {scope_struct};
 
                     if (create_fn=="array_Create" || create_fn=="map_Create" || create_fn=="channel_Create") {
-                        if (create_fn=="array_Create")
+                        if (create_fn=="array_Create") {
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
+                            ArgsV.push_back(const_int(IsOwned ? 1 : 0));
+                        }
                         else if (create_fn=="channel_Create") {
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
                             ArgsV.push_back(const_int(std::stoi(data_type.Nested_Data[1].Type)));
@@ -1630,7 +1632,6 @@ void Get_Recursive_Assign_Statements(const std::vector<std::unique_ptr<ExprAST>>
 
 
 Value *ForExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return const_float(0);
 
@@ -1766,7 +1767,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
 Value *ForEachExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1991,8 +1991,6 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 Value *IntervalLoopExprAST::codegen(Value *scope_struct) {
-    Checks();
-
     Body[0]->codegen(scope_struct);
 
     return const_int(0);
@@ -3323,7 +3321,6 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 Value *SpawnExprAST::codegen(Value *scope_struct) {
-    Checks();
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
@@ -3359,7 +3356,6 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
 
 
 Value *AsyncExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
     // Create/Spawn Threads
@@ -3399,7 +3395,6 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
 }
 
 Value *AsyncsExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -3556,6 +3551,7 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
 
 
 Value *LockExprAST::codegen(Value *scope_struct){
+    Checks();
     call("LockMutex", {Builder->CreateGlobalString(Name)});
 
     for (auto &body : Bodies)
@@ -3584,8 +3580,10 @@ void SetUniques(Value *scope_struct) {
           if (in_vec(type, compound_tokens)) {
             int attr_idx = ClassAttrs[class_name][attr];
             std::vector<Value *> ArgsDT_Create = {scope_struct};
-            if (create_fn=="array_Create")
+            if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(const_int(0));
+            }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                 ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
@@ -3611,6 +3609,7 @@ void SetUniques(Value *scope_struct) {
 }
 
 Value *MainExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return const_float(0);
 
@@ -3647,6 +3646,7 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 
 
 Value *RetExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (!ShallCodegen) {
         Value *ret = const_float(0.0f);
         FreeOwnedPoolRet(scope_struct, parser_struct, ClearOwned);
@@ -3887,10 +3887,10 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
 
 Value *ObjectExprAST::codegen(Value *scope_struct) {
-    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
 
     // Register all variables and emit their initializer.
     Value *previous_obj;
@@ -3935,8 +3935,10 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                   if (in_vec(type, compound_tokens)||type=="channel") {
                     int attr_idx = ClassAttrs[ClassName][attr];
                     std::vector<Value *> ArgsDT_Create = {scope_struct};
-                    if (create_fn=="array_Create")
+                    if (create_fn=="array_Create") {
                         ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                        ArgsDT_Create.push_back(const_int(0));
+                    }
                     else if (type=="channel") { 
                         ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                         ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
@@ -3969,7 +3971,37 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
-
+void NewExprAST::AllocPtr(Value *scope_struct) {
+    if (!IsOwn) {
+        // new - GC arena alloc
+        ptr = callret("allocate_pool", 
+                        {scope_struct,
+                         const_int(ClassSize[DataName]),\
+                         const_int16(data_name_to_type()[DataName])
+                         });
+    } else if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
+        // own - escaped
+        // std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
+        ptr = fn_owned_ret_memory[OwnedId];
+    } else {
+        bool is_borrow = fn_borrows[parser_struct->function_name].count(MemId)>0;
+        if (is_borrow) {
+            std::cout << "BORROW " << MemId << "\n";
+            ptr = callret("malloc",
+                {const_int(
+                    data_name_to_type()[DataName])
+            });
+        } else {
+            // own
+            // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
+            Value *ownedpool = get_scope_owned_pool(scope_struct);
+            ptr = Builder->CreateGEP(
+                        int8Ty, ownedpool, const_int(OwnedPoolOffset)
+                   ); 
+            OwnedValues.push_back({Data_Tree(DataName), ptr});
+        }
+    }
+}
 
 Value *NewExprAST::codegen(Value *scope_struct) {
     Value *nullPtr = ConstantPointerNull::get(
@@ -3989,36 +4021,16 @@ Value *NewExprAST::codegen(Value *scope_struct) {
 
     if(!Check_ArgsV_Count(Callee, ArgsV, parser_struct, 1))
         return const_float(0);
-
     if(in_vec(Callee, vararg_methods))
         ArgsV.push_back(const_int(TERMINATE_VARARG));
-
 
 
     if (is_high_level_obj) {
         Value *previous_obj = get_scope_obj(scope_struct);
 
         
-        if (!IsOwn) {
-            // new - GC arena alloc
-            ptr = callret("allocate_pool", 
-                            {scope_struct,
-                             const_int(ClassSize[DataName]),\
-                             const_int16(data_name_to_type()[DataName])
-                             });
-        } else if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
-            // own - escaped
-            // std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
-            ptr = fn_owned_ret_memory[OwnedId];
-        } else {
-            // own
-            // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
-            Value *ownedpool = get_scope_owned_pool(scope_struct);
-            ptr = Builder->CreateGEP(
-                        int8Ty, ownedpool, const_int(OwnedPoolOffset)
-                   ); 
-            OwnedValues.push_back({Data_Tree(DataName), ptr});
-        }
+        AllocPtr(scope_struct);
+
 
         StructType *st = struct_types["class_"+DataName]; 
         for (auto attr : ClassAttrsName[DataName]) {
@@ -4028,8 +4040,10 @@ Value *NewExprAST::codegen(Value *scope_struct) {
           if (in_vec(type, compound_tokens)) {
             int attr_idx = ClassAttrs[DataName][attr];
             std::vector<Value *> ArgsDT_Create = {scope_struct};
-            if (create_fn=="array_Create")
+            if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(const_int(0));
+            }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                 ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
@@ -4188,7 +4202,6 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
 
 
 Value *ReduceExprAST::codegen(Value *scope_struct) {
-    Checks();
     std::string gpu_str = (parser_struct->gpu>0)  ? "gpu_" : "";
     std::string callee = fn + "_" + gpu_str + functional_type + "_" + op_map[Op];
     if(parser_struct->gpu==0)
@@ -4280,7 +4293,6 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
 }
 
 Value *MapitExprAST::codegen(Value *scope_struct) {
-    Checks();
     Lambda->codegen(scope_struct);
 
 
@@ -4592,7 +4604,6 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 }
 
 Value *ViewExprAST::codegen(Value *scope_struct) {
-    Checks();
     Value *view_val = UndefValue::get(struct_types["DT_str"]);
     Value *inner = LHS->codegen(scope_struct);
     inner = Builder->CreateExtractValue(inner, {0});
@@ -4943,8 +4954,10 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         Value *append_node, *new_array;
         if (IsAppend) {
             new_array = callret("array_Create",
-                                    {scope_struct,
-                                     const_int16(data_name_to_type()[val_dt.Nested_Data[0].Type])});
+                {scope_struct,
+                 const_int16(
+                   data_name_to_type()[val_dt.Nested_Data[0].Type]),
+                 const_int(0)});
             append_node = new_map_node(scope_struct, query, new_array, key_type, value_type);
             Value *ptr_to_store = Builder->CreateSelect(
                                     Builder->CreateICmpEQ(node, nullPtr),
@@ -5131,7 +5144,6 @@ Value *callgpu(Function *TheFunction, Value *scope_struct, Parser_Struct *parser
 }
 
 Value *LaunchExprAST::codegen(Value *scope_struct) {
-    Checks();
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
     std::vector<Value*> ArgsV = {scope_struct};
@@ -5228,6 +5240,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Value *appended_val = Args[0]->codegen(scope_struct);
 
+
     std::string elem_type = inner_dt.Nested_Data[0].Type;
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5321,7 +5334,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool;
 
-    if (Callee=="array_append")
+    if (Callee=="array_append") 
         return codegen_append(scope_struct);
     if (is_tile)
         return codegen_tile(scope_struct); 

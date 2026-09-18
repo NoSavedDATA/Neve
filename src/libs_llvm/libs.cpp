@@ -1269,7 +1269,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt16Ty(*TheContext)},
+		{int8PtrTy, Type::getInt16Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("array_Create", array_CreateTy);

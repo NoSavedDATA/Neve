@@ -94,10 +94,13 @@ struct Parser_Struct {
   bool can_be_string=false;
   bool can_be_list=false, has_compiled_args=false;
   std::shared_ptr<int> owned_id = std::make_shared<int>(0);
+  std::shared_ptr<int> mem_id = std::make_shared<int>(0);
+  std::shared_ptr<uint64_t> control_stmt_id = std::make_shared<uint64_t>(2);
   int gpu=0;
   int line=0;
   int scope_depth=0;
-  int control_flow_depth=0;
+  int control_flow_depth=0, prev_branch_id=-1;
+  uint64_t branch_id=2;
   FnCompiledValues cvalues;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
   std::unordered_map<std::string, int> dyn_args_dict;
@@ -105,6 +108,17 @@ struct Parser_Struct {
   Parser_Struct *Copy();
   bool has_own() {
     return *owned_id>0;
+  }
+
+  std::vector<std::string> get_arg_names() {
+    std::vector<std::string> v = fn_argnames[function_name];
+    if (v.size()==0)
+        return v;
+    if (v[0]=="scope_struct") {
+        std::vector<std::string> ret(v.begin()+1, v.end());
+        v = ret;
+    }
+    return v;
   }
 };
 
