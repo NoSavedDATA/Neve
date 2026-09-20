@@ -34,6 +34,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "KaleidoscopeJIT.h"
 #include "compiler_frontend/expressions.h"
 #include "compiler_frontend/ownership.h"
@@ -72,11 +73,10 @@ FunctionAST::FunctionAST(Parser_Struct *parser_struct, std::unique_ptr<Prototype
                 std::vector<std::unique_ptr<ExprAST>> Body)
         : parser_struct(parser_struct), Proto(std::move(Proto)), Body(std::move(Body)) {
 
-
     if (!parser_struct)
         return;
-    BorrowChecker(parser_struct,
-                   parser_struct->function_name, this->Body);
+    // BorrowChecker(parser_struct,
+    //                parser_struct->function_name, this->Body);
     if (!parser_struct->has_own())
         return;
     EscapeAnalysis(parser_struct,
@@ -110,17 +110,57 @@ llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
 
 llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
     Template_FnAST[F->getProto().getName()][F->getProto().CArgs] = F.get();
-    fn_map[F->getName()] = F.get();
+    // fn_map[F->getName()] = F.get();
     fn_generic_vec.push_back(std::move(F));
     return llvm::Error::success(); 
 }
 
-llvm::Error KaleidoscopeJIT::genAST() {
 
-    for (int i=fn_vec.size()-1;i>=0;--i) {
-        fn_vec[i]->codegen();
+
+void gen_generics() {
+    for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
+
+        fn_ast->parser_struct->function_name = fn;
+        fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
+        fn_ast->function_name = fn;
+        // BasicBlock *CurBB = Builder->GetInsertBlock();
+        // FunctionProtos[fn]->codegen();
+        fn_ast->Proto = nullptr;
+        fn_ast->codegen();
+        // Builder->SetInsertPoint(CurBB);
     }
+}
 
+void warmup_generics() {
+    for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
+        
+        if (parser_struct->gpu>0) {
+            int gpu = parser_struct->gpu;
+            parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
+            proto->codegen();
+            parser_struct->gpu = gpu;
+        }
+        if (!fn_ast)
+            LogErrorC(-1, "Template for " +base_name + " failed");
+        FunctionProtos[fn] = std::move(proto);
+        // TheJIT->fn_map[fn] = fn_ast;
+        // fn_called.push_back(fn);
+    }
+}
+
+llvm::Error KaleidoscopeJIT::genAST() {
+    std::cout << " -- codegen --" << "\n";
+    warmup_generics();
+    fn_map["__anon_expr"]->codegen(); // let main setup globals
+    gen_generics();
+    for (int i=fn_called.size()-1;i>=0;--i) {
+        if (!fn_map.count(fn_called[i]))
+            continue; // skip llvm defined fn
+        fn_map[fn_called[i]]->codegen();
+    }
+    
+
+    fn_called.clear();
     fn_vec.clear();
     fn_map.clear();
     return llvm::Error::success();

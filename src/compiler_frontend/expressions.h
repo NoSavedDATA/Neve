@@ -572,7 +572,8 @@ class Nameable : public ExprAST {
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1, MemId=-2;
-  bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true; 
+  bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
+  bool checked=false;
 
   Nameable(Parser_Struct *);
   Nameable(Parser_Struct *, std::string, int);
@@ -592,6 +593,7 @@ class Nameable : public ExprAST {
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Checks();
 };
 
 
@@ -627,7 +629,7 @@ class NameableCall : public Nameable {
   int MemId=0, OwnedId=-2, OwnedPoolOffset=-1, OwnedPoolCap=0;
   size_t hash=0;
   std::vector<std::unique_ptr<ExprAST>> Args;
-  std::string Callee, ReturnType="";
+  std::string Callee, BaseCallee, ReturnType="";
   std::vector<Data_Tree> Types;
   CallArgsTy CompiledArgsVec, CArgs;
 
@@ -1121,6 +1123,7 @@ class SplitStridedParallelExprAST : public ExprAST {
 
 class MainExprAST : public ExprAST {
   std::vector<std::unique_ptr<ExprAST>> Bodies;
+  bool checked=false;
 
   public:
     MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
@@ -1215,6 +1218,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         CallArgsTy CArgs, bool &found, bool is_op=false);
 void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);
 
+void FunctionChecks(std::string);
+
+
+extern std::vector<std::string> fn_called;
+
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
 
 extern std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
@@ -1240,4 +1248,7 @@ extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
 
 
-void FunctionChecks(std::string);
+
+
+        // .push_back({fn_ast, std::move(proto), fn, base_name});
+

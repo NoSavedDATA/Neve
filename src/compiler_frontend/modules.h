@@ -36,6 +36,11 @@ extern std::map<std::string, std::vector<std::string>> ClassNativeMethods;
 
 extern std::unordered_map<std::string,std::unordered_map<CallArgsTy,FunctionAST*,ArgsHasher,ArgsEqual>> Template_FnAST;
 
+extern std::vector<std::tuple<FunctionAST *,
+       std::unique_ptr<PrototypeAST>,
+       Parser_Struct*,
+       std::string, std::string>> generics_fn;
+
 extern std::map<std::string, StructType*> struct_types;
 extern std::unordered_map<std::string, int> struct_type_size;
 
@@ -111,14 +116,16 @@ inline Value *global_str(std::string _string) {
 }
 
 inline Function *getFunctionCheck(std::string Name) {
-  if (auto *F = CurModule->getFunction(Name))
+  if (auto *F = CurModule->getFunction(Name)) {
+
     return F;
+  }
 
   auto FI = FunctionProtos.find(Name);
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
 
-  LogError(-1, "The function " + Name + " was not found.");
+  LogError(-1, "(getFunctionCheck) The function " + Name + " was not found.");
   return nullptr;
 }
 

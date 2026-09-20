@@ -926,12 +926,23 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
 void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid) {
+    if (!fn_bad_borrows.count(fn_name)||!fn_borrows[fn_name].count(memid))
+        return;
 
     if (in_vec(memid, fn_bad_borrows[fn_name]))
-        LogErrorC(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+        LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+    // auto &borrow_branches = fn_borrows[Callee][arg_memid];
+    // uint64_t first_borrow = borrow_branches[0];
+    // for (int j=1; j<borrow_branches.size(); j++) {
+    //     if (first_borrow!=borrow_branches[j])
+    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+    // }
+    uint64_t first_branch = fn_borrows[fn_name][memid][0];
     for (auto branch : fn_borrows[fn_name][memid]) {
+        if (first_branch!=branch)
+            LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
         if (branch==1)
-            LogErrorC(parser_struct->line, "Tried to move an readTy borrowed to a function.");
+            LogErrorS(parser_struct->line, "Tried to move an already borrowed to a function.");
     }
 }
 
@@ -959,13 +970,17 @@ Function *FunctionAST::codegen() {
   else {
     P = Proto.get();
     FunctionProtos[Proto->getName()] = std::move(Proto);
+        // parser_struct->function_name = fn;
+        // parser_struct->cvalues = proto->CArgs.cvalues;
+        // function_name = fn;
   }
 
 
 
   int idx = P->CArgs.version;
 
-  std::string function_name = P->getName();
+  if (function_name == "")
+      function_name = P->getName();
   parser_struct->function_name = function_name;
 
 
@@ -1002,6 +1017,8 @@ Function *FunctionAST::codegen() {
   int i = 0;
   int args_count = P->Args.size();
   auto it = TheFunction->arg_begin();
+
+
   for (int i=0; i<args_count; ++i, ++it) {
     llvm::Argument &Arg = *it;
 
@@ -1022,6 +1039,7 @@ Function *FunctionAST::codegen() {
   }
 
 
+
   
   Value *RetVal;
 
@@ -1040,23 +1058,14 @@ Function *FunctionAST::codegen() {
     if (idx>=0) {// is comp specialization
         body->SetCValues(parser_struct);
     }
-    // body->Traverse([&ownid_to_memid](ExprAST *node) {
-    //       node->Checks();
-    //       if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
-    //         ownid_to_memid[stmt->OwnedId] = stmt->MemId;
-    //       }
-    // });
+    body->Traverse([&ownid_to_memid](ExprAST *node) {
+          if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
+            ownid_to_memid[stmt->OwnedId] = stmt->MemId;
+          }
+    });
   }
 
 
-    // std::cout << "BorrowChecker " << function_name << "\n";
-  // BorrowChecker(parser_struct,
-    //             function_name, this->Body);
-
-
-
-  if (P->BaseName=="__anon_expr"||P->BaseName=="test")
-      std::cout << "FN: " << P->BaseName << "\n";
 
   for (auto &[_, memid] : ownid_to_memid)
       EvaluateBorrow(parser_struct, P->BaseName, memid);
@@ -1073,6 +1082,8 @@ Function *FunctionAST::codegen() {
   // Codegen
   for (auto &body : Body) {
     // std::cout << "(fn_ast codegen)" << typeid(*body).name() << "\n";
+    // if (auto *stmt = dynamic_cast<NameableCall*>(body.get()))
+    //     std::cout << "(fn_ast codegen of) " << stmt->Callee << "\n";
     if (auto *stmt = dynamic_cast<RetExprAST*>(body.get()))
         Clear_Owned_Values(scope_struct, Body);
     RetVal = body->codegen(scope_struct);

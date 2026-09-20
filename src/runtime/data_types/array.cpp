@@ -489,12 +489,18 @@ extern "C" int array_sum_int(Scope_Struct *scope_struct, DT_array *arr) {
     return sum;
 }
 extern "C" int array_prod_int(Scope_Struct *scope_struct, DT_array *arr) {
+    std::cout << "scope_struct " << scope_struct << "\n";
+    std::cout << "arr " << arr << "\n";
     int *data = static_cast<int*>(arr->data);
+    std::cout << "data " << data << "\n";
     int len = arr->virtual_size;
+    std::cout << "len " << len << "\n";
 
     int prod=1;
     for (int i = 0; i < len; ++i)
         prod *= data[i];
+    std::cout << "ret: " << "\n";
+    std::cout << "ret: " << prod << "\n";
     return prod;
 }
 

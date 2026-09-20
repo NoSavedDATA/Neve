@@ -318,8 +318,10 @@ inline Value *get_smem_offset(Parser_Struct *parser_struct) {
 
 Function *getFunction(std::string Name) {
   // First, see if the function has already been added to the current module.
-  if (auto *F = CurModule->getFunction(Name))
+  if (auto *F = CurModule->getFunction(Name)) {
+      // std::cout << "(getFunction) Got: " << Name << "\n";
     return F;
+  }
 
   // If not, check whether we can codegen the declaration from some existing
   // prototype.
@@ -327,7 +329,7 @@ Function *getFunction(std::string Name) {
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
 
-  LogError(-1, "The function " + Name + " was not found.");
+  LogError(-1, "(getFunction) The function " + Name + " was not found.");
 
   // If no existing prototype exists, return null.
   return nullptr;
@@ -388,22 +390,6 @@ Value *Idx_Calc_Codegen(Parser_Struct *parser_struct, std::string name, std::str
     return first->codegen(scope_struct); 
   }
   return const_int(0);
-
-  // if (!idxs->IsSlice) {
-  //   std::string fn = type+"_CalculateIdx";
-  //   Function *F = CurModule->getFunction(fn);
-  //   if (F)
-  //     return callret(fn, idxs_values);
-  // } else {
-  //   for (int i=0; i<idxs->size(); i++)
-  //     idxs_values.push_back(idxs->Second_Idxs[i]->codegen(scope_struct));
-  //   std::string fn = type+"_CalculateSliceIdx";
-  //   Function *F = CurModule->getFunction(fn);
-  //   if (F)
-  //     return callret(fn, idxs_values);
-  //   else
-  //     return callret("__sliced_idx__", idxs_values);
-  // }
 }
 
 
@@ -612,7 +598,6 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0) {
-    bt();
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -3565,7 +3550,6 @@ Value *LockExprAST::codegen(Value *scope_struct){
 
 
 void SetUniques(Value *scope_struct) {
-
     int idx = 0;
     for (auto class_name : Global_Uniques) {
         Value *ptr = callret("allocate_pool", {scope_struct, const_int(ClassSize[class_name]),
@@ -3986,7 +3970,7 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
     } else {
         bool is_borrow = fn_borrows[parser_struct->function_name].count(MemId)>0;
         if (is_borrow) {
-            std::cout << "BORROW " << MemId << "\n";
+            std::cout << "BORROW " << parser_struct->function_name << " | " <<  MemId << "\n";
             ptr = callret("malloc",
                 {const_int(
                     data_name_to_type()[DataName])
@@ -4679,6 +4663,10 @@ Value *RecoverUniqueGlobal(Value *scope_struct, std::string name) {
     Value *stack_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2);
     // element pointer: &pointers_stack[i]
     // {0, i} first index the array object, then the element
+
+    // p2t("name: " + name);
+    // call("print_int", {const_int(Global_Uniques_Idx[name])});
+
     Value *void_ptr_gep = Builder->CreateGEP(ArrayType::get(int8PtrTy, ContextStackSize), stack_gep, { const_int(0), const_int(Global_Uniques_Idx[name]) });
     Value *ret = Builder->CreateLoad(int8PtrTy, void_ptr_gep);
     return  ret;
@@ -4730,6 +4718,7 @@ Value *Nameable::codegen(Value *scope_struct) {
             std::cout << "has " << name << "\n";
         }
         
+        std::cout << "search " << parser_struct->function_name << " | " << Name << "\n";
         return getFunctionCheck(Name);
     }
 
@@ -5334,8 +5323,9 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool;
 
-    if (Callee=="array_append") 
+    if (Callee=="array_append")  {
         return codegen_append(scope_struct);
+    }
     if (is_tile)
         return codegen_tile(scope_struct); 
     

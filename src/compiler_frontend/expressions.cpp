@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <execution>
 #include <execinfo.h>
 #include <filesystem>
@@ -33,7 +34,7 @@ namespace fs = std::filesystem;
 
 
 
-std::vector<std::string> imported_libs;
+std::vector<std::string> imported_libs,fn_called;
 std::map<std::string, std::vector<std::string>> lib_submodules;
 
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
@@ -51,6 +52,10 @@ std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_own
 
 std::unordered_map<std::string,std::vector<int>> fn_rets;
 
+std::vector<std::tuple<FunctionAST *,
+       std::unique_ptr<PrototypeAST>,
+       Parser_Struct*,
+       std::string, std::string>> generics_fn;
 
 
 void bt(int cut) {
@@ -242,14 +247,16 @@ bool MatchBorrows(Parser_Struct *parser_struct,
 
 std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy &CArgs) {
 
-  bool has_borrow = MatchBorrows(parser_struct, Callee, CArgs);
+  // bool has_borrow = MatchBorrows(parser_struct, Callee, CArgs);
+  bool has_borrow = false;
 
   bool found = true;
   Callee = GetFnVersion(parser_struct, Callee, CArgs, found, true, true);
 
   if (!found) {
-      if (Template_FnAST.count(Callee)>0)
+      if (Template_FnAST.count(Callee)>0) {
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      }
       else if (has_borrow) {
         Template_FnAST[Callee][CArgs] = TheJIT->fn_map[Callee];
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
@@ -264,6 +271,7 @@ std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, Call
               FnNotFound(parser_struct, Callee, CArgs);
       }
   }
+  FunctionChecks(Callee);
   return Callee;
 }
 
@@ -302,6 +310,9 @@ void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 
 void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
+    Start->Traverse(fn);
+    End->Traverse(fn);
+    Step->Traverse(fn);
     for (auto &expr : Body) 
         expr->Traverse(fn);
 }
@@ -317,12 +328,14 @@ void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 
 void ForEachExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
+    Vec->Traverse(fn);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
 
 void WhileExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
+    Cond->Traverse(fn);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
@@ -745,7 +758,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             idx = FnLastVersion[fn]++;
 
 
-        if (fn!="base_name")
+        if (fn!=base_name)
             fn_borrows[fn] = fn_borrows[base_name];
         
         fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
@@ -764,25 +777,34 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         base_name, fn,
                         CArgs, templ);
 
+        generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
 
-        if (parser_struct->gpu>0) {
-            int gpu = parser_struct->gpu;
-            parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
-            proto->codegen();
-            parser_struct->gpu = gpu;
+        fn_ast->parser_struct->function_name = fn;
+        for (auto &body : fn_ast->Body) {
+            // if (begins_with(fn_name, "backprop__"))
+            // std::cout << "(fn_ast codegen)" << typeid(*body).name() << "\n";
+              body->Traverse([](ExprAST *node) {
+                  node->Checks();
+              });
         }
 
+        // if (parser_struct->gpu>0) {
+        //     int gpu = parser_struct->gpu;
+        //     parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
+        //     proto->codegen();
+        //     parser_struct->gpu = gpu;
+        // }
 
+        // if (!fn_ast)
+        //     LogErrorC(-1, "Template for " +base_name + " failed");
+        // fn_ast->Proto = std::move(proto);
+        // fn_ast->parser_struct->function_name = fn;
+        // fn_ast->parser_struct->cvalues = cvalues;
+        // BasicBlock *CurBB = Builder->GetInsertBlock();
 
-        if (!fn_ast)
-            LogErrorC(-1, "Template for " +base_name + " failed");
-        fn_ast->Proto = std::move(proto);
-        fn_ast->parser_struct->function_name = fn;
-        fn_ast->parser_struct->cvalues = cvalues;
-        BasicBlock *CurBB = Builder->GetInsertBlock();
+        // fn_ast->codegen();
 
-        fn_ast->codegen();
-        Builder->SetInsertPoint(CurBB);
+        // Builder->SetInsertPoint(CurBB);
         
         found = true;
         return fn;
@@ -1088,8 +1110,9 @@ void ObjectExprAST::Checks() {
         std::string name = this->VarNames[i].first;
         data_typeVars[parser_struct->function_name][name] = Data_Tree(ClassName);
         if (this->HasInit[i]) { // callee init
-                                //
-          Semantic_Arguments_Check(this->parser_struct, this->Args[i], ClassName+"___init__", false, this->Args[i].size(), 1);
+          std::string create_fn = ClassName+"___init__";
+          Semantic_Arguments_Check(this->parser_struct, this->Args[i], create_fn, false, this->Args[i].size(), 1);
+          FunctionChecks(create_fn);
         }  
     }
 }
@@ -1392,6 +1415,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
         data_type.is_own = IsOwn;
+        FunctionChecks(Callee);
         return data_type;
     }
 
@@ -1522,6 +1546,10 @@ Data_Tree ReduceExprAST::GetDataTree(bool from_assignment) {
 
 void ReduceExprAST::Checks() {
     GetDataTree();
+
+    std::string gpu_str = (parser_struct->gpu>0)  ? "gpu_" : "";
+    std::string callee = fn + "_" + gpu_str + functional_type + "_" + op_map[Op];
+    FunctionChecks(callee);
 }
   
 ReduceExprAST::ReduceExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS,
@@ -1754,6 +1782,9 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   L_dt = LHS->GetDataTree(Op=='=');
   R_dt = RHS->GetDataTree();
 
+  if (R_dt.Type=="function") {
+      FunctionChecks(RHS->GetName());
+  }
 
   std::string LType = UnmangleVec(L_dt), RType = UnmangleVec(R_dt);
   if(ends_with(LType, "channel"))
@@ -1846,13 +1877,16 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   // std::cout << Elements << " | " << Operation << "\n";
 
 
-  if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
+  if (LType=="channel"
+          &&!in_str(RType, primary_data_tokens)&&RType!="str")
     Operation = "channel_void_message";
 
   // std::cout << "\n";
   //   std::cout << "op" << "\n";
   //   L_dt.Print();
   //   std::cout << Operation << "\n";
+
+  FunctionChecks(Operation);
 
   if (RType=="channel" && !in_str(LType, primary_data_tokens)&&LType!="str")
     Operation = "void_channel_message";
@@ -1910,6 +1944,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic);
             }
             DynamicArgs = GetDynamicArgs(parser_struct, fn, CArgs, found);
+            FunctionChecks(Operation);
 
             if (found)
                 return fn_ret_dt[Operation];
@@ -1957,14 +1992,6 @@ void BinaryExprAST::Checks() {
       if(ChannelDirections[parser_struct->function_name][this->RHS->GetName()]==ch_receiver)
         LogErrorS(parser_struct->line, "Trying to unpack data from a receiver only channel.");
       
-      // todo: test this
-      // if (!in_str(LType, primary_data_tokens) && !is_high_lvl_obj) {
-      //     std::string copy_fn = LType + "_Copy";
-      //     Function *F = TheModule->getFunction(copy_fn);
-      //     if (!F) 
-      //         return LogErrorV(parser_struct->line, "Tried to use channel operation for " + \
-      //                                               LType + ", but this data type has no Copy implementation.");
-      // }
     }
     if (this->LHS->GetIsList()) {
         Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
@@ -2501,8 +2528,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     CArgs.template_ret = ReturnType;
 
 
-    if (ends_with(this->Name, "_prebuild"))
+    if (ends_with(this->Name, "_prebuild")) {
         prebuild_functions.push_back(this->Name);
+    }
 
     parser_struct->has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
 }
@@ -2723,7 +2751,7 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 
 
 Data_Tree Nameable::GetDataTree(bool from_assignment) {  
-  if(IsUnique)
+  if(IsUnique) 
       return Data_Tree(Name);
   
   if(Depth==1) {
@@ -2757,6 +2785,8 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
   }
   
   std::string scope = Inner->GetDataTree().Type;
+  
+
 
   if(data_typeVars[scope].find(Name)!=data_typeVars[scope].end())
     data_type = data_typeVars[scope][Name];
@@ -2766,6 +2796,7 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     LogErrorS(Line, "Could not find attribute " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));
     data_type = Data_Tree("any");
   }
+
   return data_type;
 }
 
@@ -2790,8 +2821,10 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
   this->Line = parser_struct->line;
-  if (IsUnique && !in_vec(Name, Global_Uniques))
-      Global_Uniques.push_back(Name);
+  if (IsUnique && !in_vec(Name, Global_Uniques)) {
+    Global_Uniques.push_back(Name);
+    FunctionChecks(Name+"___init__");
+  }
   if (Depth==1) {
       if (fn_memid[parser_struct->function_name].count(Name)>0)
           MemId = fn_memid[parser_struct->function_name][Name];
@@ -2843,6 +2876,13 @@ bool NameableCall::GetNeedGCSafePoint() {
     return true;
 }
 
+void Nameable::Checks() {
+  if (checked)
+    return;
+  checked=true;
+  if (IsUnique)
+    FunctionChecks(Name+"___init__");
+}
 
 
 void NameableCall::Checks() {
@@ -2866,15 +2906,11 @@ void NameableCall::Checks() {
       else { // x.view()
         this->Inner = std::move(this->Inner->Inner);
         std::string inner_ty = UnmangleVec(inner_dt); 
-        if (Callee=="append"&&inner_ty!="array")
-            LogErrorC(parser_struct->line, "Can only append to array");
         Callee = inner_ty + "_" + Callee;
       }
     } 
   }
 
-  if (Callee=="append")
-     LogErrorC(parser_struct->line, "Can only use append function with arrays.");
 
 
   if (!in_vec(Callee, {"i8", "i64", "i16"})) {
@@ -2922,14 +2958,6 @@ void NameableCall::Checks() {
 
 
 
-  // // check if exists
-  // if (fn_ret_dt.count(Callee)==0&&function_return_overwrite.count(Callee)==0\
-  //       &&method_return_overwrite.count(Callee)==0&&\
-  //         Callee!="array_append"\
-  //         &&!this->isSelf&&!is_first_citizen) {
-  //     LogErrorS(parser_struct->line, "Function " + Callee + " not yet implemented.");
-  //     return;
-  // }
     
   if (Callee=="array_append") {
       if (auto *idx_stmt = dynamic_cast<NameableIdx*>(this->Inner.get()))
@@ -3008,17 +3036,16 @@ void NameableCall::Checks() {
 
 
 
+  BaseCallee = Callee;
   if (needs_version) {
-      std::string base_callee = Callee;
       
       Callee = SolveTemplate(parser_struct, Callee, CArgs);
-      if (Callee!=base_callee && gpu_fn.count(base_callee)>0)
+      if (Callee!=BaseCallee && gpu_fn.count(BaseCallee)>0)
         gpu_fn[Callee] = 1;
 
-      TemplateSolveCompiledArgs(Callee, base_callee);
+
+      TemplateSolveCompiledArgs(Callee, BaseCallee);
   }
-  
-  std::cout << "(checks) " << Callee << "\n";
 }
 
 
@@ -3034,13 +3061,17 @@ Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
 
 
 void FunctionChecks(std::string fn_name) {
+
+
     if (TheJIT->fn_map.count(fn_name)>0) {
-        std::cout << "CHECK " << fn_name << "\n";
+      if (in_vec(fn_name, fn_called))
+           return;
+      fn_called.push_back(fn_name);
       FunctionAST *fn = TheJIT->fn_map[fn_name];
       for (auto &body : fn->Body) {
-          body->Traverse([](ExprAST *node) {
+        body->Traverse([](ExprAST *node) {
               node->Checks();
-          });
+        });
       }
     }
 }

@@ -53,7 +53,9 @@
 #include <iostream>
 
 #include "compiler_frontend/modules.h"
+#include "compiler_frontend/ownership.h"
 #include "include.h"
+#include "runtime/compiler_frontend/global_vars.h"
 
 
 using namespace llvm;
@@ -217,8 +219,12 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 
     auto Err = TheJIT->addAST(std::move(FnAST));
 
-    std::cout << "MAIN" << "\n";
+    // std::cout << "MAIN" << "\n";
+    for(auto & fn : prebuild_functions)
+        FunctionChecks(fn);
     FunctionChecks("__anon_expr");
+
+    BorrowChecker("__anon_expr");
 
     TheJIT->genAST();
     // TheModule->print(llvm::errs(), nullptr);

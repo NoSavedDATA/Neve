@@ -52,6 +52,8 @@ class FunctionAST {
     std::unique_ptr<PrototypeAST> Proto;
     //std::vector<ExprAST> Body;
     std::vector<std::unique_ptr<ExprAST>> Body;
+    std::string function_name="";
+    FnCompiledValues cvalues;
     FunctionAST(Parser_Struct*, std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body);
   
