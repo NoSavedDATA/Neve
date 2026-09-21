@@ -1,6 +1,6 @@
-CXX := clang++-19
+CXX := clang++-21
 
-LLVM_CONFIG := llvm-config-19
+LLVM_CONFIG := llvm-config-21
 
 CXXFLAGS := \
     -std=c++17 \

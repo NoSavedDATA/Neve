@@ -96,7 +96,6 @@ class ExprAST {
 
     virtual int GetMemId(); 
 
-    virtual std::vector<uint64_t> GetBranchId(); 
 
     virtual bool GetNeedGCSafePoint();
     // virtual nlohmann::json toJSON();
@@ -599,7 +598,6 @@ class Nameable : public ExprAST {
 
   int GetIsOwned() override;
   int GetMemId() override;
-  std::vector<uint64_t> GetBranchId();
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
@@ -1242,6 +1240,10 @@ extern std::unordered_map<std::string, std::vector<int>> function_escapes, funct
 extern std::unordered_map<std::string,
        std::unordered_map<int,
             std::vector<uint64_t>>> fn_borrows;
+
+extern std::unordered_map<std::string,
+       std::unordered_map<int,int>> fn_borrows_c;
+
 
 extern std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;

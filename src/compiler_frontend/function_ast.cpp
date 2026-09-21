@@ -35,6 +35,9 @@
 #include "parser.h"
 #include "scope.h"
 
+
+#define MASK_16 0xFFFFULL
+
 ExitOnError ExitOnErr;
 std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
@@ -940,8 +943,9 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
     // }
 
     uint64_t first_branch = fn_borrows[fn_name][memid][0];
+    int cstmt = (first_branch>>32)&MASK_16;
     for (auto branch : fn_borrows[fn_name][memid]) {
-        if (first_branch!=branch) {
+        if (cstmt!=(branch>>32)&MASK_16) {
             std::cout << " " << first_branch << " | " << branch << "\n";
             LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
 

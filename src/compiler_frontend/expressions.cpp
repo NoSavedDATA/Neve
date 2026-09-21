@@ -47,6 +47,8 @@ std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
 std::unordered_map<std::string,
+       std::unordered_map<int,int>> fn_borrows_c;
+std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_owns;
@@ -132,9 +134,6 @@ void ExprAST::SetMemId(std::unordered_map<int, uint64_t>&) {
 }
 
 
-std::vector<uint64_t> ExprAST::GetBranchId() {
-    return {BranchId};
-}
 
 
 void ExprAST::SetIsMsg(bool isMessage) {
@@ -192,9 +191,9 @@ void ExprSetBranch(ExprAST *expr, uint64_t branch_id) {
     if (expr->BranchId<=2)
         expr->BranchId = branch_id;
     else {
-        uint64_t branch = (expr->BranchId << 48) >> 48;
+        uint64_t branch = expr->BranchId & MASK_16;
         if (branch<=2) {
-            expr->BranchId = ((expr->BranchId>>16)<<16) | ((branch_id<<48)>>48);
+            expr->BranchId = (expr->BranchId &~MASK_16) | ( branch_id& MASK_16);
         }
     }
 }
@@ -2208,10 +2207,9 @@ IfExprAST::IfExprAST(Parser_Struct *parser_struct,
           uint64_t scope_depth, uint64_t control_stmt_id, uint64_t branch_id)
     : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {
   this->parser_struct = parser_struct;
-  uint64_t cap = (this->Else.size()==0) ? 1 : 2;
 
   uint64_t depth = scope_depth+1;
-  branch_id = (depth<<48) | (control_stmt_id << 32) | (cap << 16) | branch_id;
+  branch_id = (depth<<48) | (control_stmt_id << 32) | (2 << 16) | branch_id;
   BranchId = branch_id;
 
 
@@ -2247,7 +2245,7 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
     this->parser_struct = parser_struct;
 
   uint64_t depth = scope_depth+1;
-  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
   BranchId = branch_id;
 
 
@@ -2276,7 +2274,7 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName,
     typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
 
   uint64_t depth = scope_depth+1;
-  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
   BranchId = branch_id;
 
   for (auto &body : this->Body) {
@@ -2306,7 +2304,7 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
     this->parser_struct = parser_struct;
 
   uint64_t depth = scope_depth+1;
-  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (uint64_t)2;
+  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
   BranchId = branch_id;
   for (auto &body : this->Body) {
       if (body->BranchId>2)
@@ -2825,9 +2823,6 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
 }
 
 
-std::vector<uint64_t> Nameable::GetBranchId() {
-    return {BranchId};
-}
 
 
 
