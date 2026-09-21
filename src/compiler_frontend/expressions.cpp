@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include "include.h"
@@ -125,6 +126,17 @@ bool ExprAST::GetIsAttribute() {
 }
 
 
+void ExprAST::SetMemId() {
+}
+void ExprAST::SetMemId(std::unordered_map<int, uint64_t>&) {
+}
+
+
+std::vector<uint64_t> ExprAST::GetBranchId() {
+    return {BranchId};
+}
+
+
 void ExprAST::SetIsMsg(bool isMessage) {
   this->isMessage=isMessage;
 }
@@ -170,8 +182,9 @@ void ExprTieBranch(Parser_Struct *parser_struct,
         int branchid) {
     for (auto &body : Body) {
         int cstmtid = (body->BranchId >> 32)&MASK_16;
-        if (cstmtid!=branchid)
+        if (cstmtid!=branchid) {
             cstmt_parents[parser_struct->function_name][cstmtid] = branchid;
+        }
     }
 }
 
@@ -1381,20 +1394,29 @@ DataExprAST::DataExprAST(
       data_type.Nested_Data.push_back(Data_Tree(std::to_string(size)));
   }
 
+  SetMemId();
+}
+
+void DataExprAST::SetMemId() {
+  if (!data_type.IsFromArena())
+      return;
+
   for(auto &[name, expr] : this->VarNames) {
-    if (IsOwned) {
+    if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
         function_owns[parser_struct->function_name][name]=(*parser_struct->owned_id)++;
         fn_memid[parser_struct->function_name][name] = (*parser_struct->mem_id)++;
+    } else {
+        int owned_id = expr->GetIsOwned();
+        if (owned_id>=-1)
+            function_owns[parser_struct->function_name][name] = owned_id;
+        int memid = expr->GetMemId();
+        if (memid > -2)
+            fn_memid[parser_struct->function_name][name] = memid;
     }
-
-    int owned_id = expr->GetIsOwned();
-    if (owned_id>=-1)
-        function_owns[parser_struct->function_name][name] = owned_id;
-    int memid = expr->GetMemId();
-    if (memid > -2)
-        fn_memid[parser_struct->function_name][name] = memid;
   }
 }
+
+
 
 
 
@@ -2516,6 +2538,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     }
 
 
+    parser_struct->memid_arg_offset=(this->Name=="__anon_expr")
+        ? 0 : *parser_struct->mem_id;
 
 
     fn_argnames[this->Name] = std::move(arg_names);
@@ -2798,6 +2822,11 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
   }
 
   return data_type;
+}
+
+
+std::vector<uint64_t> Nameable::GetBranchId() {
+    return {BranchId};
 }
 
 

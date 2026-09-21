@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "llvm/IR/Value.h"
 
@@ -64,6 +65,10 @@ class ExprAST {
     virtual void SetIsAttribute(bool Attribute); 
     virtual bool GetIsAttribute(); 
     
+
+    virtual void SetMemId(); 
+    virtual void SetMemId(std::unordered_map<int, uint64_t>&); 
+
   
     virtual void SetPreDot(std::string pre_dot); 
     virtual std::string GetPreDot(); 
@@ -91,6 +96,7 @@ class ExprAST {
 
     virtual int GetMemId(); 
 
+    virtual std::vector<uint64_t> GetBranchId(); 
 
     virtual bool GetNeedGCSafePoint();
     // virtual nlohmann::json toJSON();
@@ -443,6 +449,10 @@ class DataExprAST : public VarExprAST {
   bool GetNeedGCSafePoint() override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+
+  void SetMemId();
+  void SetMemId(std::unordered_map<int, uint64_t> &map);
+
 };
 
 
@@ -589,6 +599,7 @@ class Nameable : public ExprAST {
 
   int GetIsOwned() override;
   int GetMemId() override;
+  std::vector<uint64_t> GetBranchId();
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
@@ -1241,6 +1252,7 @@ extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount
 extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 
 
+
 extern std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
@@ -1250,5 +1262,5 @@ extern std::unordered_map<std::string,int> FnLastVersion;
 
 
 
-        // .push_back({fn_ast, std::move(proto), fn, base_name});
+// .push_back({fn_ast, std::move(proto), fn, base_name});
 

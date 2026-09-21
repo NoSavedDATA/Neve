@@ -931,18 +931,21 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
 
     if (in_vec(memid, fn_bad_borrows[fn_name]))
         LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+
     // auto &borrow_branches = fn_borrows[Callee][arg_memid];
     // uint64_t first_borrow = borrow_branches[0];
     // for (int j=1; j<borrow_branches.size(); j++) {
     //     if (first_borrow!=borrow_branches[j])
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
     // }
+
     uint64_t first_branch = fn_borrows[fn_name][memid][0];
     for (auto branch : fn_borrows[fn_name][memid]) {
-        if (first_branch!=branch)
+        if (first_branch!=branch) {
+            std::cout << " " << first_branch << " | " << branch << "\n";
             LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
-        if (branch==1)
-            LogErrorS(parser_struct->line, "Tried to move an already borrowed to a function.");
+
+        }
     }
 }
 
