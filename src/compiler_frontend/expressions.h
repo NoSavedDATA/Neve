@@ -20,6 +20,13 @@ class TemplateAST;
 // Abstract Syntax Tree (aka Parse Tree)
 //===----------------------------------------------------------------------===//
 
+enum MemTy {
+    newTy = 0,
+    ownTy = 1,
+    borrowTy = 2,
+    unkmemTy = 3,
+};
+
 /// ExprAST - Base class for all expression nodes.
 class ExprAST {
   public:
@@ -459,15 +466,15 @@ class NewExprAST : public ExprAST {
   public:
     std::string DataName, Callee;
     std::vector<std::unique_ptr<ExprAST>> Args;
-    bool is_high_level_obj=false, IsOwn=false, checked=false;
+    bool is_high_level_obj=false, checked=false;
     Data_Tree data_type=Data_Tree("");
-    int MemId=0, OwnedPoolOffset=-1,
+    int MemId=0, OwnedPoolOffset=-1, MemoryType=0,
         OwnedId=-2, OwnedRetPoolOffset=-1;
     Value *ptr=nullptr;
 
     NewExprAST(
       Parser_Struct *, std::string,
-      std::vector<std::unique_ptr<ExprAST>> Args, bool is_own=false);
+      std::vector<std::unique_ptr<ExprAST>> Args, int memory_type=0);
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
@@ -1247,6 +1254,10 @@ extern std::unordered_map<std::string,
 
 extern std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
+
+
+extern std::unordered_map<std::string,
+       std::vector<int>> fn_borrows_incomplete;
 
 
 extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_owns;

@@ -1,3 +1,4 @@
+#include "parser.h"
 #include "llvm/IR/Value.h"
 
 
@@ -21,6 +22,7 @@
 // #include "../codegen/string.h"
 #include "../common/include.h"
 #include "../runtime/data_types/data_tree.h"
+#include "expressions.h"
 #include "include.h"
 #include "logging.h"
 #include "modules.h"
@@ -1834,7 +1836,9 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string
 }
 
 
-std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string class_name, bool is_own=false) {
+
+std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string class_name, int memory_type=0) {
+    if (memory_type!=unkmemTy)
     getNextToken(); // eat new/own
 
     if(CurTok!=tok_data&&Classes.count(IdentifierStr)==0) {
@@ -1849,14 +1853,26 @@ std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string 
         return LogErrorBreakLine(parser_struct->line, "Expected \"(\" at new expression.");
 
     auto Args = Parse_Arguments(parser_struct, class_name);    
-    return std::make_unique<NewExprAST>(parser_struct, IdName, std::move(*Args), is_own);
+    return std::make_unique<NewExprAST>(parser_struct, IdName, std::move(*Args), memory_type);
 }
 
 
 
+std::unique_ptr<ExprAST> ParseMemInferExpr(Parser_Struct *parser_struct, std::string class_name) {
+    getNextToken(); // eat ~
+    LogBlue("Mem infer");
+    
+    std::vector<std::unique_ptr<ExprAST>> v;
 
+    v.push_back(ParseExpression(parser_struct,class_name,false));
 
+    if (CurTok==',') {
+        getNextToken();
+        v.push_back(ParseExpression(parser_struct,class_name,false));
+    }
 
+    return ParseNewExpr(parser_struct, class_name, unkmemTy);
+}
 
 
 
@@ -2056,7 +2072,7 @@ std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct *parser_struct, std::string c
 ///   ::= ifexpr
 ///   ::= forexpr
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string class_name, bool can_be_list) {
-  // std::cout << "tok " << CurTok << " | " << ReverseToken(CurTok) << "\n";
+  std::cout << "tok " << CurTok << " | " << ReverseToken(CurTok) << "\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));
@@ -2071,6 +2087,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
   }
   case '$':
     return ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, can_be_list);
+  case '~':
+    return ParseMemInferExpr(parser_struct, class_name);
   case tok_self:
     return ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, can_be_list);
   case tok_number:
@@ -2140,7 +2158,7 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
   case tok_new:
     return ParseNewExpr(parser_struct, class_name);
   case tok_own:
-    return ParseNewExpr(parser_struct, class_name, true);
+    return ParseNewExpr(parser_struct, class_name, 1);
   case tok_struct:
     return ParseDataExpr(parser_struct, class_name);
   case tok_var:
@@ -2170,7 +2188,7 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct *parser_struct, std::string cl
   // std::cout <<"Parse unary got can_be_list: " << can_be_list <<  "\n";
   // If the current token is not an operator, it must be a primary expr.
   
-  if ((!isascii(CurTok) || CurTok=='$' || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')&&CurTok!=tok_not)
+  if ((!isascii(CurTok) || CurTok=='$' || CurTok=='~' || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')&&CurTok!=tok_not)
   {
     // std::cout << "Returning, non-ascii found.\n";
     // std::cout << "" << CurTok << "|" << ReverseToken(CurTok) << "\n";

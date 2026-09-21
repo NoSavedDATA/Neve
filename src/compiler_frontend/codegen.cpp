@@ -3956,7 +3956,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 void NewExprAST::AllocPtr(Value *scope_struct) {
-    if (!IsOwn) {
+    if (!MemoryType) {
         // new - GC arena alloc
         ptr = callret("allocate_pool", 
                         {scope_struct,

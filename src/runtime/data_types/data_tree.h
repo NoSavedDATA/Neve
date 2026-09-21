@@ -11,7 +11,8 @@ struct Data_Tree {
     std::vector<Data_Tree> Nested_Data;
     std::string Type="";
     bool empty=true, is_array=false, is_buffer=false, retry=false,
-         is_generic=false, is_smem=false, is_own=false, is_borrow=false;
+         is_generic=false, is_smem=false, is_borrow=false;
+    int is_own=0;
     
     Data_Tree() = default;
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);

@@ -46,7 +46,7 @@ void GetScopeOwnedValues(ExprAST *expr,
     if(has_body(expr)) return;
 
     if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
-        if (new_expr->IsOwn)
+        if (new_expr->MemoryType>0)
             owneds.push_back({Data_Tree(new_expr->DataName), new_expr->ptr});
     }
 }
@@ -224,17 +224,11 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
 
             int control_stmt = (branch>>32)&MASK_16;
             int depth = (branch>>48)&MASK_16;
-
             // std::cout << "\ncstmt " << control_stmt << " | " << expr_control_stmt << "\n";
             // std::cout << "depth " << depth << " | " << expr_depth << "\n";
             // std::cout << "match " << (expr_depth>=depth) << " | " << match_cstmt_parent(
             //             parser_struct->function_name,
             //         control_stmt, expr_control_stmt) << "\n";
-
-
-            
-
-
             bool match = (expr_depth>=depth&&match_cstmt_parent(
                         parser_struct->function_name,
                     control_stmt, expr_control_stmt));
@@ -307,29 +301,20 @@ inline void RegisterBorrow(Parser_Struct *parser_struct,
              std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
              std::unordered_map<int,int> &borrow_c
          ) {
-
     int appended_memid = expr->GetMemId();
     uint64_t branch = (borrow_type==0)
                     ? parent_branch
                     : 0;
-    
-    // std::cout << "append  "  << appended_memid << "\n";
-    // std::cout << "append  " << expr->BranchId << " | " << parent_branch << "\n";
 
     if (appended_memid> -2) {
         borrow_ids[appended_memid].push_back(branch);
         borrow_c[appended_memid]++;
     }
-
-    if (auto *nameable = dynamic_cast<Nameable*>(expr.get())) {
-        if (nameable->Depth==1) {
-            std::string name = nameable->Name;
-        }
-    }
 }
 
 
-void GetCallMostRestrictive(std::string callee,
+void GetCallMostRestrictive(Parser_Struct *parser_struct,
+            std::string callee,
             NameableCall *callexpr,
             std::vector<uint64_t> &arg_parents,
             int arg_memid, uint64_t callexpr_branch,
@@ -340,12 +325,20 @@ void GetCallMostRestrictive(std::string callee,
     int borrows = fn_borrows[callee][arg_memid].size();
     uint64_t fn_owner_branch = fn_borrows[callee][arg_memid][0];
     uint64_t callbranch = callexpr->BranchId;
-    // std::cout << "check " << memid << " | " << nameableexpr->Name << "|" << argname << "|" << arg_memid << "\n";
 
     int cap = (fn_owner_branch>>16)&MASK_16;
-    std::cout << "cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
 
-    if (arg_parents.size()==0||fn_borrows_c[callee][arg_memid]<cap) {
+    // std::cout << "cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
+    // std::cout << " " << in_vec(arg_memid,fn_borrows_incomplete[callee]) << "\n";
+
+
+    bool has_incomplete = fn_borrows_c[callee][arg_memid]<cap
+                            ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
+    if (has_incomplete)
+        fn_borrows_incomplete[parser_struct->function_name].push_back(memid);
+
+    // TODO: tackle nested if borrow
+    if (arg_parents.size()==0||has_incomplete) {
         borrow_ids[memid].push_back(callexpr_branch);
         return;
     }
@@ -357,16 +350,13 @@ void GetCallMostRestrictive(std::string callee,
     for (int i=1; i<arg_parents.size(); ++i) {
         uint64_t branch = arg_parents[i];
 
-        // borrow_ids[memid].push_back((branch&~(MASK_16<<16))|cap<<16);
         borrow_ids[memid].push_back(branch);
 
         int cstmt_i = (branch>>32) & MASK_16;
-        std::cout << "compare " << first_branch << " to " << branch << "\n"; 
-        std::cout << "compare " << cstmt << " to " << cstmt_i << "\n"; 
         if (cstmt_i>cstmt)
             most_restrictive=i;
     }
-    std::cout << "most restrictive " << most_restrictive << " | " << arg_parents.size()<< "\n";
+    // std::cout << "most restrictive " << most_restrictive << " | " << arg_parents.size()<< "\n";
 
     return;
 }
@@ -418,7 +408,6 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
 
             int arg_memid = fn_arg_memid[callee][argname];
             arg_to_caller_memid[arg_memid] = parent_memid;
-            std::cout << "tie " << argname << " -> " << arg_memid << " | " << parent_memid << "\n";
         }
     }
 
@@ -452,7 +441,6 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 for (auto &borrow : fn_borrows[callee][arg_memid]) {
                     int owner_memid = borrow&MASK_16;
                     if (arg_to_caller_memid.count(owner_memid)) {
-                        std::cout << "TIE " << owner_memid << "-" << arg_memid << "\n"; 
                         caller_parents.push_back(
                             arg_to_caller_memid[owner_memid]
                         );
@@ -460,19 +448,14 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 }
 
 
-                GetCallMostRestrictive(callee,
+                GetCallMostRestrictive(parser_struct,
+                            callee,
                             callexpr,
                             caller_parents,
                             arg_memid, callexpr->BranchId,
                             memid, borrow_ids);
-
-                int branch_cap = (borrow_ids[memid][0]>>16)&MASK_16;
-
-
                 borrow_c[memid]++;
 
-                // borrow_ids[memid].push_back(owner);
-                // std::cout << "______ " << memid << " TO " << (owner&MASK_16) << "\n";
 
                 Data_Tree &dt = CArgs.dts[j-1];
                 int ownid = nameableexpr->GetIsOwned();
@@ -636,6 +619,17 @@ void BorrowChecker(std::string fn_name) {
     fn_bad_borrows[fn_name] = bad_borrows;
     fn_rets[fn_name] = retids;
     fn_retscount[fn_name] = retcount;
+
+
+    for(auto &[memid,borrows]: borrow_ids) {
+        uint64_t fn_owner_branch = borrows[0];
+        int cap = (fn_owner_branch>>16)&MASK_16;
+
+        bool has_incomplete = borrow_c[memid]<cap;
+        if (has_incomplete) {
+            fn_borrows_incomplete[fn_name].push_back(memid);
+        }
+    }
 }
 
 
@@ -709,7 +703,7 @@ void EscapeAnalysis(Parser_Struct *parser_struct, std::string fn_name,
 
 void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
     if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
-        if (new_expr->IsOwn) {
+        if (new_expr->MemoryType>0) {
             new_expr->OwnedPoolOffset = last_offset;
             last_offset += ClassSize[new_expr->DataName];
         }

@@ -942,15 +942,15 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
     // }
 
-    uint64_t first_branch = fn_borrows[fn_name][memid][0];
-    int cstmt = (first_branch>>32)&MASK_16;
-    for (auto branch : fn_borrows[fn_name][memid]) {
-        if (cstmt!=(branch>>32)&MASK_16) {
-            std::cout << " " << first_branch << " | " << branch << "\n";
-            LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+    // uint64_t first_branch = fn_borrows[fn_name][memid][0];
+    // int cstmt = (first_branch>>32)&MASK_16;
+    // for (auto branch : fn_borrows[fn_name][memid]) {
+    //     if (cstmt!=(branch>>32)&MASK_16) {
+    //         std::cout << " " << first_branch << " | " << branch << "\n";
+    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
 
-        }
-    }
+    //     }
+    // }
 }
 
 
@@ -1067,15 +1067,17 @@ Function *FunctionAST::codegen() {
     }
     body->Traverse([&ownid_to_memid](ExprAST *node) {
           if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
-            ownid_to_memid[stmt->OwnedId] = stmt->MemId;
+            if (stmt->OwnedId!=-2)
+                ownid_to_memid[stmt->OwnedId] = stmt->MemId;
           }
     });
   }
 
 
 
-  for (auto &[_, memid] : ownid_to_memid)
+  for (auto &[owned, memid] : ownid_to_memid)
       EvaluateBorrow(parser_struct, P->BaseName, memid);
+  
 
   for (auto &[dt, name, memid] : P->CArgs.borrows) {
     std::cout << "handle borrow " << P->BaseName << function_name << " | " << name << " | " << memid << "\n";

@@ -53,6 +53,10 @@ std::unordered_map<std::string,
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_owns;
 
+std::unordered_map<std::string,
+       std::vector<int>> fn_borrows_incomplete;
+
+
 std::unordered_map<std::string,std::vector<int>> fn_rets;
 
 std::vector<std::tuple<FunctionAST *,
@@ -237,7 +241,7 @@ bool MatchBorrows(Parser_Struct *parser_struct,
                     LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
             }
 
-            dt.is_own=false;
+            dt.is_own=0;
             dt.is_borrow=true;
             has_borrow = true;
             CArgs.borrows.push_back({
@@ -1435,7 +1439,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
             LogErrorS(parser_struct->line, "New not implemented for data type " + DataName);
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
-        data_type.is_own = IsOwn;
+        data_type.is_own = MemoryType;
         FunctionChecks(Callee);
         return data_type;
     }
@@ -1443,7 +1447,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
     // Other data types (DT_<data>)
     Data_Tree new_dt = fn_ret_dt[Callee];
     data_type = new_dt;
-    data_type.is_own = IsOwn;
+    data_type.is_own = MemoryType;
     return new_dt;
 }
 
@@ -1454,14 +1458,14 @@ void NewExprAST::Checks() {
     GetDataTree();
 }
 
-NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, bool is_own)
-            : DataName(DataName), Args(std::move(Args)), IsOwn(is_own) {
+NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, int memory_type)
+            : DataName(DataName), Args(std::move(Args)), MemoryType(memory_type) {
     this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
     // GetDataTree();
 
 
-    if (this->IsOwn)
+    if (this->MemoryType!=0)
         OwnedId = (*parser_struct->owned_id)++;
     MemId = (*parser_struct->mem_id)++;
 }
