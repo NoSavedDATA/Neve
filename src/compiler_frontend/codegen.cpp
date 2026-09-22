@@ -3972,9 +3972,10 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
                 data_name_to_type()[DataName])
         });
     } else {
-        if (in_vec(OwnedId, function_escapes[parser_struct->function_name]))
+        if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
+            std::cout << "Owned ret: " << parser_struct->function_name << " | " << OwnedId << "\n"; 
             ptr = fn_owned_ret_memory[OwnedId];
-        else {
+        } else {
             // own
             // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
             Value *ownedpool = get_scope_owned_pool(scope_struct);

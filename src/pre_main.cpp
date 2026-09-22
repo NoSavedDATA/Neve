@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <iostream>
 
+#include "compiler_frontend/escape_analysis.h"
 #include "compiler_frontend/modules.h"
 #include "compiler_frontend/ownership.h"
 #include "include.h"
@@ -223,8 +224,9 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     for(auto & fn : prebuild_functions)
         FunctionChecks(fn);
     FunctionChecks("__anon_expr");
-
-    BorrowChecker("__anon_expr", "__anon_expr");
+    std::unordered_map<std::string, int> seen_escapes, seen_borrows;
+    EscapeAnalysis("__anon_expr", "__anon_expr", seen_escapes);
+    BorrowChecker("__anon_expr", "__anon_expr", seen_borrows);
 
     TheJIT->genAST();
     // TheModule->print(llvm::errs(), nullptr);

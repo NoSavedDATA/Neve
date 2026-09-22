@@ -79,8 +79,8 @@ FunctionAST::FunctionAST(Parser_Struct *parser_struct, std::unique_ptr<Prototype
     //                parser_struct->function_name, this->Body);
     if (!parser_struct->has_own())
         return;
-    EscapeAnalysis(parser_struct,
-                   parser_struct->function_name, this->Body);
+    // EscapeAnalysis(parser_struct,
+    //                parser_struct->function_name, this->Body);
 }
   
 
@@ -119,7 +119,6 @@ llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
 
 void gen_generics() {
     for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
-
         fn_ast->parser_struct->function_name = fn;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
         fn_ast->function_name = fn;

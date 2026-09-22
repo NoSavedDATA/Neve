@@ -395,22 +395,22 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
 
 
 
-void GetBorrows(Parser_Struct *parser_struct, ExprAST *expr,
-                 std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
-                 std::unordered_map<int,int> &borrow_c,
-                 std::vector<int> &bad_borrows,
-                 std::unordered_map<int,uint64_t> &memid_to_branch,
-                 std::vector<int> &retids, int &retcount
+void GetBorrows(Parser_Struct *parser_struct,
+                std::unordered_map<std::string, int> &seen,
+                ExprAST *expr,
+                std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
+                std::unordered_map<int,int> &borrow_c,
+                std::vector<int> &bad_borrows,
+                std::unordered_map<int,uint64_t> &memid_to_branch,
+                std::vector<int> &retids, int &retcount
              ) {
 
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
         std::string base_callee = callexpr->BaseCallee;
-        if (parser_struct->function_name==callee)
-            return; // cut recursion
         // std::cout << "fn borrow: " << callee << "\n";
 
-        BorrowChecker(base_callee, callee);
+        BorrowChecker(base_callee, callee, seen);
 
         if (callee=="array_append") {
             RegisterBorrow(parser_struct,
@@ -482,12 +482,16 @@ void GetBorrows(Parser_Struct *parser_struct, ExprAST *expr,
 
 
 
-void BorrowChecker(std::string base_callee, std::string fn_name) {
-    if (in_vec(base_callee, native_fn)||fn_borrows.count(fn_name)>0
+void BorrowChecker(std::string base_callee, std::string fn_name,
+                    std::unordered_map<std::string, int> &seen) {
+    if (in_vec(base_callee, native_fn)
+            ||fn_borrows.count(fn_name)>0
+            ||seen.count(fn_name)>0
             ||!TheJIT->fn_map.count(base_callee))
         return; // skip llvm fn
-    std::cout << "BorrowChecker " << base_callee << "|" << fn_name << "\n";
+    // std::cout << "BorrowChecker " << base_callee << "|" << fn_name << "\n";
 
+    seen[fn_name] = 1;
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
@@ -498,20 +502,15 @@ void BorrowChecker(std::string base_callee, std::string fn_name) {
     int retcount=0;
     parser_struct->function_name = fn_name;
 
-    std::cout << "BorrowChecker " << fn_name << "\n";
 
     *parser_struct->mem_id = parser_struct->memid_arg_offset;
-    // if (parser_struct->class_name!="") {
-    //     std::cout << "for class-> " << parser_struct->class_name << " " << parser_struct->function_name << "\n";
-    //     (*parser_struct->mem_id)++;
-    // }
 
     for (auto &body : Body) {
-      body->Traverse([parser_struct,
+      body->Traverse([parser_struct, &seen,
               &borrow_ids, &borrow_c, &bad_borrows, &memid_to_branch,
               &retids, &retcount](ExprAST *node) {
 
-        GetBorrows(parser_struct, node,
+        GetBorrows(parser_struct, seen, node,
                     borrow_ids,
                     borrow_c,
                     bad_borrows,

@@ -773,7 +773,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             FnLastVersion[fn] = 1;
         } else
             idx = FnLastVersion[fn]++;
-        std::cout << "NEW VERSION " << idx << " | " << fn << "\n";
 
 
         if (fn!=base_name)
@@ -809,7 +808,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                   node->Checks();
               });
         }
-
         generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
         *parser_struct->mem_id = memid;
         *parser_struct->owned_id = ownid;
@@ -2969,9 +2967,6 @@ NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameabl
   
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];
-
-
-
 }
 
 
@@ -3152,10 +3147,6 @@ void NameableCall::Checks() {
   }
 
 
-
-
-  if (function_own_ret_count.count(Callee)>0)
-    OwnedId = (*parser_struct->owned_id)++;
     // std::cout << "---(call)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
   MemId = (*parser_struct->mem_id)++;
 }

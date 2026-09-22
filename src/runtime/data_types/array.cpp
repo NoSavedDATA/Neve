@@ -65,15 +65,14 @@ extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
           vec = newT<DT_array>(scope_struct, "array");
           break;
       case 1:
-          std::cout << "AS OWN" << "\n";
+          std::cout << "(array) AS OWN" << "\n";
           vec = (DT_array*)malloc(sizeof(DT_array));
           break;
       case 2:
-          std::cout << "AS BORROW" << "\n";
+          std::cout << "(array) AS BORROW" << "\n";
           vec = (DT_array*)malloc(sizeof(DT_array));
           break;
       default:
-          
           break;
   }
 

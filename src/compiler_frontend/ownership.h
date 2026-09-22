@@ -27,5 +27,6 @@ inline bool has_body(ExprAST *expr) {
 
 
 
-void BorrowChecker(std::string, std::string fn_name);
+void BorrowChecker(std::string, std::string fn_name,
+                   std::unordered_map<std::string, int> &);
 
