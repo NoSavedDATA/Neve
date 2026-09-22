@@ -211,14 +211,23 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
 }
 
 
-bool MatchBorrows(Parser_Struct *parser_struct,
+bool MatchOwned(Parser_Struct *parser_struct,
         std::string Callee, CallArgsTy &CArgs) {
     if (fn_arg_memid.count(Callee)==0)
         return false;
 
+    bool has_owned=false;
+    for (auto &dt : CArgs.dts)
+      if (dt.is_own) {
+          has_owned=true;
+          break;
+      }
+    if (!has_owned)
+      return false;
+
+
     bool has_borrow = false;
     std::vector<std::string> argnames;
-    
     int i=0;
     for (auto &argname : fn_argnames[Callee]) {
         if (argname=="scope_struct")
@@ -226,56 +235,31 @@ bool MatchBorrows(Parser_Struct *parser_struct,
         argnames.push_back(argname);
         if (i>=CArgs.dts.size()) // todo: this break is skipping default args
             break;
-
-        Data_Tree &dt = CArgs.dts[i++];
-        if (!dt.is_own&&!dt.is_borrow)
-            continue;
-
-        int arg_memid = fn_arg_memid[Callee][argname];
-        if (fn_borrows[Callee].count(arg_memid)) {
-            
-            auto &borrow_branches = fn_borrows[Callee][arg_memid];
-            uint64_t first_borrow = borrow_branches[0];
-            for (int j=1; j<borrow_branches.size(); j++) {
-                if (first_borrow!=borrow_branches[j])
-                    LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
-            }
-
-            dt.is_own=0;
-            dt.is_borrow=true;
-            has_borrow = true;
-            CArgs.borrows.push_back({
-                    dt, argname, arg_memid
-                });
-        }
     }
  
-    if (has_borrow) {
-        CArgs.args = argnames;
-        CArgs.template_ret = fn_ret_dt[Callee];
-        CArgs.template_ret.Print();
-    }
-    
-
-    return has_borrow;
+    CArgs.args = argnames;
+    CArgs.template_ret = fn_ret_dt[Callee];
+    return true;
 }
 
 
 std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy &CArgs) {
 
-  // bool has_borrow = MatchBorrows(parser_struct, Callee, CArgs);
-  bool has_borrow = false;
+  // std::string base_callee = Callee;
+  bool has_owned = MatchOwned(parser_struct, Callee, CArgs);
+
 
   bool found = true;
-  Callee = GetFnVersion(parser_struct, Callee, CArgs, found, true, true);
+  Callee = GetFnVersion(parser_struct, Callee, CArgs, found,
+                        true, !in_vec(Callee, native_fn));
 
   if (!found) {
-      if (Template_FnAST.count(Callee)>0) {
+      if (Template_FnAST.count(Callee)>0)
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
-      }
-      else if (has_borrow) {
+      else if (has_owned) {
         Template_FnAST[Callee][CArgs] = TheJIT->fn_map[Callee];
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+        // fn_called.push_back(Callee);
       }
 
       
@@ -288,6 +272,7 @@ std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, Call
       }
   }
   FunctionChecks(Callee);
+  // FunctionChecks(base_callee);
   return Callee;
 }
 
@@ -557,6 +542,8 @@ bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_
             continue;
         if (match_borrows&&l[i].is_borrow!=r[i].is_borrow)
             return false;
+        if (match_borrows&&l[i].is_own!=r[i].is_own)
+            return false;
         if (!accept_layout&&l[i].Type=="layout")
             return false;
         if (l[i].Compare(r[i])>0)
@@ -576,6 +563,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
     FnVersion[BaseName].push_back(CArgs);
 
+
     int size = CArgs.args.size();
     for (int i=0; i<size; ++i) {
         std::string arg_name = CArgs.args[i];
@@ -583,6 +571,19 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         data_typeVars[this->Name][arg_name] = dt;
         this->Args.push_back(arg_name);
         this->Types.push_back(dt);
+
+        // std::cout << "\nname: " << arg_name << "\n"; 
+        // dt.Print();
+        // std::cout << "SET ID owned " << (*parser_struct->owned_id) << "\n"; 
+        // std::cout << "SET ID memid " << (*parser_struct->mem_id) << "\n"; 
+        if (dt.is_own==ownTy)
+          function_owns[fn][arg_name] = (*parser_struct->owned_id)++;
+
+        if (dt.IsFromArena()) {
+          int memid = (*parser_struct->mem_id)++; 
+          fn_memid[this->Name][arg_name] = memid;
+          fn_arg_memid[this->Name][arg_name] = memid;
+        }
     }
     for (auto &[_, name, dt] : CArgs.dyn_args) {
         this->Args.push_back(name);
@@ -594,7 +595,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
     
     fn_ret_dt[this->Name] = CArgs.template_ret;
-    native_fn.push_back(this->Name);
 
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
     if (parser_struct->gpu==0) {
@@ -742,6 +742,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         bool is_op) {
 
     FunctionAST *fn_ast=nullptr; 
+
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
@@ -772,6 +773,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             FnLastVersion[fn] = 1;
         } else
             idx = FnLastVersion[fn]++;
+        std::cout << "NEW VERSION " << idx << " | " << fn << "\n";
 
 
         if (fn!=base_name)
@@ -789,11 +791,15 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         fn_ret_dt[fn] = CArgs.template_ret;
 
 
+        int memid = *parser_struct->mem_id;
+        int ownid = *parser_struct->owned_id;
+        *parser_struct->mem_id = 0;
+        *parser_struct->owned_id = 0;
+
         auto proto = std::make_unique<PrototypeAST>(parser_struct,
                         base_name, fn,
                         CArgs, templ);
 
-        generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
 
         fn_ast->parser_struct->function_name = fn;
         for (auto &body : fn_ast->Body) {
@@ -803,6 +809,10 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                   node->Checks();
               });
         }
+
+        generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
+        *parser_struct->mem_id = memid;
+        *parser_struct->owned_id = ownid;
 
         // if (parser_struct->gpu>0) {
         //     int gpu = parser_struct->gpu;
@@ -1131,6 +1141,18 @@ void ObjectExprAST::Checks() {
           FunctionChecks(create_fn);
         }  
     }
+
+    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+        if (!this->HasInit[i]) {
+            std::string name = this->VarNames[i].first;
+            if(!this->VarNames[i].second)
+                continue;
+            int owned_id = this->VarNames[i].second->GetIsOwned();
+            if (owned_id>=-1) 
+                function_owns[parser_struct->function_name][name] = owned_id;
+        }
+    }
+
 }
 
 ObjectExprAST::ObjectExprAST(
@@ -1149,9 +1171,6 @@ ObjectExprAST::ObjectExprAST(
             std::string name = this->VarNames[i].first;
             if(!this->VarNames[i].second)
                 continue;
-            int owned_id = this->VarNames[i].second->GetIsOwned();
-            if (owned_id>=-1) 
-                function_owns[parser_struct->function_name][name] = owned_id;
             int memid = this->VarNames[i].second->GetMemId();
             if (memid > -2)
                 fn_memid[parser_struct->function_name][name] = memid;
@@ -1226,6 +1245,9 @@ NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> In
 }
  
 void UnkVarExprAST::Checks() {
+  if (checked)
+      return;
+  checked=true;
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
@@ -1250,6 +1272,15 @@ void UnkVarExprAST::Checks() {
 
 
 
+  for(auto &[name, expr] : this->VarNames) {
+    expr->Checks();
+    int owned_id = expr->GetIsOwned();
+    if (owned_id > -2)
+        function_owns[parser_struct->function_name][name] = owned_id;
+    int memid = expr->GetMemId();
+    if (memid > -2)
+        fn_memid[parser_struct->function_name][name] = memid; 
+  }
 }
 
 UnkVarExprAST::UnkVarExprAST(
@@ -1260,15 +1291,6 @@ UnkVarExprAST::UnkVarExprAST(
   : VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {
   this->parser_struct = parser_struct;
-
-  for(auto &[name, expr] : this->VarNames) {
-    int owned_id = expr->GetIsOwned();
-    if (owned_id>=-1)
-        function_owns[parser_struct->function_name][name] = owned_id;
-    int memid = expr->GetMemId();
-    if (memid > -2)
-        fn_memid[parser_struct->function_name][name] = memid; 
-  }
 }
 
 bool UnkVarExprAST::GetNeedGCSafePoint() {
@@ -1341,6 +1363,9 @@ DictExprAST::DictExprAST(
 
 
 void DataExprAST::Checks() {
+  if(checked)
+      return;
+  checked=true;
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     if(this->isSelf)
       continue;    
@@ -1372,6 +1397,22 @@ void DataExprAST::Checks() {
     }
   }
 
+
+
+  if (!data_type.IsFromArena())
+      return;
+
+  for(auto &[name, expr] : this->VarNames) {
+    if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
+        function_owns[parser_struct->function_name][name]=(*parser_struct->owned_id)++;
+    } else {
+        expr->Checks();
+        int owned_id = expr->GetIsOwned();
+        if (owned_id>=-1)
+            function_owns[parser_struct->function_name][name] = owned_id;
+    }
+  }
+  SetMemId();
 }
   
 DataExprAST::DataExprAST(
@@ -1396,8 +1437,6 @@ DataExprAST::DataExprAST(
 
       data_type.Nested_Data.push_back(Data_Tree(std::to_string(size)));
   }
-
-  SetMemId();
 }
 
 void DataExprAST::SetMemId() {
@@ -1406,12 +1445,10 @@ void DataExprAST::SetMemId() {
 
   for(auto &[name, expr] : this->VarNames) {
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
-        function_owns[parser_struct->function_name][name]=(*parser_struct->owned_id)++;
+    // std::cout << "---(owned)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
         fn_memid[parser_struct->function_name][name] = (*parser_struct->mem_id)++;
     } else {
-        int owned_id = expr->GetIsOwned();
-        if (owned_id>=-1)
-            function_owns[parser_struct->function_name][name] = owned_id;
+        expr->Checks();
         int memid = expr->GetMemId();
         if (memid > -2)
             fn_memid[parser_struct->function_name][name] = memid;
@@ -1427,6 +1464,24 @@ void DataExprAST::SetMemId() {
 bool DataExprAST::GetNeedGCSafePoint() {
     return true;
 }
+
+MeminferExpr::MeminferExpr(Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<ExprAST>> v)
+    : v(std::move(v)) {
+    this->parser_struct = parser_struct;
+}
+void MeminferExpr::Checks() {
+    int rhs = newTy;
+    int lhs = (v[0]->GetIsOwned()!=-2) ? ownTy : memTy;
+
+    if (v.size()==2)
+        rhs = (v[1]->GetIsOwned()!=-2) ? ownTy : memTy;
+
+    memTy = std::max(lhs, rhs);
+
+    std::cout << "memTy: " << memTy << ", lhs: " << lhs << ", rhs: " << rhs << "\n";
+}
+
 
 Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
     if(data_type.Type!="")
@@ -1456,18 +1511,28 @@ void NewExprAST::Checks() {
         return;
     checked=true;
     GetDataTree();
+    if (meminfer_expr) {
+        if (auto *meminfer_stmt = dynamic_cast<MeminferExpr*>(meminfer_expr.get())) {
+            meminfer_expr->Checks();
+            MemoryType = meminfer_stmt->memTy;
+        }
+    }
+
+    if (MemoryType!=newTy)
+        OwnedId = (*parser_struct->owned_id)++;
+    
+    // std::cout << "---(own)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
+    MemId = (*parser_struct->mem_id)++;
 }
 
-NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, int memory_type)
-            : DataName(DataName), Args(std::move(Args)), MemoryType(memory_type) {
+
+NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args, int memory_type, 
+        std::unique_ptr<ExprAST> meminfer_expr)
+            : DataName(DataName), Args(std::move(Args)), MemoryType(memory_type),
+              meminfer_expr(std::move(meminfer_expr)){
     this->parser_struct = parser_struct;
     Callee = DataName + "_Create";
     // GetDataTree();
-
-
-    if (this->MemoryType!=0)
-        OwnedId = (*parser_struct->owned_id)++;
-    MemId = (*parser_struct->mem_id)++;
 }
 
 bool NewExprAST::GetNeedGCSafePoint() {
@@ -1995,8 +2060,22 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 void BinaryExprAST::Checks() {
   GetDataTree();
 
+
+  int memid = RHS->GetMemId();
+  if (Op=='='&& memid>=-1) {
+    if (auto *nameable = dynamic_cast<Nameable*>(LHS.get())) {
+        if (nameable->Depth==1) {
+          std::string name = nameable->GetName(); 
+          RHS->Checks();
+          int owned_id = RHS->GetIsOwned();
+          if (owned_id > -2)
+            function_owns[parser_struct->function_name][name] = owned_id;
+        }
+    }
+  }
+
   std::string LType = L_dt.Type;
-  std::string Lname = this->LHS->GetName();
+  std::string Lname = LHS->GetName();
 
   if (IsPositionalArg(parser_struct, Lname))
     return;
@@ -2078,10 +2157,7 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
   if (Op=='='&& memid>=-1) {
     if (auto *nameable = dynamic_cast<Nameable*>(this->LHS.get())) {
         if (nameable->Depth==1) {
-            std::string name = nameable->GetName(); 
-          int owned_id = this->RHS->GetIsOwned();
-          if (owned_id > -2)
-            function_owns[parser_struct->function_name][name] = owned_id;
+          std::string name = nameable->GetName(); 
           fn_memid[parser_struct->function_name][name] = memid;
         }
     }
@@ -2533,6 +2609,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         CArgs.args.push_back(arg_name);
 
         if (arg.IsFromArena()) {
+        // std::cout << "---(proto)SET ID memid " << this->Name << "|" << (*parser_struct->mem_id) << "\n"; 
           int MemId = (*parser_struct->mem_id)++;
           fn_memid[this->Name][arg_name] = MemId;
           fn_arg_memid[this->Name][arg_name] = MemId;
@@ -2548,7 +2625,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     int required_args = arg_count-ctx_offset;
     Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
     Function_Arg_Count[this->Name] = required_args;
-    native_fn.push_back(this->Name);
 
     fn_ret_dt[this->Name] = ReturnType;
     CArgs.template_ret = ReturnType;
@@ -2894,9 +2970,8 @@ NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameabl
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];
 
-  if (function_own_ret_count.count(Callee)>0)
-    OwnedId = (*parser_struct->owned_id)++;
-  MemId = (*parser_struct->mem_id)++;
+
+
 }
 
 
@@ -3064,6 +3139,7 @@ void NameableCall::Checks() {
 
 
 
+  // Check for Generics
   BaseCallee = Callee;
   if (needs_version) {
       
@@ -3074,6 +3150,14 @@ void NameableCall::Checks() {
 
       TemplateSolveCompiledArgs(Callee, BaseCallee);
   }
+
+
+
+
+  if (function_own_ret_count.count(Callee)>0)
+    OwnedId = (*parser_struct->owned_id)++;
+    // std::cout << "---(call)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
+  MemId = (*parser_struct->mem_id)++;
 }
 
 
@@ -3089,7 +3173,6 @@ Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
 
 
 void FunctionChecks(std::string fn_name) {
-
 
     if (TheJIT->fn_map.count(fn_name)>0) {
       if (in_vec(fn_name, fn_called))

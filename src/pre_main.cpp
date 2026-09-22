@@ -224,7 +224,7 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
         FunctionChecks(fn);
     FunctionChecks("__anon_expr");
 
-    BorrowChecker("__anon_expr");
+    BorrowChecker("__anon_expr", "__anon_expr");
 
     TheJIT->genAST();
     // TheModule->print(llvm::errs(), nullptr);

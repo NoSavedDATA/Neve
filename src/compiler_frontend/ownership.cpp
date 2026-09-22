@@ -13,6 +13,7 @@
 #include "ownership.h"
 #include "expressions.h"
 #include "logging.h"
+#include "modules.h"
 #include "scope.h"
 #include <cstdint>
 #include <cstdlib>
@@ -25,70 +26,6 @@
 
 
 #define MASK_16 0xFFFFULL
-
-std::vector<std::pair<Data_Tree, Value*>> OwnedValues;
-
-void Clear_Fn_Owned_Values(Value *scope_struct) {
-    Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[dt, ptr] : OwnedValues) {
-        std::string disown_method = dt.Type+"_disown";
-        if (fn_ret_dt.count(disown_method)>0) {
-            set_scope_obj(scope_struct, ptr);
-            call(disown_method, {scope_struct, ptr});
-        }
-    }
-    set_scope_obj(scope_struct, previous_obj);
-}
-
-
-void GetScopeOwnedValues(ExprAST *expr,
-        std::vector<std::pair<Data_Tree,Value*>> &owneds) {
-    if(has_body(expr)) return;
-
-    if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
-        if (new_expr->MemoryType>0)
-            owneds.push_back({Data_Tree(new_expr->DataName), new_expr->ptr});
-    }
-}
-
-
-void Clear_Owned_Values(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Body) {
-    std::vector<std::pair<Data_Tree,Value*>> owneds;
-    for (auto &body : Body) {
-        body->Traverse([&owneds](ExprAST *node) {
-            GetScopeOwnedValues(node, owneds);
-        });
-    }
-
-    Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[dt, ptr] : owneds) {
-        set_scope_obj(scope_struct, ptr);
-        std::string disown_method = dt.Type+"_disown";
-        if (fn_ret_dt.count(disown_method)>0)
-        call(disown_method, {scope_struct, ptr});
-    }
-    set_scope_obj(scope_struct, previous_obj);
-}
-
-
-
-
-void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
-  if (!parser_struct||!scope_struct)
-    return;
-  if (!parser_struct->has_own())
-    return;
-
-  call("free", {
-    get_scope_owned_pool(scope_struct)
-  });
-}
-
-void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, bool clear_owned) {
-  if (clear_owned)
-    Clear_Fn_Owned_Values(scope_struct);
-  FreeOwnedPool(scope_struct, parser_struct);
-}
 
 
 
@@ -118,55 +55,17 @@ int Nameable::GetMemId() {
     if (Depth>1)
         return -2;
     std::string scope = parser_struct->function_name;
+    // std::cout << " " << scope << " | " << Name << "\n";
     if (fn_memid[scope].count(Name)==0)
         return -2;
     return fn_memid[scope][Name];
 }
 int NameableCall::GetMemId() {
+    // std::cout << "as call " << MemId << "\n";
     return MemId;
 }
 
 
-
-
-
-
-
-int ExprAST::GetIsOwned() {
-    return -2;
-}
-int NewExprAST::GetIsOwned() {
-    return OwnedId;
-}
-int UnaryExprAST::GetIsOwned() {
-    return Operand->GetIsOwned();
-}
-int BinaryExprAST::GetIsOwned() {
-    // return LHS->GetIsOwned() || RHS->GetIsOwned();
-    int id = RHS->GetIsOwned();
-    if (id>=0) return id;
-    id = LHS->GetIsOwned();
-    if (id>=0) return id;
-    return -2;
-}
-int Nameable::GetIsOwned() {
-    // Check Depth 1 owned for borrowed
-    if (Depth>1)
-        return -2;
-    std::string scope = parser_struct->function_name;
-    if (function_owns[scope].count(Name)==0)
-        return -2;
-    return function_owns[scope][Name];
-}
-int NameableCall::GetIsOwned() {
-    // allocates return
-    if (OwnedPoolOffset>=0) 
-        return OwnedId;
-    // returns into reserved memory
-    if (function_callee_escapes.count(Callee)>0)
-        return -1;
-    return -2;
-}
 
 
 
@@ -241,17 +140,6 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
 
 
 
-
-
-void EscapeAnalysisRecursive(Parser_Struct *parser_struct, std::string fn_name) {
-    if (TheJIT->fn_map.count(fn_name)==0)
-        LogError(parser_struct->line, "Escape analysis failed for " + fn_name);
-    auto &body = TheJIT->fn_map[fn_name]->Body;
-    EscapeAnalysis(parser_struct,fn_name,body);
-}
-
-
-
 uint64_t FormatLifetime(uint64_t branch, int memid) {
     return (branch&~MASK_16) | (uint16_t)memid;
 }
@@ -305,6 +193,8 @@ inline void RegisterBorrow(Parser_Struct *parser_struct,
     uint64_t branch = (borrow_type==0)
                     ? parent_branch
                     : 0;
+
+    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
 
     if (appended_memid> -2) {
         borrow_ids[appended_memid].push_back(branch);
@@ -371,7 +261,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
     std::string base_callee = callexpr->BaseCallee;
     // if (fn_argnames.count(callee))
         // std::cout << "Failed for " << callee << "\n";
-    if (!in_vec(callee,fn_called))
+    if (in_vec(callee,native_methods))
         return; // skip llvm defined
 
 
@@ -408,6 +298,8 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
 
             int arg_memid = fn_arg_memid[callee][argname];
             arg_to_caller_memid[arg_memid] = parent_memid;
+
+            // std::cout << " " << argname << " | " << arg_memid << "\n"; 
         }
     }
 
@@ -436,7 +328,12 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             int arg_memid = fn_arg_memid[callee][argname];
 
 
+
+
             if (fn_borrows[callee].count(arg_memid)>0) {
+                // if(begins_with(callee, "test"))
+                //     std::cout << "->as borrow " << arg_memid << "\n";
+
                 std::vector<uint64_t> caller_parents;
                 for (auto &borrow : fn_borrows[callee][arg_memid]) {
                     int owner_memid = borrow&MASK_16;
@@ -460,6 +357,8 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 Data_Tree &dt = CArgs.dts[j-1];
                 int ownid = nameableexpr->GetIsOwned();
 
+
+
                 bool is_owned = ownid!=-2||dt.is_borrow||dt.is_own;
                 if (is_owned) {
                     has_borrow=true;
@@ -471,12 +370,15 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 }
             }
         }
+
+
     }
 
     if (has_borrow) {
         CArgs.args = argnames;
         CArgs.template_ret = fn_ret_dt[callee];
         bool found = false;
+
         callee = GetFnVersion(parser_struct, base_callee, CArgs, found, true, true);
         if (!found) {
             Template_FnAST[base_callee][CArgs] = TheJIT->fn_map[base_callee];
@@ -503,11 +405,12 @@ void GetBorrows(Parser_Struct *parser_struct, ExprAST *expr,
 
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
+        std::string base_callee = callexpr->BaseCallee;
         if (parser_struct->function_name==callee)
             return; // cut recursion
         // std::cout << "fn borrow: " << callee << "\n";
 
-        BorrowChecker(callee);
+        BorrowChecker(base_callee, callee);
 
         if (callee=="array_append") {
             RegisterBorrow(parser_struct,
@@ -538,7 +441,7 @@ void GetBorrows(Parser_Struct *parser_struct, ExprAST *expr,
         for(auto &[name, _] : dataexpr->VarNames) {
             if (fn_memid[parser_struct->function_name].count(name)) {
                 int memid = fn_memid[parser_struct->function_name][name];
-                std::cout << "UNK " << name << "->"<< memid << "\n";
+                // std::cout << "UNK " << name << "->"<< memid << "\n";
                 memid_to_branch[memid] = FormatLifetime(dataexpr->BranchId, memid);
             }
         }
@@ -579,10 +482,13 @@ void GetBorrows(Parser_Struct *parser_struct, ExprAST *expr,
 
 
 
-void BorrowChecker(std::string fn_name) {
-    if (!in_vec(fn_name, fn_called)||fn_borrows.count(fn_name)>0)
+void BorrowChecker(std::string base_callee, std::string fn_name) {
+    if (in_vec(base_callee, native_fn)||fn_borrows.count(fn_name)>0
+            ||!TheJIT->fn_map.count(base_callee))
         return; // skip llvm fn
-    FunctionAST *fn_ast = TheJIT->fn_map[fn_name];
+    std::cout << "BorrowChecker " << base_callee << "|" << fn_name << "\n";
+
+    FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
     std::unordered_map<int,std::vector<uint64_t>> borrow_ids;
@@ -590,6 +496,7 @@ void BorrowChecker(std::string fn_name) {
     std::unordered_map<int,uint64_t> memid_to_branch;
     std::vector<int> retids, bad_borrows;
     int retcount=0;
+    parser_struct->function_name = fn_name;
 
     std::cout << "BorrowChecker " << fn_name << "\n";
 
@@ -630,124 +537,4 @@ void BorrowChecker(std::string fn_name) {
             fn_borrows_incomplete[fn_name].push_back(memid);
         }
     }
-}
-
-
-void GetOwnedRet(Parser_Struct *parser_struct, ExprAST *expr,
-                 std::vector<int> &owned_ids,
-                 std::vector<int> &owned_callee_ids,
-                 int &own_ret_count, int &new_ret) {
-    if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
-        std::string callee = callexpr->Callee;
-        if (function_own_ret_count.count(callee)==0) {
-            if (fn_owns.count(callee)==0)
-                return;
-            std::cout << "NEEDS RECURSIZE escape analysis" << "\n";
-            EscapeAnalysisRecursive(parser_struct, callee);
-        }
-        owned_callee_ids.push_back(callexpr->OwnedId);
-        own_ret_count+=function_own_ret_count[callee];
-        return;
-    }
-
-    if (auto *ret_expr = dynamic_cast<RetExprAST*>(expr)) {
-        for (auto &var : ret_expr->Vars) {
-            int owned_id = var->GetIsOwned();
-
-            // todo: can change to >=0?
-            if (owned_id>=-1) {
-                owned_ids.push_back(owned_id);
-                own_ret_count++;
-            }
-            else if (auto *callexpr = dynamic_cast<NameableCall*>(var.get()))
-                continue;
-            else
-                new_ret++;
-            if (owned_ids.size()>0&&ret_expr->Vars.size()>1)
-                LogErrorC(-1, "Tuple function return does not yet support owned values.");
-        }
-    }
-}
-
-void EscapeAnalysis(Parser_Struct *parser_struct, std::string fn_name,
-            std::vector<std::unique_ptr<ExprAST>> &Body) {
-    if(!fn_ret_dt[fn_name].IsFromArena())
-        return;
-    if (function_own_ret_count.count(fn_name)>0)
-        return;
-
-
-    std::vector<int> owned_ids, owned_callee_ids;
-    int new_ret=0, own_ret_count=0;
-
-    for (auto &body : Body) {
-      body->Traverse([parser_struct, &owned_ids,
-              &owned_callee_ids,
-              &own_ret_count, &new_ret](ExprAST *node) {
-        GetOwnedRet(parser_struct, node,
-                    owned_ids, owned_callee_ids,
-                    own_ret_count, new_ret);
-      });
-    }
-
-    if (own_ret_count>0&&new_ret>0) {
-        LogError(parser_struct->line, "Ambiguous return for \"" + fn_name + "\". Cannot return GC arena and owned pointers from the same function.");
-    }
-
-    function_escapes[fn_name] = owned_ids;
-    function_callee_escapes[fn_name] = owned_callee_ids;
-    function_own_ret_count[fn_name] = own_ret_count;
-}
-
-
-
-void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
-    if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
-        if (new_expr->MemoryType>0) {
-            new_expr->OwnedPoolOffset = last_offset;
-            last_offset += ClassSize[new_expr->DataName];
-        }
-    }
-    if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
-        std::string callee = callexpr->Callee;
-
-        int owned_id = callexpr->OwnedId;
-        if (owned_id < -1||in_vec(owned_id, function_callee_escapes[fn_name]))
-            return;
-        if (function_own_ret_count.count(callee)==0)
-            return;
-        int size = function_own_ret_count[callee];
-        callexpr->OwnedPoolOffset = last_offset;
-        callexpr->OwnedPoolCap = size;
-        last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-    }
-}
-
-
-void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
-        std::string fn_name, 
-        std::vector<std::unique_ptr<ExprAST>> &Body) {
-    if(!parser_struct->has_own())
-        return;
-
-    // Set own pool
-    int last_offset=0;
-    for (auto &body : Body) {
-        body->Traverse([&last_offset, fn_name](ExprAST *node) {
-            GetOwnedValues(node, fn_name, last_offset);
-        });
-    }
-    bool has_owned_pool = last_offset>0;
-
-    if (has_owned_pool) {
-      Value *ownedpool = callret("malloc", {const_int(last_offset)});
-      set_scope_owned_pool(scope_struct, ownedpool);
-    }
-
-  for (auto &id : function_escapes[fn_name]) {
-    if (id<0)
-        continue;
-    fn_owned_ret_memory[id] = get_scope_escape_retoffset(scope_struct);
-  }
-
 }

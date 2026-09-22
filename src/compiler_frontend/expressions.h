@@ -153,6 +153,8 @@ struct ArgsEqual {
         for (int i=0;i<a.dts.size();++i) {
             if (a.dts[i].Compare(b.dts[i])>0)
                 return false;
+            if(a.dts[i].is_own!=b.dts[i].is_own)
+                return false;
         }
 
         if (!a.has)
@@ -316,6 +318,7 @@ class DictExprAST : public VarExprAST {
 class UnkVarExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
+    bool checked=false;
 
     UnkVarExprAST(
       Parser_Struct *,
@@ -442,7 +445,7 @@ class DataExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
     Data_Tree data_type;
-    bool HasNotes, IsStruct, DtHasCreateFn, IsOwned;
+    bool HasNotes, IsStruct, DtHasCreateFn, IsOwned, checked=false;
     std::string dt_type, create_fn; 
 
     DataExprAST(
@@ -462,19 +465,33 @@ class DataExprAST : public VarExprAST {
 };
 
 
+
+class MeminferExpr : public ExprAST {
+  public:
+  std::vector<std::unique_ptr<ExprAST>> v;
+  int memTy=newTy;
+
+  MeminferExpr(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>);
+  Value *codegen(Value *scope_struct) override;
+  void Checks();
+};
+
 class NewExprAST : public ExprAST {
   public:
     std::string DataName, Callee;
     std::vector<std::unique_ptr<ExprAST>> Args;
+    std::unique_ptr<ExprAST> meminfer_expr=nullptr;
     bool is_high_level_obj=false, checked=false;
     Data_Tree data_type=Data_Tree("");
-    int MemId=0, OwnedPoolOffset=-1, MemoryType=0,
+    int MemId=0, OwnedPoolOffset=-1, MemoryType=newTy,
         OwnedId=-2, OwnedRetPoolOffset=-1;
     Value *ptr=nullptr;
 
+
     NewExprAST(
       Parser_Struct *, std::string,
-      std::vector<std::unique_ptr<ExprAST>> Args, int memory_type=0);
+      std::vector<std::unique_ptr<ExprAST>> Args, int memory_type=0,
+      std::unique_ptr<ExprAST> meminfer_expr=nullptr);
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
@@ -484,6 +501,7 @@ class NewExprAST : public ExprAST {
   void AllocPtr(Value *ptr);
   void Checks();
 };
+
 
 
   
@@ -1223,6 +1241,8 @@ struct Arg_Pair {
     Arg_Pair(Data_Tree, std::string);
 };
 
+
+// void MakeTemplate();
 
 
 void bt(int cut=8);

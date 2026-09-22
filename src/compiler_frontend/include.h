@@ -20,6 +20,7 @@ extern Value *stack, *stack_top_value, *cur_self;
 
 #include "scope.h"
 #include "ownership.h"
+#include "escape_analysis.h"
 #include "codegen.h"
 #include "function_ast.h"
 #include "libs_parser.h"

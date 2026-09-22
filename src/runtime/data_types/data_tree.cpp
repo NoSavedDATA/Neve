@@ -189,6 +189,7 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
 
     std::string other_type = other_tree.Type;
 
+
     if(is_generic||other_tree.is_generic)
         return 0;
 
@@ -230,6 +231,8 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
 
     if(Type=="any"||other_type=="any")
         return 0;
+
+
 
     if(Type=="charv"||other_type=="charv")
         return 0;

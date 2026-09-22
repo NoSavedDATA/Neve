@@ -3956,26 +3956,25 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 void NewExprAST::AllocPtr(Value *scope_struct) {
-    if (!MemoryType) {
+
+
+    if (MemoryType==newTy) {
         // new - GC arena alloc
         ptr = callret("allocate_pool", 
                         {scope_struct,
                          const_int(ClassSize[DataName]),\
                          const_int16(data_name_to_type()[DataName])
                          });
-    } else if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
-        // own - escaped
-        // std::cout << "IS ESCAPED " << parser_struct->function_name << " | " << OwnedId << "|" << fn_owned_ret_memory.count(OwnedId) << "\n";
-        ptr = fn_owned_ret_memory[OwnedId];
+    } else if(fn_borrows[parser_struct->function_name].count(MemId)>0) {
+        LogBlue("BORROW " + parser_struct->function_name + " | " + std::to_string(MemId));
+        ptr = callret("malloc",
+            {const_int(
+                data_name_to_type()[DataName])
+        });
     } else {
-        bool is_borrow = fn_borrows[parser_struct->function_name].count(MemId)>0;
-        if (is_borrow) {
-            std::cout << "BORROW " << parser_struct->function_name << " | " <<  MemId << "\n";
-            ptr = callret("malloc",
-                {const_int(
-                    data_name_to_type()[DataName])
-            });
-        } else {
+        if (in_vec(OwnedId, function_escapes[parser_struct->function_name]))
+            ptr = fn_owned_ret_memory[OwnedId];
+        else {
             // own
             // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
             Value *ownedpool = get_scope_owned_pool(scope_struct);
@@ -3986,6 +3985,13 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
         }
     }
 }
+
+
+Value *MeminferExpr::codegen(Value *scope_struct) {
+
+    return const_int(0);
+}
+
 
 Value *NewExprAST::codegen(Value *scope_struct) {
     Value *nullPtr = ConstantPointerNull::get(
@@ -4601,7 +4607,6 @@ Value *ViewExprAST::codegen(Value *scope_struct) {
 
 Value *NameableLLVMIRCall::codegen(Value *scope_struct) {  
     int arg_type_check_offset=1, target_args_size=Args.size();
-    bool is_nsk_fn = in_str(Callee, native_methods);
 
     // std::vector<Value*> ArgsV = {scope_struct};
 
@@ -5323,9 +5328,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool;
 
-    if (Callee=="array_append")  {
+    if (Callee=="array_append")
         return codegen_append(scope_struct);
-    }
     if (is_tile)
         return codegen_tile(scope_struct); 
     

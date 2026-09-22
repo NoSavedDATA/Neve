@@ -171,7 +171,7 @@ extern "C" int prebuild() {
                       "cpu_idx", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "print_tensor", "path_exists", "dir_exists", "load_bin_idx",
                       "importance_sample_idx", "importance_sample_weight",
-                      "cross_entropy_idx"};
+                      "cross_entropy_idx", "array_append"};
     native_functions = concat_str_vec(native_functions, return_string_fn);
     native_fn = concat_str_vec(native_methods, native_functions);
 

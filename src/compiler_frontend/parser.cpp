@@ -1726,12 +1726,8 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct *parser_struct, std::strin
 
 
 std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string class_name, bool is_owned) {
-
-  if (is_owned) {
-
-      std::cout << "parse owned" << "\n";
+  if (is_owned)
       getNextToken();
-  }
 
   bool is_struct=(CurTok==tok_struct);
 
@@ -1837,9 +1833,9 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string
 
 
 
-std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string class_name, int memory_type=0) {
+std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string class_name, int memory_type, std::unique_ptr<ExprAST> MeminferExpr=nullptr) {
     if (memory_type!=unkmemTy)
-    getNextToken(); // eat new/own
+        getNextToken(); // eat new/own
 
     if(CurTok!=tok_data&&Classes.count(IdentifierStr)==0) {
         if (!(tokenizer->has_lib_file && CurTok==tok_identifier))
@@ -1853,15 +1849,13 @@ std::unique_ptr<ExprAST> ParseNewExpr(Parser_Struct *parser_struct, std::string 
         return LogErrorBreakLine(parser_struct->line, "Expected \"(\" at new expression.");
 
     auto Args = Parse_Arguments(parser_struct, class_name);    
-    return std::make_unique<NewExprAST>(parser_struct, IdName, std::move(*Args), memory_type);
+    return std::make_unique<NewExprAST>(parser_struct, IdName, std::move(*Args), memory_type, std::move(MeminferExpr));
 }
 
 
 
 std::unique_ptr<ExprAST> ParseMemInferExpr(Parser_Struct *parser_struct, std::string class_name) {
     getNextToken(); // eat ~
-    LogBlue("Mem infer");
-    
     std::vector<std::unique_ptr<ExprAST>> v;
 
     v.push_back(ParseExpression(parser_struct,class_name,false));
@@ -1871,7 +1865,8 @@ std::unique_ptr<ExprAST> ParseMemInferExpr(Parser_Struct *parser_struct, std::st
         v.push_back(ParseExpression(parser_struct,class_name,false));
     }
 
-    return ParseNewExpr(parser_struct, class_name, unkmemTy);
+    return ParseNewExpr(parser_struct, class_name, unkmemTy,
+            std::make_unique<MeminferExpr>(parser_struct, std::move(v)));
 }
 
 
@@ -2072,7 +2067,7 @@ std::unique_ptr<ExprAST> ParseLaunch(Parser_Struct *parser_struct, std::string c
 ///   ::= ifexpr
 ///   ::= forexpr
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string class_name, bool can_be_list) {
-  std::cout << "tok " << CurTok << " | " << ReverseToken(CurTok) << "\n";
+  // std::cout << "tok " << CurTok << " | " << ReverseToken(CurTok) << "\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));
@@ -2156,7 +2151,7 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
   case tok_channel:
     return ParseChannelExpr(parser_struct, class_name);
   case tok_new:
-    return ParseNewExpr(parser_struct, class_name);
+    return ParseNewExpr(parser_struct, class_name, 0);
   case tok_own:
     return ParseNewExpr(parser_struct, class_name, 1);
   case tok_struct:
