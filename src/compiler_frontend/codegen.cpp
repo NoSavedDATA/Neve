@@ -5348,7 +5348,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
             std::string ret = GetDataTree().Type;
             set_scope_retpool(scope_struct, previous_owned_pool,
                     ClassSize[ret], OwnedPoolOffset);
-            p2t("recover prev retpool metadata");
         }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }

@@ -77,12 +77,13 @@ void Clear_Owned_Values(Value *scope_struct, std::vector<std::unique_ptr<ExprAST
 void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
   if (!parser_struct||!scope_struct)
     return;
-  // if (!parser_struct->has_own())
-  //   return;
+  if (!parser_struct->has_owned_pool)
+    return;
 
-  // call("free", {
-  //   get_scope_owned_pool(scope_struct)
-  // });
+  std::cout << "FrEE POOL " << "\n";
+  call("free", {
+    get_scope_owned_pool(scope_struct)
+  });
 }
 
 void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, bool clear_owned) {
@@ -170,8 +171,6 @@ void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
         std::string callee = callexpr->Callee;
         int owned_id = callexpr->OwnedId;
         
-        // if (fn_name=="beta_nest")
-            std::cout << "eval: " << fn_name << ": " << callee << " | " << owned_id << "\n";
         
         if (owned_id==-2
             ||in_vec(callexpr->GetIsOwned(),function_escapes[fn_name]))
@@ -184,14 +183,13 @@ void GetOwnedValues(ExprAST *expr, std::string fn_name, int &last_offset) {
             return;
         }
 
-        std::cout << "$ " << callee << " | " << owned_id << "\n";
 
 
         int size = function_own_ret_count[callee];
         callexpr->OwnedPoolOffset = last_offset;
         callexpr->OwnedPoolCap = size;
         last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-        std::cout << "set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
+        std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
     }
 }
 
@@ -211,6 +209,7 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
     bool has_owned_pool = last_offset>0;
 
     if (has_owned_pool) {
+        parser_struct->has_owned_pool = true;
         std::cout << "==HAS_owned_pool " << parser_struct->function_name << ", last offset: " << last_offset << "\n";
         Value *ownedpool = callret("malloc", {const_int(last_offset)});
         set_scope_owned_pool(scope_struct, ownedpool);
