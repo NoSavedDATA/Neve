@@ -5327,7 +5327,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     int target_args_size=Args.size()+1;
 
-    Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool;
+    Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool, *prev_offset, *prev_stride;
 
     if (Callee=="array_append")
         return codegen_append(scope_struct);
@@ -5342,12 +5342,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
         previous_stack_top = Load_Stack_Top(parser_struct->function_name);
-        previous_owned_pool = get_scope_owned_pool(scope_struct);
+        previous_owned_pool = get_scope_owned_pool(scope_struct,
+                                prev_offset, prev_stride);
         if(OwnedPoolOffset>=0) {
             std::string ret = GetDataTree().Type;
             set_scope_retpool(scope_struct, previous_owned_pool,
                     ClassSize[ret], OwnedPoolOffset);
-            p2t("recover prev retpool");
+            p2t("recover prev retpool metadata");
         }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }
@@ -5441,7 +5442,9 @@ Value *NameableCall::codegen(Value *scope_struct) {
     set_scope_obj(scope_struct, previous_obj);
   if (may_allocate) {
       Set_Stack_Top(scope_struct, parser_struct->function_name);
-      set_scope_owned_pool(scope_struct, previous_owned_pool);
+      // set_scope_owned_pool(scope_struct, previous_owned_pool);
+      set_scope_owned_pool(scope_struct, previous_owned_pool,
+                            prev_offset, prev_stride);
   }
   
 

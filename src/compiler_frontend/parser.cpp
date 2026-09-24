@@ -2843,8 +2843,6 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
     Body.push_back(std::move(body));
   }
 
-  if (parser_struct->has_own())
-      fn_owns[parser_struct->function_name] = 1;
 
   //std::cout << "function number of expressions: " << Body.size() << "\n";
 

@@ -225,8 +225,8 @@ void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
         FunctionChecks(fn);
     FunctionChecks("__anon_expr");
     std::unordered_map<std::string, int> seen_escapes, seen_borrows;
-    EscapeAnalysis("__anon_expr", "__anon_expr", seen_escapes);
     BorrowChecker("__anon_expr", "__anon_expr", seen_borrows);
+    EscapeAnalysis("__anon_expr", "__anon_expr", seen_escapes);
 
     TheJIT->genAST();
     // TheModule->print(llvm::errs(), nullptr);

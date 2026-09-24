@@ -85,6 +85,7 @@ class ExprAST {
 
 
     virtual void Traverse(const std::function<void(ExprAST*)>& fn);
+    virtual void TraversePost(const std::function<void(ExprAST*)>& fn);
 
 
     virtual int GetIsOwned(); 
@@ -329,6 +330,7 @@ class UnkVarExprAST : public VarExprAST {
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
   
@@ -381,6 +383,7 @@ class IntervalLoopExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 class NewVecExprAST : public ExprAST {
@@ -432,6 +435,7 @@ public:
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
   
@@ -458,6 +462,7 @@ class DataExprAST : public VarExprAST {
   bool GetNeedGCSafePoint() override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 
   void SetMemId();
   void SetMemId(std::unordered_map<int, uint64_t> &map);
@@ -537,6 +542,7 @@ public:
   bool GetNeedGCSafePoint() override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   int GetMemId() override;
 };
@@ -564,6 +570,7 @@ public:
   void Checks() override;
   // void SetCValues(Parser_Struct *parser_struct);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   int GetMemId() override;
 };
@@ -627,6 +634,7 @@ class Nameable : public ExprAST {
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks();
 };
 
@@ -679,6 +687,7 @@ class NameableCall : public Nameable {
   int GetIsOwned() override;
   int GetMemId() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -693,6 +702,7 @@ class NameableIdx : public Nameable {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   Data_Tree GetLayoutDT(Data_Tree dt, bool from_assignment=false);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -818,6 +828,7 @@ class RetExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -870,6 +881,7 @@ class IfExprAST : public ExprAST {
                 std::vector<BasicBlock *> &BreakBB,
                 std::vector<BasicBlock *> &ContinueBB);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
 
@@ -891,6 +903,7 @@ class ForExprAST : public ExprAST {
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 /// ForExprAST - Expression class for for.
@@ -909,6 +922,7 @@ class ForEachExprAST : public ExprAST {
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 /// WhileExprAST - Expression class for while.
@@ -926,6 +940,7 @@ class WhileExprAST : public ExprAST {
   void SetCValues(Parser_Struct *) override;
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
 
@@ -979,6 +994,7 @@ class SpawnExprAST : public ExprAST {
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -996,6 +1012,7 @@ class AsyncExprAST : public ExprAST {
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -1012,6 +1029,7 @@ class FinishExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -1026,6 +1044,7 @@ class AsyncsExprAST : public ExprAST {
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
 
@@ -1165,6 +1184,7 @@ class MainExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks();
 };
 
@@ -1280,7 +1300,7 @@ extern std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
 
 
-extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_owns;
+extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount;
 
 extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 

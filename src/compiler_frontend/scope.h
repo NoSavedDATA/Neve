@@ -43,6 +43,26 @@ inline Value *get_scope_owned_pool(Value *scope_struct) {
   return Builder->CreateLoad(int8PtrTy, owned_pool_gep);
 }
 
+inline Value *get_scope_owned_pool(Value *scope_struct,
+        Value *&prev_offset, Value *&prev_stride) {
+  Value *owned_pool_gep = Builder->CreateStructGEP(
+            struct_types["scope_struct"],
+            scope_struct, 8
+          );
+  prev_offset = Builder->CreateLoad(intTy, 
+                      Builder->CreateStructGEP(
+                        struct_types["scope_struct"],
+                        scope_struct, 10
+                      ));
+  prev_stride = Builder->CreateLoad(intTy, 
+                      Builder->CreateStructGEP(
+                        struct_types["scope_struct"],
+                        scope_struct, 11
+                      ));
+  return Builder->CreateLoad(int8PtrTy, owned_pool_gep);
+}
+
+
 inline void set_scope_owned_pool(Value *scope_struct, Value *ownedpool) {
       Value *owned_pool_gep = Builder->CreateStructGEP(
                 struct_types["scope_struct"],
@@ -51,6 +71,31 @@ inline void set_scope_owned_pool(Value *scope_struct, Value *ownedpool) {
       Builder->CreateStore(
                 ownedpool,
                 owned_pool_gep);
+}
+
+inline void set_scope_owned_pool(Value *scope_struct, Value *ownedpool,
+                    Value *prev_offset, Value *prev_stride) {
+      Value *owned_pool_gep = Builder->CreateStructGEP(
+                struct_types["scope_struct"],
+                scope_struct, 8
+              );
+      Builder->CreateStore(
+                ownedpool,
+                owned_pool_gep);
+
+
+      Builder->CreateStore(
+                prev_offset,
+                Builder->CreateStructGEP(
+                    struct_types["scope_struct"],
+                    scope_struct, 10
+                  ));
+      Builder->CreateStore(
+                prev_stride,
+                Builder->CreateStructGEP(
+                    struct_types["scope_struct"],
+                    scope_struct, 11
+                  ));
 }
 
 
@@ -104,6 +149,7 @@ inline Value *get_scope_escape_retoffset(
             st, scope_struct, 10
           );
     Value *offset = Builder->CreateLoad(intTy,retpool_offset_gep);
+    call("print_int", {offset});
 
     Value *stride = 
         Builder->CreateLoad(intTy,

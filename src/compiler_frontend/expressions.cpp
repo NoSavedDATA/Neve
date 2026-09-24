@@ -51,7 +51,7 @@ std::unordered_map<std::string,
 std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
-std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_owns;
+std::unordered_map<std::string,int> function_own_ret_count, fn_retscount;
 
 std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
@@ -419,6 +419,143 @@ void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn) {
     if (Depth>1)
         Inner->Traverse(fn);
 }
+
+
+
+
+
+void ExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+}
+
+void FinishExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Bodies) 
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void IntervalLoopExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Body[0]->TraversePost(fn);
+    fn(this);
+}
+
+void ForExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Start->TraversePost(fn);
+    End->TraversePost(fn);
+    Step->TraversePost(fn);
+    for (auto &expr : Body) 
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Then) 
+        expr->TraversePost(fn);
+    for (auto &expr : Else) 
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+
+void ForEachExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Vec->TraversePost(fn);
+    for (auto &expr : Body)
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void WhileExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Cond->TraversePost(fn);
+    for (auto &expr : Body)
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void AsyncExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Body)
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void AsyncsExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Body)
+        expr->TraversePost(fn);
+    fn(this);
+}
+void SpawnExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Body)
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void MainExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &expr : Bodies)
+        expr->TraversePost(fn);
+    fn(this);
+}
+
+void UnkVarExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : VarNames)
+        var.second->TraversePost(fn);
+    fn(this);
+}
+void DataExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : VarNames)
+        var.second->TraversePost(fn);
+    fn(this);
+}
+void BinaryExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    LHS->TraversePost(fn);
+    RHS->TraversePost(fn);
+    fn(this);
+}
+void UnaryExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Operand->TraversePost(fn);
+    fn(this);
+}
+void RetExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : Vars)
+        var->TraversePost(fn);
+    fn(this);
+}
+
+void ObjectExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+        if (!this->HasInit[i]) { // callee init
+            if (!VarNames[i].second)
+                continue;
+            VarNames[i].second->TraversePost(fn);
+        }
+    }
+    fn(this);
+}
+
+void Nameable::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    if (Depth>1)
+        Inner->TraversePost(fn);
+    fn(this);
+}
+
+void NameableIdx::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    Inner->TraversePost(fn);
+    fn(this);
+}
+
+
+void NameableCall::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : Args)
+        var->TraversePost(fn);
+    if (Depth>1)
+        Inner->TraversePost(fn);
+    fn(this);
+}
+
+
+
+
+
+
+
 
 
  

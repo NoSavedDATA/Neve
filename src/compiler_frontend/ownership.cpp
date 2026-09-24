@@ -357,8 +357,6 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 Data_Tree &dt = CArgs.dts[j-1];
                 int ownid = nameableexpr->GetIsOwned();
 
-
-
                 bool is_owned = ownid!=-2||dt.is_borrow||dt.is_own;
                 if (is_owned) {
                     has_borrow=true;
