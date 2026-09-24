@@ -40,6 +40,7 @@
 #include "compiler_frontend/ownership.h"
 #include "compiler_frontend/function_ast.h"
 #include "compiler_frontend/modules.h"
+#include "runtime/common/extension_functions.h"
 #include "runtime/compiler_frontend/global_vars.h"
 #include "runtime/compiler_frontend/logging_v.h"
 #include "llvm/Support/Error.h"
@@ -110,6 +111,12 @@ llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
 
 void gen_generics() {
     for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
+        if (in_vec(base_name, fn_called)) {
+            erase(fn_called, base_name);
+            fn_ast->parser_struct->function_name = base_name;
+            TheJIT->fn_map[base_name]->codegen();   
+        }
+
         fn_ast->parser_struct->function_name = fn;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
         fn_ast->function_name = fn;

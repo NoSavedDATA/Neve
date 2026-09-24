@@ -151,6 +151,8 @@ struct ArgsEqual {
                     const CallArgsTy& b) const {
         if (a.dts.size()!=b.dts.size()||a.has!=b.has)
             return false;
+        if (a.template_ret.is_borrow!=b.template_ret.is_borrow)
+            return false;
         for (int i=0;i<a.dts.size();++i) {
             if (a.dts[i].Compare(b.dts[i])>0)
                 return false;

@@ -256,7 +256,8 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
             std::unordered_map<int,int> &borrow_c,
             std::vector<int> &bad_borrows,
-            std::unordered_map<int,uint64_t> &memid_to_branch) {
+            std::unordered_map<int,uint64_t> &memid_to_branch,
+            std::unordered_map<std::string, int> &seen) {
     std::string fn_name = parser_struct->function_name;
     std::string base_callee = callexpr->BaseCallee;
     // if (fn_argnames.count(callee))
@@ -383,6 +384,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             callee = GenTemplate(parser_struct, base_callee, CArgs, found);
         }
         callexpr->Callee = callee;
+        // BorrowChecker(base_callee, callee, seen);
     }
 }
 
@@ -420,7 +422,7 @@ void GetBorrows(Parser_Struct *parser_struct,
         }
         RegisterCallBorrow(parser_struct,
                 callexpr, callee, borrow_ids, borrow_c,
-                bad_borrows, memid_to_branch);
+                bad_borrows, memid_to_branch, seen);
         return;
     }
 

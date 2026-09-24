@@ -3966,15 +3966,23 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
                          const_int16(data_name_to_type()[DataName])
                          });
     } else if(fn_borrows[parser_struct->function_name].count(MemId)>0) {
-        LogBlue("BORROW " + parser_struct->function_name + " | " + std::to_string(MemId));
         ptr = callret("malloc",
-            {const_int(
-                data_name_to_type()[DataName])
-        });
+                    {const_int(
+                        data_name_to_type()[DataName])
+                });
     } else {
         if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
-            std::cout << "Owned ret: " << parser_struct->function_name << " | " << OwnedId << "\n"; 
-            ptr = fn_owned_ret_memory[OwnedId];
+
+            if (parser_struct->borrow_ret) {
+
+                LogBlue(parser_struct->function_name + " alloc borrowed ret");
+                    ptr = callret("malloc",
+                            {const_int(
+                                data_name_to_type()[DataName])
+                        });
+            }
+            else
+                ptr = fn_owned_ret_memory[OwnedId];
         } else {
             // own
             // std::cout << "IsOwn " << OwnedPoolOffset << "\n";

@@ -677,7 +677,7 @@ bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_
         //
         if (l[i].Type=="any"||r[i].Type=="any")
             continue;
-        if (match_borrows&&l[i].is_borrow!=r[i].is_borrow)
+        if (match_borrows&&(l[i].is_borrow!=r[i].is_borrow))
             return false;
         if (match_borrows&&l[i].is_own!=r[i].is_own)
             return false;
@@ -689,6 +689,32 @@ bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_
     return true;
 }
 
+bool CompareDTs(CallArgsTy cargs, CallArgsTy rcargs, bool accept_layout=true, bool match_borrows=false) {
+    if(match_borrows&&
+       cargs.template_ret.is_borrow!=rcargs.template_ret.is_borrow)
+        return false;
+    std::vector<Data_Tree> l = cargs.dts;
+    std::vector<Data_Tree> r = rcargs.dts;
+    if(l.size()!=r.size())
+        return false;
+    for (int i=0; i<l.size(); ++i) {
+        // std::cout << "COMPARE" << "\n";
+        // l[i].Print();
+        // r[i].Print();
+        //
+        if (l[i].Type=="any"||r[i].Type=="any")
+            continue;
+        if (match_borrows&&(l[i].is_borrow!=r[i].is_borrow))
+            return false;
+        if (match_borrows&&l[i].is_own!=r[i].is_own)
+            return false;
+        if (!accept_layout&&l[i].Type=="layout")
+            return false;
+        if (l[i].Compare(r[i])>0)
+            return false;
+    }
+    return true;
+}
 
 
 PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
@@ -883,7 +909,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
-        if (!CompareDTs(CArgs.dts, templ.dts, true, true))
+        if (!CompareDTs(CArgs, templ, true, true))
             continue;
 
 
@@ -910,14 +936,18 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             FnLastVersion[fn] = 1;
         } else
             idx = FnLastVersion[fn]++;
-
-
-        if (fn!=base_name)
-            fn_borrows[fn] = fn_borrows[base_name];
-        
         fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
         CArgs.version = idx;
         CArgs.version_str = fn;
+
+        if (fn!=base_name) {
+            function_escapes[fn] = function_escapes[base_name];
+            function_own_ret_count[fn] = function_own_ret_count[base_name];
+            fn_borrows[fn] = fn_borrows[base_name];
+        }
+
+
+        
         CArgs.dyn_args = templ.dyn_args;
         FnDynArgs[fn] = templ.dyn_args;
         CArgs.cvalues = cvalues;
@@ -983,7 +1013,7 @@ std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsT
         //     print_dt_vec(CArgs.dts);
         //     print_dt_vec(cargs.dts);
         // }
-        if(CompareDTs(cargs.dts, CArgs.dts, accept_layout, match_owned) && CArgs.cvalues==cargs.cvalues) {
+        if(CompareDTs(cargs, CArgs, accept_layout, match_owned) && CArgs.cvalues==cargs.cvalues) {
             return cargs.version_str;
         }
     }
@@ -1380,9 +1410,9 @@ NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> In
 }
  
 void UnkVarExprAST::Checks() {
-  if (checked)
-      return;
-  checked=true;
+  // if (checked)
+  //     return;
+  // checked=true;
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
@@ -1498,9 +1528,9 @@ DictExprAST::DictExprAST(
 
 
 void DataExprAST::Checks() {
-  if(checked)
-      return;
-  checked=true;
+  // if(checked)
+  //     return;
+  // checked=true;
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     if(this->isSelf)
       continue;    
@@ -3269,7 +3299,8 @@ void NameableCall::Checks() {
         ||data_typeVars[parser_struct->function_name].count(Callee)>0
         &&data_typeVars[parser_struct->function_name][Callee].Type=="Function");
 
-
+  if(fn_ret_dt.count(Callee)>0)
+      CArgs.template_ret = fn_ret_dt[Callee];
 
   // Check for Generics
   BaseCallee = Callee;

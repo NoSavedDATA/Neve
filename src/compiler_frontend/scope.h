@@ -149,13 +149,14 @@ inline Value *get_scope_escape_retoffset(
             st, scope_struct, 10
           );
     Value *offset = Builder->CreateLoad(intTy,retpool_offset_gep);
-    call("print_int", {offset});
 
     Value *stride = 
         Builder->CreateLoad(intTy,
             Builder->CreateStructGEP(
                 st, scope_struct, 11
               ));
+    // call("print_int", {offset});
+    // call("print_int", {stride});
 
     Value *next_offset = Builder->CreateAdd(offset, stride);
     Builder->CreateStore(next_offset, retpool_offset_gep);

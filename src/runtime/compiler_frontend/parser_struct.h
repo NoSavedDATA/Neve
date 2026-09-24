@@ -93,6 +93,7 @@ struct Parser_Struct {
   std::string parse_fn="";
   bool can_be_string=false;
   bool can_be_list=false, has_compiled_args=false, has_owned_pool=false;
+  bool borrow_ret=false;
   std::shared_ptr<int> owned_id = std::make_shared<int>(0);
   std::shared_ptr<int> mem_id = std::make_shared<int>(0);
   std::shared_ptr<uint64_t> control_stmt_id = std::make_shared<uint64_t>(2);
