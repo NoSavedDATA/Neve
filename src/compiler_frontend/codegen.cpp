@@ -21,6 +21,7 @@
 #include "../simd/include.h"
 #include "../KaleidoscopeJIT.h"
 
+#include "escape_analysis.h"
 #include "expressions.h"
 #include "include.h"
 #include "logging.h"
@@ -47,7 +48,7 @@ std::map<std::string, std::map<std::string, Value *>> function_pointers;
 std::vector<std::string> prebuild_functions;
 std::unordered_map<std::string, llvm::Type*> str_toTy;
 std::unordered_map<std::string, Function *> async_fn;
-std::map<int,Value*> fn_owned_ret_memory;
+std::map<int,Value*> fn_owned_ret_memory, memidV;
 std::string current_codegen_function;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
@@ -58,6 +59,9 @@ std::vector<std::string> Global_Uniques;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
 
 std::vector<Value *> thread_pointers;
+
+Value *ConditionalTakesV;
+
 
 
 PointerType *floatPtrTy, *int8PtrTy, *int1PtrTy;
@@ -81,7 +85,6 @@ llvm::Type *get_type_from_data(Parser_Struct *parser_struct, Data_Tree dt) {
             nested_size = parser_struct->cvalues.ints[nested_type];
         else
             nested_size = std::stoi(nested_type);
-
         size *= nested_size;
     }
     llvm_type = ArrayType::get(llvm_type, size);
@@ -1356,6 +1359,9 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), MergeBB);
     Builder->SetInsertPoint(MergeBB);
 
+
+    ClearOwned();
+
     auto then_values = block_values[ThenPostBB];
     auto else_values = block_values[ElsePostBB];
     for (auto &[name, value] : old_values) {
@@ -1477,6 +1483,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
 
     // Emit merge block.
     Builder->SetInsertPoint(MergeBB);
+    ClearOwned();
 
 
     auto then_values = block_values[ThenPostBB];
@@ -1564,7 +1571,7 @@ void SetBreakPHIS(Parser_Struct *parser_struct, std::vector<std::string> &assign
 
 
 
-void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> Body,
+void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Body,
         BasicBlock *LoopBB, BasicBlock *IncBB, BasicBlock *AfterBB,
         std::map<std::string, Value*> &break_values_snapshot,
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {  
@@ -1704,7 +1711,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
 
-    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
     block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
 
     Builder->CreateBr(IncBB);
@@ -1743,6 +1750,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     function_allocas[parser_struct->function_name] = old_allocas;
     // verifyFunction(*TheFunction);
     // CurModule->print(llvm::errs(), nullptr);
+
+    ClearOwned();
 
     return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
@@ -1861,7 +1870,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
-    Codegen_Loop_Body(scope_struct, std::move(Body), LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
     block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
 
 
@@ -1889,6 +1898,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values, BreakBB, CondBB);
 
+    ClearOwned();
     return const_float(0.0f);
 }
 
@@ -1933,8 +1943,10 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
     Value* condVal = Cond->codegen(scope_struct);
-    if (!condVal)
+    if (!condVal) {
+        LogBlue("NO CONDVAL");
         return nullptr;
+    }
 
     Builder->CreateCondBr(condVal, LoopBB, AfterBB);
 
@@ -1942,7 +1954,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
-    Codegen_Loop_Body(scope_struct, std::move(Body),
+    Codegen_Loop_Body(scope_struct, Body,
             LoopBB, CondBB, AfterBB,
             break_values_snapshot,
             BreakBB, ContinueBB);
@@ -1968,6 +1980,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
     SetBreakPHIS(parser_struct, assigned_vars,
             old_function_values, function_phi_values, BreakBB, CondBB);
 
+    ClearOwned();
     return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
 
@@ -3964,34 +3977,34 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
                         {scope_struct,
                          const_int(ClassSize[DataName]),\
                          const_int16(data_name_to_type()[DataName])
-                         });
+              });
     } else if(fn_borrows[parser_struct->function_name].count(MemId)>0) {
+        // taken
         ptr = callret("malloc",
                     {const_int(
                         data_name_to_type()[DataName])
-                });
+              });
+
+        memidV[MemId] = ptr;
     } else {
         if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
-
-            if (parser_struct->borrow_ret) {
-
-                LogBlue(parser_struct->function_name + " alloc borrowed ret");
-                    ptr = callret("malloc",
-                            {const_int(
-                                data_name_to_type()[DataName])
-                        });
-            }
-            else
+            if (parser_struct->borrow_ret)
+                // taken escape
+                ptr = callret("malloc",
+                        {const_int(
+                            data_name_to_type()[DataName])
+                      });
+            else // escape
                 ptr = fn_owned_ret_memory[OwnedId];
         } else {
             // own
-            // std::cout << "IsOwn " << OwnedPoolOffset << "\n";
             Value *ownedpool = get_scope_owned_pool(scope_struct);
             ptr = Builder->CreateGEP(
                         int8Ty, ownedpool, const_int(OwnedPoolOffset)
                    ); 
             OwnedValues.push_back({Data_Tree(DataName), ptr});
         }
+        memidV[MemId] = ptr;
     }
 }
 
@@ -4664,6 +4677,42 @@ Value *NameableLLVMIRCall::codegen(Value *scope_struct) {
 }
 
 
+void DispatchOwnedFree(Value *memV, Data_Tree &dt, ExprAST *expr) {
+
+    if (auto *stmt = dynamic_cast<WhileExprAST*>(expr)) {
+        stmt->RegisterOwned(dt, memV);
+        std::cout << "dispatch owned  WHILE" << "\n"; 
+    }
+
+    if (auto *stmt = dynamic_cast<ForExprAST*>(expr)) {
+        stmt->RegisterOwned(dt, memV);
+        std::cout << "dispatch owned  FOR" << "\n"; 
+    }
+
+    if (auto *stmt = dynamic_cast<ForEachExprAST*>(expr)) {
+        stmt->RegisterOwned(dt, memV);
+        std::cout << "dispatch owned  FOREACH" << "\n"; 
+    }
+
+    if (auto *stmt = dynamic_cast<IfExprAST*>(expr)) {
+        stmt->RegisterOwned(dt, memV);
+        std::cout << "dispatch owned  IF" << "\n"; 
+    }
+
+    if (auto *stmt = dynamic_cast<Nameable*>(expr)) {
+        std::cout << "dispatch owned  NAMEABLE" << "\n"; 
+        ExprAST *parent = expr->Parent;
+        while (parent->Parent!=nullptr)
+            parent = parent->Parent;
+
+        if (auto *parent_stmt = dynamic_cast<NameableCall*>(parent)) {
+            parent_stmt->RegisterOwned(dt, memV);
+            LogBlue("AS CALL PARENT");
+        }
+    }
+}
+
+
 
 Value *NestedCallExprAST::codegen(Value *scope_struct) {
     return const_float(0);
@@ -4691,6 +4740,7 @@ Value *Nameable::codegen(Value *scope_struct) {
         return const_float(0.0f);
     Data_Tree dt = GetDataTree();
     std::string type = dt.Type;
+    std::string fn = parser_struct->function_name;
 
     if(Depth==1) {
         if(IsUnique)
@@ -4699,40 +4749,50 @@ Value *Nameable::codegen(Value *scope_struct) {
             return get_scope_obj(scope_struct);
         }
         // buffers
-        if (function_allocas[parser_struct->function_name].count(Name)>0)
-            return function_allocas[parser_struct->function_name][Name]; 
-        if (function_values[parser_struct->function_name].count(Name)>0)
-            return function_values[parser_struct->function_name][Name];
+        if (function_allocas[fn].count(Name)>0)
+            return function_allocas[fn][Name]; 
+        if (function_values[fn].count(Name)>0) {
+            if (ConditionalTakes.count(MemId)>0) {
+                
+                if (this==fn_memid_to_lastseen[fn][MemId]) {
+                    ExprAST *outermost = this;
+                    GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
+                            (fn_memid_to_branch[fn][MemId]>>32)&MASK_16);
+                    DispatchOwnedFree(memidV[MemId], dt, outermost);
+                }
+            }
+            return function_values[fn][Name];
+        }
         if (Name=="tid") {
             Value *tid_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 1);
             Value *tid = Builder->CreateSub(Builder->CreateLoad(intTy, tid_gep), const_int(1));
-            function_values[parser_struct->function_name]["tid"] = tid;
+            function_values[fn]["tid"] = tid;
             return tid;
         }
         if (Name=="tN") {
             Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 7);
             Value *tN = Builder->CreateLoad(intTy, tN_gep);
-            function_values[parser_struct->function_name]["tN"] = tN;
+            function_values[fn]["tN"] = tN;
             return tN;
         }
         if (Name=="tHW") {
             Value *tHW = callret("tHW_fn", {scope_struct});
-            function_values[parser_struct->function_name]["tHW"] = tHW;
+            function_values[fn]["tHW"] = tHW;
             return tHW;
         }
         if (Name=="smem_size") {
             Value *smem_size = callret("smem_size_fn", {scope_struct});
-            function_values[parser_struct->function_name]["smem_size"] = smem_size;
+            function_values[fn]["smem_size"] = smem_size;
             return smem_size;
         }
         if (parser_struct->cvalues.ints.count(Name)>0)
             return const_int(parser_struct->cvalues.ints[Name]);
-        for (auto &[name, val] : function_values[parser_struct->function_name]) {
-            if (parser_struct->function_name=="avgpool2d_kernel")
+        for (auto &[name, val] : function_values[fn]) {
+            if (fn=="avgpool2d_kernel")
             std::cout << "has " << name << "\n";
         }
         
-        std::cout << "search " << parser_struct->function_name << " | " << Name << "\n";
+        std::cout << "search " << fn << " | " << Name << "\n";
         return getFunctionCheck(Name);
     }
 
@@ -5232,6 +5292,8 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
 
         offset = Builder->CreateAdd(offset, product);
     }
+
+    ClearOwned();
     return Builder->CreateGEP(ty, ptr, offset);
 }
 
@@ -5325,6 +5387,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
     Builder->SetInsertPoint(postBB); 
     // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
 
+    ClearOwned();
     return const_int(0);
 }
 
@@ -5481,7 +5544,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     struct_ret = Builder->CreateInsertValue(struct_ret, packed_bool, {1});
     ret = struct_ret;
   }
-
+  ClearOwned();
   return ret;
 }
 

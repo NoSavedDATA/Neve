@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 
+#define MASK_16 0xFFFFULL
+
+
 #include "../nsk_cpp.h"
 #include "tokenizers/include.h"
 #include "parsers/include.h"

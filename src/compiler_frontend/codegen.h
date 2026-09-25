@@ -9,6 +9,7 @@
 
 #include "../nsk_cpp.h"
 #include "../KaleidoscopeJIT.h"
+#include "escape_analysis.h"
 #include "include.h"
 #include "modules.h"
 #include "expressions.h"
@@ -27,8 +28,9 @@ extern std::map<std::string,std::map<Value *, Value *>> function_vecs;
 extern std::map<std::string,std::map<std::string, Value *>> function_pointers;
 extern std::unordered_map<std::string, llvm::Type*> str_toTy;
 extern std::string current_codegen_function;
+extern Value *ConditionalTakesV;
 
-extern std::map<int,Value*> fn_owned_ret_memory;
+extern std::map<int,Value*> fn_owned_ret_memory, memidV;
 
 
 

@@ -22,21 +22,24 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 #include <execution>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 // #include "../../lsp/json.hpp"
 #include "../include.h"
 #include "codegen.h"
+#include "escape_analysis.h"
 #include "expressions.h"
+#include "logging.h"
 #include "modules.h"
 #include "ownership.h"
 #include "parser.h"
 #include "scope.h"
 
 
-#define MASK_16 0xFFFFULL
 
 ExitOnError ExitOnErr;
 std::unordered_map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
@@ -929,7 +932,22 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
 void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid) {
-    if (!fn_bad_borrows.count(fn_name)||!fn_borrows[fn_name].count(memid))
+    if (!fn_borrows[fn_name].count(memid))
+        return;
+
+
+    std::vector<uint64_t> branch = fn_borrows[fn_name][memid];
+    int cap = (branch[0] >> 16)&MASK_16;
+    int branch_id = (branch[0] >> 32)&MASK_16;
+    int size = fn_borrows_c[fn_name][memid];
+
+    if (size<cap) {
+        std::cout << fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
+        ConditionalTakes[memid] = branch_id;
+    }
+
+
+    if(!fn_bad_borrows.count(fn_name))
         return;
 
     if (in_vec(memid, fn_bad_borrows[fn_name]))
@@ -1041,6 +1059,11 @@ Function *FunctionAST::codegen() {
         function_values[function_name][arg_name] = &Arg;
         StoreVal(TheFunction, function_name, arg_name, &Arg,
                     data_typeVars[function_name][arg_name]);
+
+        if(fn_arg_memid.count(function_name)>0)
+            if(fn_arg_memid[function_name].count(arg_name)>0)
+                memidV[fn_arg_memid[function_name][arg_name]] = &Arg;
+
         Data_Tree &dt = data_typeVars[function_name][arg_name];
     }
   }
@@ -1065,13 +1088,19 @@ Function *FunctionAST::codegen() {
     if (idx>=0) {// is comp specialization
         body->SetCValues(parser_struct);
     }
-    body->Traverse([&ownid_to_memid](ExprAST *node) {
-          if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
+    body->Traverse([&ownid_to_memid, &idx, this](ExprAST *node) {
+        if (idx>=0&&node->parser_struct!=nullptr&&parser_struct!=nullptr) {
+            node->parser_struct->function_name = parser_struct->function_name;
+            node->parser_struct->cvalues = parser_struct->cvalues;
+        }
+        if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
             if (stmt->OwnedId!=-2)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
-          }
+            }
     });
   }
+
+
 
 
 
@@ -1080,9 +1109,13 @@ Function *FunctionAST::codegen() {
   
 
   for (auto &[dt, name, memid] : P->CArgs.borrows) {
-    std::cout << "handle borrow " << P->BaseName << function_name << " | " << name << " | " << memid << "\n";
+    std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
     EvaluateBorrow(parser_struct, P->BaseName, memid);
   }
+
+
+  if (ConditionalTakes.size()>0)
+      ConditionalTakesV = ConstantAggregateZero::get(ArrayType::get(boolTy, ConditionalTakes.size()));
 
 
   SetFnOwn(parser_struct, scope_struct, function_name, Body);
@@ -1099,6 +1132,9 @@ Function *FunctionAST::codegen() {
   }
   OwnedValues.clear();
   fn_owned_ret_memory.clear();
+  ConditionalTakes.clear();
+  memidV.clear();
+  ConditionalTakesV = nullptr;
 
 
   if (RetVal) {
@@ -1111,7 +1147,7 @@ Function *FunctionAST::codegen() {
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (ends_with(function_name,"_train"))
+    // if (begins_with(function_name,"MyClass_send"))
     //     TheModule->print(llvm::errs(), nullptr);
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;

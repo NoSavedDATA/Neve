@@ -2,6 +2,7 @@
 #include "include.h"
 
 extern std::vector<std::pair<Data_Tree, Value*>> OwnedValues;
+extern std::map<int, int> ConditionalTakes;
 
 
 

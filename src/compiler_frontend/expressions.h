@@ -46,6 +46,7 @@ class ExprAST {
     int Line=-1;
     uint64_t BranchId=2;
     Parser_Struct *parser_struct=nullptr;
+    ExprAST *Parent=nullptr;
   
     Data_Tree data_type = Data_Tree("");
 
@@ -104,10 +105,16 @@ class ExprAST {
 
     virtual int GetMemId(); 
 
+    virtual int GetBranchId();
+
 
     virtual bool GetNeedGCSafePoint();
     // virtual nlohmann::json toJSON();
 };
+
+
+void GetOutermostConditionalExpr(int cstmt, std::string fn_name, ExprAST *&expr,
+                                 int tgt_branch=0);
 
 
 struct CallArgsTy {
@@ -467,6 +474,7 @@ class DataExprAST : public VarExprAST {
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 
   void SetMemId();
+  void SetMemId2();
   void SetMemId(std::unordered_map<int, uint64_t> &map);
 
 };
@@ -557,10 +565,10 @@ class BinaryExprAST : public ExprAST {
 
 public:
   std::string Elements, Operation;
+  std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
   bool is_store_sugar=false, is_fused=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::unique_ptr<ExprAST> LHS, RHS;
-  ExprAST *Parent=nullptr;
   char Op;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *);
@@ -570,6 +578,8 @@ public:
   bool GetNeedGCSafePoint() override;
   FnCompiledValues GetSubmitedCValues();
   void Checks() override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   // void SetCValues(Parser_Struct *parser_struct);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -616,7 +626,7 @@ class Nameable : public ExprAST {
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1, MemId=-2;
   bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
-  bool checked=false;
+  bool checked=false, IsAttr=false;
 
   Nameable(Parser_Struct *);
   Nameable(Parser_Struct *, std::string, int);
@@ -675,6 +685,7 @@ class NameableCall : public Nameable {
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, BaseCallee, ReturnType="";
   std::vector<Data_Tree> Types;
+  std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
   CallArgsTy CompiledArgsVec, CArgs;
 
   NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy);
@@ -686,6 +697,8 @@ class NameableCall : public Nameable {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   void Checks() override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   int GetIsOwned() override;
   int GetMemId() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
@@ -871,6 +884,7 @@ class IfExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Then, Else;
+    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     IfExprAST(Parser_Struct *,
               std::unique_ptr<ExprAST> Cond,
               std::vector<std::unique_ptr<ExprAST>> Then,
@@ -883,6 +897,8 @@ class IfExprAST : public ExprAST {
                 std::vector<BasicBlock *> &BreakBB,
                 std::vector<BasicBlock *> &ContinueBB);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
@@ -894,6 +910,7 @@ class ForExprAST : public ExprAST {
   public:
     std::string VarName;
     std::unique_ptr<ExprAST> Start, End, Step;
+    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
@@ -903,6 +920,8 @@ class ForExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -915,6 +934,7 @@ class ForEachExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
+    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
               std::vector<std::unique_ptr<ExprAST>> Body,
               Parser_Struct *,
@@ -922,6 +942,8 @@ class ForEachExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -932,6 +954,7 @@ class WhileExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
 
   public:
+    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     std::vector<std::unique_ptr<ExprAST>> Body;
     WhileExprAST(std::unique_ptr<ExprAST> Cond,
             std::vector<std::unique_ptr<ExprAST>> Body,
@@ -940,6 +963,8 @@ class WhileExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct *) override;
+  void RegisterOwned(Data_Tree, Value*);
+  void ClearOwned();
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -1296,6 +1321,13 @@ extern std::unordered_map<std::string,
 
 extern std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
+
+extern std::unordered_map<std::string,
+       std::unordered_map<int,uint64_t>> fn_memid_to_branch;
+
+extern std::unordered_map<std::string,
+       std::unordered_map<int,ExprAST*>>
+                    fn_memid_to_lastseen, fn_conditional_stmt;
 
 
 extern std::unordered_map<std::string,

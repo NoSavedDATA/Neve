@@ -25,9 +25,9 @@
 #include <vector>
 
 
-#define MASK_16 0xFFFFULL
 
 std::vector<std::pair<Data_Tree, Value*>> OwnedValues;
+
 
 void Clear_Fn_Owned_Values(Value *scope_struct) {
     Value *previous_obj = get_scope_obj(scope_struct);
@@ -232,7 +232,6 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
     std::string base_callee = callexpr->BaseCallee;
     CallArgsTy CArgs = callexpr->CArgs;
     CArgs.template_ret.is_borrow=true;
-    CArgs.template_ret.Print();
     bool found = false;
 
     std::string prev_callee = callee;
