@@ -55,7 +55,7 @@ std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vec
 
 std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Value*>>> layout_strides;
 
-std::vector<std::string> Global_Uniques;
+std::vector<std::string> Global_Uniques, ConditionalsQueue;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
 
 std::vector<Value *> thread_pointers;
@@ -942,8 +942,6 @@ void Set_Pointer_Stack(Value *scope_struct, Parser_Struct *parser_struct, std::s
         return;
 
     std::string function_name = parser_struct->function_name;
-    // p2t("SET " + var_name);
-    // call("print_void_ptr", {val});
     if (function_pointers[function_name].count(var_name)==0) {
         Allocate_On_Pointer_Stack(scope_struct, function_name, var_name, Data_Tree("aux"), val);
         return;
@@ -1268,6 +1266,12 @@ Value *GCSafePointExprAST::codegen(Value *scope_struct) {
     return const_float(0.0f);
 }
 
+void BlockConditionals(std::string fn) {
+    for(auto &var_to_remove : ConditionalsQueue)
+        function_values[fn].erase(var_to_remove);
+    ConditionalsQueue.clear();
+}
+
 
 
 Value *IfExprAST::codegen(Value *scope_struct) {
@@ -1358,6 +1362,9 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 
 
     ClearOwned(scope_struct);
+    BlockConditionals(parser_struct->function_name);
+
+
 
     auto then_values = block_values[ThenPostBB];
     auto else_values = block_values[ElsePostBB];
@@ -1477,6 +1484,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     // Emit merge block.
     Builder->SetInsertPoint(MergeBB);
     ClearOwned(scope_struct);
+    BlockConditionals(parser_struct->function_name);
 
 
     auto then_values = block_values[ThenPostBB];
@@ -3984,6 +3992,7 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
               });
     } else if(fn_borrows[parser_struct->function_name].count(MemId)>0) {
         // taken
+        LogBlue("Taken " + parser_struct->function_name + ": " + std::to_string(MemId));
         ptr = callret("malloc",
                     {const_int(
                         data_name_to_type()[DataName])
@@ -4685,27 +4694,6 @@ Value *NameableLLVMIRCall::codegen(Value *scope_struct) {
 void DispatchOwnedFree(Value *memV, int memid, Data_Tree &dt, ExprAST *expr) {
     // std::cout << "dispatch " << "\n";
     // dt.Print();
-    if (auto *stmt = dynamic_cast<WhileExprAST*>(expr)) {
-        // std::cout << "dispatch owned  WHILE" << "\n"; 
-        stmt->RegisterOwned(dt, memid, memV);
-    }
-
-    if (auto *stmt = dynamic_cast<ForExprAST*>(expr)) {
-        // std::cout << "dispatch owned  FOR" << "\n"; 
-        stmt->RegisterOwned(dt, memid, memV);
-    }
-
-    if (auto *stmt = dynamic_cast<ForEachExprAST*>(expr)) {
-        // std::cout << "dispatch owned  FOREACH" << "\n"; 
-        stmt->RegisterOwned(dt, memid, memV);
-    }
-
-    if (auto *stmt = dynamic_cast<IfExprAST*>(expr)) {
-        // std::cout << "dispatch owned  IF" << "\n"; 
-        stmt->RegisterOwned(dt, memid, memV);
-    }
-
-
     if (auto *stmt = dynamic_cast<Nameable*>(expr)) {
         ExprAST *parent = expr->Parent;
         while (parent->Parent!=nullptr) {
@@ -4713,7 +4701,7 @@ void DispatchOwnedFree(Value *memV, int memid, Data_Tree &dt, ExprAST *expr) {
         }
         // std::cout << "Parent post  " << parent << "\n";
         if (auto *parent_stmt = dynamic_cast<NameableCall*>(parent)) {
-            // std::cout << "REGISTER CALL CLEAR FOR  " << memV << "\n";
+            std::cout << "REGISTER CALL CLEAR FOR  " << memV << "\n";
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
@@ -4722,7 +4710,17 @@ void DispatchOwnedFree(Value *memV, int memid, Data_Tree &dt, ExprAST *expr) {
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
+        if (auto *parent_stmt = dynamic_cast<RetExprAST*>(parent)) {
+            std::cout << "RetExpr dispatch" << memV << "\n";
+            // parent_stmt->RegisterOwned(dt, memid, memV);
+        }
+
     }
+
+
+
+    if (auto *stmt = dynamic_cast<OwnedHolder*>(expr))
+        stmt->RegisterOwned(dt, memid, memV);
 }
 
 
@@ -4770,19 +4768,13 @@ Value *Nameable::codegen(Value *scope_struct) {
 
 
             if (ConditionalTakes.count(memid)>0||is_owned) {
-                if (fn=="ResidualModule_infer") {
-                    std::cout << "------>DISPATCH " << fn << " | " << Name << " | " << MemId << "\n";
-                    dt.Print();
-                }
                 if (this==fn_memid_to_lastseen[fn][memid]) {
-                    if (fn=="ResidualModule_infer") {
-                        std::cout << "----(TRUE)-->DISPATCH " << fn << " | " << Name << "\n";
-                        dt.Print();
-                    }
                     ExprAST *outermost = this;
                     GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
                             (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
-                    DispatchOwnedFree(function_values[fn][Name], MemId, dt, outermost);
+                    if (fn=="Conv2d_infer")
+                        std::cout << "<<>> DISPATCH " << memid << "\n";
+                    DispatchOwnedFree(function_values[fn][Name], memid, dt, outermost);
                 }
             }
             return function_values[fn][Name];
@@ -4811,12 +4803,6 @@ Value *Nameable::codegen(Value *scope_struct) {
         }
         if (parser_struct->cvalues.ints.count(Name)>0)
             return const_int(parser_struct->cvalues.ints[Name]);
-        for (auto &[name, val] : function_values[fn]) {
-            if (fn=="avgpool2d_kernel")
-            std::cout << "has " << name << "\n";
-        }
-        
-        std::cout << "search " << fn << " | " << Name << "\n";
         return getFunctionCheck(Name);
     }
 
@@ -4831,14 +4817,9 @@ Value *Nameable::codegen(Value *scope_struct) {
     int attr_idx = ClassAttrs[scope][Name];
 
 
-    // p2t(Name + "|" + scope + ": " + std::to_string(attr_idx) + " -- " + std::to_string(offset) + " / " + std::to_string(ClassSize[scope]));
 
     obj_ptr = Builder->CreateStructGEP(st, obj_ptr, attr_idx);
 
-    // if (Name=="ptr"){
-    //     p2t("ptr");
-    //     call("print_void_ptr", {obj_ptr});
-    // }
 
     if(Load_Last||!IsLeaf) {
         llvm::Type *Ty = get_type_from_data(parser_struct, attr_type);
@@ -4846,10 +4827,6 @@ Value *Nameable::codegen(Value *scope_struct) {
                     ? Builder->CreateLoad(Ty, obj_ptr) \
                     : Builder->CreateInBoundsGEP(Ty, obj_ptr, {const_int(0), const_int(0)}); //&arr[0]
     }
-    // if (Name=="dims"){
-    //     p2t("dims post");
-    //     call("print_void_ptr", {obj_ptr});
-    // }
 
     return obj_ptr;
 }
@@ -5327,6 +5304,8 @@ void SetConditionalTake(std::unique_ptr<ExprAST> &taken) {
         return;
     Value *ctaken_id_gep = Builder->CreateInBoundsGEP(boolTy, ConditionalTakesV, const_int(ConditionalTakes[memid]));
     Builder->CreateStore(const_bool(1), ctaken_id_gep);
+
+    // ConditionalsQueue.push_back(taken->GetName());
 }
 
 
@@ -5431,7 +5410,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     int target_args_size=Args.size()+1;
 
-    Value *previous_obj, *previous_stack_top, *previous_owned_pool, *previous_ret_pool, *prev_offset, *prev_stride;
+    Value *previous_obj, *previous_stack_top, *owned_pool, *previous_ret_pool, *prev_offset, *prev_stride;
 
     if (Callee=="array_append")
         return codegen_append(scope_struct);
@@ -5446,12 +5425,15 @@ Value *NameableCall::codegen(Value *scope_struct) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
         previous_stack_top = Load_Stack_Top(parser_struct->function_name);
-        previous_owned_pool = get_scope_owned_pool(scope_struct,
+        owned_pool = get_scope_owned_pool(scope_struct,
                                 prev_offset, prev_stride);
+
         if(OwnedPoolOffset>=0) {
             std::string ret = GetDataTree().Type;
-            set_scope_retpool(scope_struct, previous_owned_pool,
-                    ClassSize[ret], OwnedPoolOffset);
+            // p2t("set " + Callee + " --> " + std::to_string(OwnedPoolOffset));
+            // call("print_void_ptr", {owned_pool});
+            set_scope_retpool(scope_struct, owned_pool,
+                    OwnedPoolOffset, ClassSize[ret]);
         }
         Set_Stack_Top(scope_struct, parser_struct->function_name);
     }
@@ -5545,9 +5527,17 @@ Value *NameableCall::codegen(Value *scope_struct) {
     set_scope_obj(scope_struct, previous_obj);
   if (may_allocate) {
       Set_Stack_Top(scope_struct, parser_struct->function_name);
-      // set_scope_owned_pool(scope_struct, previous_owned_pool);
-      set_scope_owned_pool(scope_struct, previous_owned_pool,
+      // if (parser_struct->function_name=="ResidualModule_forward") {
+      //   p2t("PREV OFFSET" + Callee);
+      //   call("print_int", {prev_offset});
+      // }
+
+
+      if (fn_with_pool.count(Callee)>0)
+          set_scope_owned_pool(scope_struct, owned_pool,
                             prev_offset, prev_stride);
+      else
+          set_scope_owned_pool(scope_struct, owned_pool);
   }
   
 

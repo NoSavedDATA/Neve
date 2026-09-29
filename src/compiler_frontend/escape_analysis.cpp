@@ -91,8 +91,9 @@ void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
   if (!parser_struct->has_owned_pool)
     return;
 
-  // std::cout << "FrEE POOL " << parser_struct->function_name << "\n";
 
+  // p2t("free pool " + parser_struct->function_name);
+  // call("print_void_ptr", {get_scope_owned_pool(scope_struct)});
   call("free", {
     get_scope_owned_pool(scope_struct)
   });
@@ -129,12 +130,15 @@ int BinaryExprAST::GetIsOwned() {
 }
 int Nameable::GetIsOwned() {
     // Check Depth 1 owned for borrowed
+    if (OwnedId!=-2)
+        return OwnedId;
     if (Depth>1)
         return -2;
     std::string scope = parser_struct->function_name;
-    // std::cout << " " << scope << " | " << Name << ": " << function_owns[scope].count(Name) << "\n";
+
     if (function_owns[scope].count(Name)==0)
         return -2;
+    // std::cout << "(owned) " << scope << " | " << Name << ": " << function_owns[scope].count(Name) << "\n";
     return function_owns[scope][Name];
 }
 int NameableCall::GetIsOwned() {
@@ -190,19 +194,18 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         
         if(owned_id==-2||in_vec(owned_id,function_escapes[fn_name]))
             return;
+
         int memid = callexpr->MemId;
-
-
+        if (fn_name=="ResidualModule_forward")
+            std::cout << callee << " | " << memid << " | " << fn_borrows[fn_name].count(memid) << "\n";
         if (fn_borrows[fn_name].count(memid)!=0)
             return;
-
-
 
         int size = function_own_ret_count[callee];
         callexpr->OwnedPoolOffset = last_offset;
         callexpr->OwnedPoolCap = size;
         last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-        // std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
+        std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
         return;
     }
 }
@@ -212,8 +215,12 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
         std::string fn_name, 
         std::vector<std::unique_ptr<ExprAST>> &Body) {
 
-    if (fn_ret_dt.count(fn_name)>0)
+    if (fn_ret_dt.count(fn_name)>0) {
+
         parser_struct->borrow_ret = fn_ret_dt[fn_name].is_borrow;
+        // if(parser_struct->borrow_ret)
+        //     LogBlue("RET AS BORROW " + fn_name);
+    }
 
 
     // Set own pool
@@ -226,11 +233,15 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
     bool has_owned_pool = last_offset>0;
 
     if (has_owned_pool) {
+        LogBlue("=="+parser_struct->function_name + " has offset " + std::to_string(last_offset));
         parser_struct->has_owned_pool = true;
-        // std::cout << "==HAS_owned_pool " << parser_struct->function_name << ", last offset: " << last_offset << "\n";
         Value *ownedpool = callret("malloc", {const_int(last_offset)});
         set_scope_owned_pool(scope_struct, ownedpool);
+        // p2t("    SEt pool " + parser_struct->function_name);
+        // call("print_void_ptr", {get_scope_owned_pool(scope_struct)});
+        fn_with_pool[parser_struct->function_name] = 1;
     }
+
 }
 
 
@@ -265,7 +276,8 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
                 std::string nestedcallee = nestedcall->Callee;
                 int owned_id =  nestedcall->OwnedId;
                 // std::cout << ">> " << nestedcallee << " | " << in_vec(owned_id,function_escapes[callee]) << "\n"; 
-                SetToBorrowedRet(parser_struct, nestedcall);
+                if (in_vec(owned_id, function_escapes[callee]))
+                    SetToBorrowedRet(parser_struct, nestedcall);
             }
           });
         }
@@ -281,8 +293,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                  ExprAST *expr,
                  std::vector<int> &owned_ids,
                  int &own_ret_count, int &new_ret,
-                 std::unordered_map<int, int> &ownid_to_size,
-                 int &last_ownid) {
+                 std::unordered_map<int, int> &ownid_to_size) {
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
         EscapeAnalysis(callexpr->BaseCallee, callee, seen);
@@ -291,69 +302,29 @@ void GetOwnedRet(Parser_Struct *parser_struct,
             return;
 
         // std::cout << "-- " << callee << " has " << function_own_ret_count[callee] << "\n"; 
-        callexpr->OwnedId = last_ownid;
-        ownid_to_size[last_ownid++] = function_own_ret_count[callee];
+        ownid_to_size[callexpr->OwnedId] = function_own_ret_count[callee];
 
-        if (fn_borrows[parser_struct->function_name].count(callexpr->MemId)>0)
+        if (fn_borrows[parser_struct->function_name].count(callexpr->MemId)>0) {
+            LogBlue("SET TO BORrowed ret " + callee);
             SetToBorrowedRet(parser_struct, callexpr);
+        }
 
         return;
     }
 
 
-
-    // Update ownid in order to encompass calls
-    if (auto *stmt = dynamic_cast<BinaryExprAST*>(expr)) {
-        if (stmt->Op!='=')
-            return;
-        if(auto *lhs = dynamic_cast<Nameable*>(stmt->LHS.get())) {
-
-            if(lhs->Depth>1)
-                return;
-            std::string name = lhs->Name;
-            std::string fn = parser_struct->function_name;
-            int own_id = stmt->RHS->GetIsOwned();
-            if (own_id > -2)
-                function_owns[fn][name] = own_id;
-        }
-    }
-
-    if (auto *stmt = dynamic_cast<DataExprAST*>(expr)) {
-      for(auto &[name, expr] : stmt->VarNames) {
-            std::string fn = parser_struct->function_name;
-            int own_id = expr->GetIsOwned();
-            if (own_id > -2)
-                function_owns[fn][name] = own_id;
-        }
-    }
-    if (auto *stmt = dynamic_cast<UnkVarExprAST*>(expr)) {
-      for(auto &[name, expr] : stmt->VarNames) {
-            std::string fn = parser_struct->function_name;
-            int own_id = expr->GetIsOwned();
-            if (own_id > -2)
-                function_owns[fn][name] = own_id;
-        }
-    }
-    if (auto *stmt = dynamic_cast<ObjectExprAST*>(expr)) {
-      for(auto &[name, expr] : stmt->VarNames) {
-            if (!expr)
-                continue;
-            std::string fn = parser_struct->function_name;
-            int own_id = expr->GetIsOwned();
-            if (own_id > -2)
-                function_owns[fn][name] = own_id;
-        }
-    }
-
     // Ret
     if (auto *ret_expr = dynamic_cast<RetExprAST*>(expr)) {
         for (auto &var : ret_expr->Vars) {
             int owned_id = var->GetIsOwned();
-
-
             // todo: can change to >=0?
             if (owned_id>=-1) {
-                // std::cout << "add ret " << parser_struct->function_name << " | " << owned_id << "\n"; 
+                // std::cout << "******************add ret " << parser_struct->function_name << " | " << owned_id << "\n"; 
+
+                if (in_vec(var->GetMemId(), fn_borrows_incomplete[parser_struct->function_name]))
+                    LogBlue("INCOMPLETE " + std::to_string(var->GetMemId()));
+
+
                 owned_ids.push_back(owned_id);
                 if(ownid_to_size.count(owned_id)) {
                     own_ret_count+=ownid_to_size[owned_id];
@@ -384,7 +355,6 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
     parser_struct->function_name = fn_name;
-    int last_ownid = *parser_struct->owned_id; // set calls ownid
 
     std::vector<int> owned_ids;
     std::unordered_map<int, int> ownid_to_size;
@@ -393,12 +363,11 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
     for (auto &body : Body) {
       body->TraversePost([parser_struct, &seen, &owned_ids,
               &own_ret_count, &new_ret,
-              &ownid_to_size,
-              &last_ownid](ExprAST *node) {
+              &ownid_to_size](ExprAST *node) {
         GetOwnedRet(parser_struct, seen, node,
                     owned_ids,
                     own_ret_count, new_ret,
-                    ownid_to_size, last_ownid);
+                    ownid_to_size);
       });
     }
 
@@ -410,7 +379,6 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
 
     if (own_ret_count==0)
         return;
-
 
     function_escapes[fn_name] = owned_ids;
     function_own_ret_count[fn_name] = own_ret_count;

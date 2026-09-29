@@ -51,7 +51,7 @@ std::unordered_map<std::string,
 std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
-std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret;
+std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
 std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
@@ -267,8 +267,9 @@ std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, Call
                         true, !in_vec(Callee, native_fn));
 
   if (!found) {
-      if (Template_FnAST.count(Callee)>0)
+      if (Template_FnAST.count(Callee)>0) {
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
+      }
       else if (has_owned) {
         Template_FnAST[Callee][CArgs] = TheJIT->fn_map[Callee];
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
@@ -753,20 +754,21 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     this->parser_struct = parser_struct;
 
     FnVersion[BaseName].push_back(CArgs);
+    SetDefaultArgs(templ.dts);
 
 
     int size = CArgs.args.size();
     for (int i=0; i<size; ++i) {
         std::string arg_name = CArgs.args[i];
+        if (i>=templ.dts.size()) // positional args
+            break;
         Data_Tree dt = templ.dts[i];
         data_typeVars[this->Name][arg_name] = dt;
         this->Args.push_back(arg_name);
         this->Types.push_back(dt);
-
-        // std::cout << "\nname: " << arg_name << "\n"; 
-        // dt.Print();
         // std::cout << "SET ID owned " << (*parser_struct->owned_id) << "\n"; 
         // std::cout << "SET ID memid " << (*parser_struct->mem_id) << "\n"; 
+        // dt.Print();
         if (dt.is_own==ownTy)
           function_owns[fn][arg_name] = (*parser_struct->owned_id)++;
 
@@ -787,6 +789,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     
     fn_ret_dt[this->Name] = CArgs.template_ret;
 
+
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
     if (parser_struct->gpu==0) {
         this->Types.insert(this->Types.begin(), Data_Tree("Scope_Struct"));
@@ -798,6 +801,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
     Function_Arg_Count[this->Name] = required_args;
     fn_argnames[this->Name] = this->Args;
+
+
 
     if (ends_with(this->Name, "disown"))
         fn_called.push_back(this->Name);
@@ -937,6 +942,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
     FunctionAST *fn_ast=nullptr; 
 
+    print_dt_vec(CArgs.dts);
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
@@ -1005,6 +1011,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         *parser_struct->mem_id = 0;
         *parser_struct->owned_id = 0;
 
+
         auto proto = std::make_unique<PrototypeAST>(parser_struct,
                         base_name, fn,
                         CArgs, templ);
@@ -1013,7 +1020,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         fn_ast->parser_struct->function_name = fn;
 
 
-        std::cout << "gen template " << parser_struct->function_name << "\n";
         for (auto &body : fn_ast->Body) {
               body->Traverse([parser_struct, &fn](ExprAST *node) {
                   // node->parser_struct->function_name = fn;
@@ -2288,11 +2294,8 @@ void BinaryExprAST::Checks() {
           std::string name = nameable->GetName(); 
           RHS->Checks();
           int owned_id = RHS->GetIsOwned();
-          if (owned_id > -2)
-            function_owns[parser_struct->function_name][name] = owned_id;
-
-          if(memid!=-2)
-              fn_memid[parser_struct->function_name][name] = memid;
+          function_owns[parser_struct->function_name][name] = owned_id;
+          fn_memid[parser_struct->function_name][name] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
         }
@@ -2809,6 +2812,33 @@ void PrototypeAST::SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits) {
         AddFnVersion(BaseName, CArgs_variation, version);
     }
 }
+void PrototypeAST::SetDefaultArgs(std::vector<Data_Tree> dts) {
+    if(ArgsInit[BaseName].size()==0)
+        return;
+
+    ArgsInit[Name] = ArgsInit[BaseName];
+    int inits = ArgsInit[Name].size();
+
+    Function_Required_Arg_Count[Name] -= inits;
+
+    int i=0, dts_size = dts.size();
+    for(auto &argname : fn_argnames[BaseName]) {
+        if (argname=="scope_struct")
+            continue;
+        if (i++<dts_size)
+            continue;
+        dts.push_back(Function_Arg_DataTypes[BaseName][argname]);
+    }
+
+    // Handle positional args
+    for (int i=0; i<inits; ++i) {
+        auto _dts = dts;
+        _dts.erase(_dts.end()-inits, _dts.end()-inits+i+1);
+        CallArgsTy CArgs_variation = CallArgsTy(dts);
+        AddFnVersion(BaseName, CArgs_variation, version);
+    }
+}
+
   
 PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
               const std::string &Name,
@@ -3258,6 +3288,7 @@ void Nameable::Checks() {
     FunctionChecks(Name+"___init__");
 
   MemId = GetMemId();
+  OwnedId = GetIsOwned();
 }
 
 
@@ -3423,11 +3454,12 @@ void NameableCall::Checks() {
       if (Callee!=BaseCallee && gpu_fn.count(BaseCallee)>0)
         gpu_fn[Callee] = 1;
 
-
       TemplateSolveCompiledArgs(Callee, BaseCallee);
   }
 
   MemId = (*parser_struct->mem_id)++;
+  if (fn_with_owned_ret.count(Callee)>0)
+      OwnedId = (*parser_struct->owned_id)++;
 }
 
 

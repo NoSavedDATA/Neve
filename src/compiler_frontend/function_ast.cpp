@@ -33,6 +33,7 @@
 #include "codegen.h"
 #include "escape_analysis.h"
 #include "expressions.h"
+#include "include.h"
 #include "logging.h"
 #include "modules.h"
 #include "ownership.h"
@@ -942,11 +943,34 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
     int branch_id = (branch[0] >> 32)&MASK_16;
     int size = fn_borrows_c[fn_name][memid];
 
+    std::cout << "<>"<< fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
     if (size<cap) {
         std::cout << fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
         ConditionalTakes[memid] = LastConditionalTake++;
 
     }
+
+
+    if (size>cap)
+        LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+
+
+    for(auto &_branch : branch) {
+        int _branch_id = (_branch>>32) & MASK_16;
+        std::cout << "Append in " << _branch_id << "\n";
+
+    }
+
+    // uint64_t first_branch = fn_borrows[fn_name][memid][0];
+    // int cstmt = (first_branch>>32)&MASK_16;
+    // for (auto branch : fn_borrows[fn_name][memid]) {
+    //     if (cstmt!=(branch>>32)&MASK_16) {
+    //         std::cout << " " << first_branch << " | " << branch << "\n";
+    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+
+    //     }
+    // }
+
 
 
     if(!fn_bad_borrows.count(fn_name))
@@ -962,15 +986,6 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
     // }
 
-    // uint64_t first_branch = fn_borrows[fn_name][memid][0];
-    // int cstmt = (first_branch>>32)&MASK_16;
-    // for (auto branch : fn_borrows[fn_name][memid]) {
-    //     if (cstmt!=(branch>>32)&MASK_16) {
-    //         std::cout << " " << first_branch << " | " << branch << "\n";
-    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
-
-    //     }
-    // }
 }
 
 
@@ -1144,6 +1159,7 @@ Function *FunctionAST::codegen() {
   OwnedsCleared.clear();
   fn_owned_ret_memory.clear();
   ConditionalTakes.clear();
+  ConditionalsQueue.clear();
   ConditionalTakesV = nullptr;
 
 

@@ -632,7 +632,7 @@ class Nameable : public ExprAST {
   public:
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
-  int Depth=1, MemId=-2;
+  int Depth=1, MemId=-2, OwnedId=-2;
   bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
   bool checked=false, IsAttr=false;
 
@@ -1258,7 +1258,7 @@ class PrototypeAST {
   
     
     void SetDefaultArgs(std::vector<std::unique_ptr<ExprAST>> Inits);
-  
+    void SetDefaultArgs(std::vector<Data_Tree>);
   
     unsigned getBinaryPrecedence() const; 
 };
@@ -1325,9 +1325,10 @@ extern std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
 
 
-extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_with_owned_ret;
+extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
 extern std::unordered_map<std::string, std::vector<int>> fn_rets;
+extern std::vector<std::string> ConditionalsQueue;
 
 
 

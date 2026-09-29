@@ -56,7 +56,7 @@ void print_caller() {
 
 std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 std::map<std::string, std::vector<std::string>> ClassNativeMethods;
-std::map<std::string, std::map<std::string, std::unique_ptr<ExprAST>>> ArgsInit;
+std::map<std::string, std::map<std::string, std::shared_ptr<ExprAST>>> ArgsInit;
 std::map<std::string, std::map<std::string, int>> ChannelDirections;
 
 

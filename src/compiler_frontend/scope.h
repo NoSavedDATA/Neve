@@ -101,7 +101,7 @@ inline void set_scope_owned_pool(Value *scope_struct, Value *ownedpool,
 
 inline void set_scope_retpool(
         Value *scope_struct, Value *ownedpool,
-        int stride, int offset) {
+        int offset, int stride) {
     StructType *st = struct_types["scope_struct"];
     Value *retpool_gep = Builder->CreateStructGEP(
             st, scope_struct, 9
@@ -113,12 +113,8 @@ inline void set_scope_retpool(
             st, scope_struct, 11
           );
 
-    Value *owned_pool_offset = Builder->CreateGEP(
-        int8Ty, ownedpool, const_int(offset)
-    );
-
-    Builder->CreateStore(owned_pool_offset, retpool_gep);
-    Builder->CreateStore(const_int(0), retpool_offset_gep);
+    Builder->CreateStore(ownedpool, retpool_gep);
+    Builder->CreateStore(const_int(offset), retpool_offset_gep);
     Builder->CreateStore(const_int(stride), retpool_stride_gep);
 }
 
@@ -155,12 +151,14 @@ inline Value *get_scope_escape_retoffset(
             Builder->CreateStructGEP(
                 st, scope_struct, 11
               ));
+    // p2t("offset");
     // call("print_int", {offset});
     // call("print_int", {stride});
 
     Value *next_offset = Builder->CreateAdd(offset, stride);
     Builder->CreateStore(next_offset, retpool_offset_gep);
 
-    Value *ret = Builder->CreateGEP(int8Ty, retpool, offset);
-    return ret;
+    Value *new_offset = Builder->CreateLoad(intTy,retpool_offset_gep);
+
+    return Builder->CreateGEP(int8Ty, retpool, offset);
 }

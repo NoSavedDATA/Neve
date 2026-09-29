@@ -91,13 +91,13 @@ void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr) {
 void OwnedHolder::ClearOwned(Value *scope_struct) {
     if (OwnedToClear.size()==0)
         return;
-    std::cout << "\n\n------\n";
-    if (dynamic_cast<BinaryExprAST*>(this))
-        std::cout << "BinOp CLEAR OWNED " << "\n";
+    // std::cout << "\n\n------\n";
+    // if (dynamic_cast<BinaryExprAST*>(this))
+    //     std::cout << "BinOp CLEAR OWNED " << "\n";
     // if (dynamic_cast<NameableCall*>(this))
     //     std::cout << "CALL CLEAR OWNED " << "\n";
     // if (dynamic_cast<IfExprAST*>(this))
-    //     std::cout << "IF CLEAR OWNED " << "\n";
+        // std::cout << "IF CLEAR OWNED " << "\n";
     // if (dynamic_cast<ForExprAST*>(this))
     //     std::cout << "FOR CLEAR OWNED " << "\n";
     // if (dynamic_cast<WhileExprAST*>(this))
@@ -106,11 +106,12 @@ void OwnedHolder::ClearOwned(Value *scope_struct) {
     Value *previous_obj = get_scope_obj(scope_struct);
     for(auto &[dt, memid, ptr] : OwnedToClear) {
         OwnedsCleared.push_back(ptr);
-        bool is_conditional = ConditionalTakes.count(memid)>0; 
 
+        bool is_conditional = ConditionalTakes.count(memid)>0; 
         BasicBlock *AfterBB, *DisownBB;
         if (is_conditional) {
             std::cout << "----------------------------AS CONDITIONAL " << memid << "\n";
+            p2t("------------------------->conditional " + std::to_string(memid));
             Function *TheFunction = Builder->GetInsertBlock()->getParent();
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
@@ -262,7 +263,7 @@ inline void RegisterBorrow(Parser_Struct *parser_struct,
     if (appended_memid == -2)
         return;
 
-    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
+    std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
 
     borrow_ids[appended_memid].push_back(parent_branch);
     borrow_c[appended_memid]++;
@@ -603,9 +604,9 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     fn_bad_borrows[fn_name] = bad_borrows;
     fn_rets[fn_name] = retids;
     fn_retscount[fn_name] = retcount;
+
     for(auto &[memid, branch] : memid_to_branch)
         fn_memid_to_branch[fn_name][memid] = branch;
-
 
     for(auto &[memid,borrows]: borrow_ids) {
         uint64_t fn_owner_branch = borrows[0];

@@ -42,7 +42,7 @@ extern std::map<std::string, Data_Tree> Idx_Fn_Return;
 extern std::vector<std::string> Sys_Arguments;
  
 
-extern std::map<std::string, std::map<std::string, std::unique_ptr<ExprAST>>> ArgsInit;
+extern std::map<std::string, std::map<std::string, std::shared_ptr<ExprAST>>> ArgsInit;
 
 extern std::vector<std::string> imported_libs;
 extern std::map<std::string, std::vector<std::string>> lib_submodules;
