@@ -47,6 +47,7 @@ std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 
+int LastConditionalTake;
 
 
 inline void RegisterData() {
@@ -943,7 +944,8 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
 
     if (size<cap) {
         std::cout << fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
-        ConditionalTakes[memid] = branch_id;
+        ConditionalTakes[memid] = LastConditionalTake++;
+
     }
 
 
@@ -1060,11 +1062,10 @@ Function *FunctionAST::codegen() {
         StoreVal(TheFunction, function_name, arg_name, &Arg,
                     data_typeVars[function_name][arg_name]);
 
-        if(fn_arg_memid.count(function_name)>0)
-            if(fn_arg_memid[function_name].count(arg_name)>0)
-                memidV[fn_arg_memid[function_name][arg_name]] = &Arg;
-
-        Data_Tree &dt = data_typeVars[function_name][arg_name];
+        int memid = fn_memid[function_name][arg_name];
+        Data_Tree dt = data_typeVars[function_name][arg_name];
+        if (memid!=-2&&fn_borrows[function_name].count(memid)>0)
+            OwnedValues.push_back({memid, dt, &Arg, 3});
     }
   }
 
@@ -1103,6 +1104,7 @@ Function *FunctionAST::codegen() {
 
 
 
+  LastConditionalTake = 0;
 
   for (auto &[owned, memid] : ownid_to_memid)
       EvaluateBorrow(parser_struct, P->BaseName, memid);
@@ -1114,8 +1116,18 @@ Function *FunctionAST::codegen() {
   }
 
 
-  if (ConditionalTakes.size()>0)
-      ConditionalTakesV = ConstantAggregateZero::get(ArrayType::get(boolTy, ConditionalTakes.size()));
+  if (ConditionalTakes.size()>0) {
+      // ConditionalTakesV = ConstantAggregateZero::get(ArrayType::get(intTy, ConditionalTakes.size()));
+    ConditionalTakesV = Builder->CreateAlloca(boolTy, const_int(ConditionalTakes.size()));
+    uint64_t sizeInBytes = ConditionalTakes.size() * (boolTy->getIntegerBitWidth() / 8);
+    Builder->CreateMemSet(
+        ConditionalTakesV, 
+        const_bool(0),   
+        sizeInBytes,     
+        Align(4)         
+    );
+      
+  }
 
 
   SetFnOwn(parser_struct, scope_struct, function_name, Body);
@@ -1126,20 +1138,19 @@ Function *FunctionAST::codegen() {
     // std::cout << "(fn_ast codegen)" << typeid(*body).name() << "\n";
     // if (auto *stmt = dynamic_cast<NameableCall*>(body.get()))
     //     std::cout << "(fn_ast codegen of) " << stmt->Callee << "\n";
-    if (auto *stmt = dynamic_cast<RetExprAST*>(body.get()))
-        Clear_Owned_Values(scope_struct, Body);
     RetVal = body->codegen(scope_struct);
   }
   OwnedValues.clear();
+  OwnedsCleared.clear();
   fn_owned_ret_memory.clear();
   ConditionalTakes.clear();
-  memidV.clear();
   ConditionalTakesV = nullptr;
 
 
   if (RetVal) {
     if(!Builder->GetInsertBlock()->getTerminator()) {
-        Clear_Owned_Values(scope_struct, Body);
+        // Clear_Owned_Values(scope_struct, &Body);
+        Clear_Fn_Owned_Values(scope_struct);
         FreeOwnedPool(scope_struct, parser_struct);
         Builder->CreateRet(RetVal); 
     }

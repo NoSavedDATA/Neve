@@ -329,6 +329,7 @@ class UnkVarExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
     bool checked=false;
+    std::vector<int> Memids;
 
     UnkVarExprAST(
       Parser_Struct *,
@@ -430,6 +431,7 @@ class ObjectExprAST : public VarExprAST {
 public:
   std::unique_ptr<ExprAST> Init;
   std::vector<bool> HasInit;
+  std::vector<int> Memids;
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args;
   std::string ClassName;
 
@@ -460,6 +462,7 @@ class DataExprAST : public VarExprAST {
     Data_Tree data_type;
     bool HasNotes, IsStruct, DtHasCreateFn, IsOwned, checked=false;
     std::string dt_type, create_fn; 
+    std::vector<int> Memids;
 
     DataExprAST(
       Parser_Struct *,
@@ -534,6 +537,14 @@ class LibImportExprAST : public ExprAST {
    
  
   
+class OwnedHolder {
+  public:
+    std::vector<std::tuple<Data_Tree, int, Value*>> OwnedToClear;
+    virtual ~OwnedHolder() = default;
+  public:
+    virtual void ClearOwned(Value*);
+    virtual void RegisterOwned(Data_Tree, int, Value*);
+};
   
   
   
@@ -559,13 +570,12 @@ public:
   
   
 /// BinaryExprAST - Expression class for a binary operator.
-class BinaryExprAST : public ExprAST {
+class BinaryExprAST : public ExprAST, public OwnedHolder {
   std::string cast_L_to="", cast_R_to="";
   Data_Tree L_dt, R_dt;
 
 public:
   std::string Elements, Operation;
-  std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
   bool is_store_sugar=false, is_fused=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::unique_ptr<ExprAST> LHS, RHS;
@@ -578,8 +588,6 @@ public:
   bool GetNeedGCSafePoint() override;
   FnCompiledValues GetSubmitedCValues();
   void Checks() override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   // void SetCValues(Parser_Struct *parser_struct);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -674,7 +682,7 @@ class NameableLLVMIRCall : public Nameable {
 };
 
 
-class NameableCall : public Nameable {
+class NameableCall : public Nameable, public OwnedHolder {
   bool checked=false;
   public:
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
@@ -685,7 +693,6 @@ class NameableCall : public Nameable {
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, BaseCallee, ReturnType="";
   std::vector<Data_Tree> Types;
-  std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
   CallArgsTy CompiledArgsVec, CArgs;
 
   NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy);
@@ -697,8 +704,6 @@ class NameableCall : public Nameable {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   void Checks() override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   int GetIsOwned() override;
   int GetMemId() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
@@ -836,9 +841,8 @@ class RetExprAST : public ExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Vars;
     Data_Tree return_expected_type, returning_type;
-    bool ClearOwned;
     
-    RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct *, bool);
+    RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct *);
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
@@ -879,12 +883,11 @@ class GCSafePointExprAST : public ExprAST {
 
 
 /// IfExprAST - Expression class for if/then/else.
-class IfExprAST : public ExprAST {
+class IfExprAST : public ExprAST, public OwnedHolder {
   std::unique_ptr<ExprAST> Cond;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Then, Else;
-    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     IfExprAST(Parser_Struct *,
               std::unique_ptr<ExprAST> Cond,
               std::vector<std::unique_ptr<ExprAST>> Then,
@@ -897,8 +900,6 @@ class IfExprAST : public ExprAST {
                 std::vector<BasicBlock *> &BreakBB,
                 std::vector<BasicBlock *> &ContinueBB);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
@@ -906,11 +907,10 @@ class IfExprAST : public ExprAST {
 
   
 /// ForExprAST - Expression class for for.
-class ForExprAST : public ExprAST {
+class ForExprAST : public ExprAST, public OwnedHolder {
   public:
     std::string VarName;
     std::unique_ptr<ExprAST> Start, End, Step;
-    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     std::vector<std::unique_ptr<ExprAST>> Body;
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
@@ -920,21 +920,18 @@ class ForExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 /// ForExprAST - Expression class for for.
-class ForEachExprAST : public ExprAST {
+class ForEachExprAST : public ExprAST, public OwnedHolder {
   std::string VarName;
   std::unique_ptr<ExprAST> Vec;
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Body;
-    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
               std::vector<std::unique_ptr<ExprAST>> Body,
               Parser_Struct *,
@@ -942,19 +939,16 @@ class ForEachExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   void SetCValues(Parser_Struct *) override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 /// WhileExprAST - Expression class for while.
-class WhileExprAST : public ExprAST {
+class WhileExprAST : public ExprAST, public OwnedHolder {
   std::unique_ptr<ExprAST> Cond;
 
   public:
-    std::vector<std::pair<Data_Tree, Value*>> OwnedToClear;
     std::vector<std::unique_ptr<ExprAST>> Body;
     WhileExprAST(std::unique_ptr<ExprAST> Cond,
             std::vector<std::unique_ptr<ExprAST>> Body,
@@ -963,8 +957,6 @@ class WhileExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct *) override;
-  void RegisterOwned(Data_Tree, Value*);
-  void ClearOwned();
   void Checks() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -1202,10 +1194,9 @@ class SplitStridedParallelExprAST : public ExprAST {
 
 
 class MainExprAST : public ExprAST {
+  public:
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   bool checked=false;
-
-  public:
     MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
 
 
@@ -1334,7 +1325,7 @@ extern std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
 
 
-extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount;
+extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_with_owned_ret;
 
 extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 

@@ -25,6 +25,9 @@ inline bool has_body(ExprAST *expr) {
 }
 
 
+void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr);
+
+
 
 
 void BorrowChecker(std::string, std::string fn_name,

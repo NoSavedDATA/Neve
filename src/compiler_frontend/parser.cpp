@@ -1984,13 +1984,11 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct *parser_struct, std::string 
 
   std::unique_ptr<ExprAST> expr;
 
-  bool clear_owned = parser_struct->scope_depth>0;
-
 
 
   if (CurTok==tok_space)  {
     getNextToken();
-    return make_unique<RetExprAST>(std::move(Vars), parser_struct, clear_owned);
+    return make_unique<RetExprAST>(std::move(Vars), parser_struct);
   }
   
   while(true) {
@@ -2010,7 +2008,7 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct *parser_struct, std::string 
     getNextToken(); // eat ,
   }
 
-  return make_unique<RetExprAST>(std::move(Vars), parser_struct, clear_owned);
+  return make_unique<RetExprAST>(std::move(Vars), parser_struct);
 }
 
 

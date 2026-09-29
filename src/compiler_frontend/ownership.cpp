@@ -75,69 +75,64 @@ int NameableCall::GetMemId() {
 
 
 
-
-void ForExprAST::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
+void OwnedHolder::RegisterOwned(Data_Tree dt, int memid, Value *v) {
+    OwnedToClear.push_back({dt, memid, v});
 }
-void ForExprAST::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "FOR CLEAR " << value << "\n"; 
-        dt.Print();
+
+
+void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr) {
+    std::string disown_method = dt.Type+"_disown";
+    if (fn_ret_dt.count(disown_method)>0) {
+        set_scope_obj(scope_struct, ptr);
+        call(disown_method, {scope_struct, ptr});
     }
 }
 
-void ForEachExprAST::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
-}
-void ForEachExprAST::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "ForEachExprAST CLEAR " << value << "\n"; 
-        dt.Print();
+void OwnedHolder::ClearOwned(Value *scope_struct) {
+    if (OwnedToClear.size()==0)
+        return;
+    std::cout << "\n\n------\n";
+    if (dynamic_cast<BinaryExprAST*>(this))
+        std::cout << "BinOp CLEAR OWNED " << "\n";
+    // if (dynamic_cast<NameableCall*>(this))
+    //     std::cout << "CALL CLEAR OWNED " << "\n";
+    // if (dynamic_cast<IfExprAST*>(this))
+    //     std::cout << "IF CLEAR OWNED " << "\n";
+    // if (dynamic_cast<ForExprAST*>(this))
+    //     std::cout << "FOR CLEAR OWNED " << "\n";
+    // if (dynamic_cast<WhileExprAST*>(this))
+    //     std::cout << "WHILE CLEAR OWNED " << "\n";
+
+    Value *previous_obj = get_scope_obj(scope_struct);
+    for(auto &[dt, memid, ptr] : OwnedToClear) {
+        OwnedsCleared.push_back(ptr);
+        bool is_conditional = ConditionalTakes.count(memid)>0; 
+
+        BasicBlock *AfterBB, *DisownBB;
+        if (is_conditional) {
+            std::cout << "----------------------------AS CONDITIONAL " << memid << "\n";
+            Function *TheFunction = Builder->GetInsertBlock()->getParent();
+            AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
+                                TheFunction);
+            DisownBB = BasicBlock::Create(*TheContext, "disown.disown",
+                                TheFunction);
+
+            Builder->CreateCondBr(
+                        Builder->CreateLoad(boolTy,
+                            Builder->CreateInBoundsGEP(boolTy,
+                                ConditionalTakesV,
+                                const_int(ConditionalTakes[memid]))),
+                        AfterBB, DisownBB);
+            Builder->SetInsertPoint(DisownBB);
+        }
+        Disown(scope_struct, dt, ptr);
+        if (is_conditional) {
+            call("free", {ptr});
+            Builder->CreateBr(AfterBB);
+            Builder->SetInsertPoint(AfterBB);
+        }
     }
-}
-
-void WhileExprAST::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
-}
-void WhileExprAST::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "While CLEAR " << value << "\n"; 
-        dt.Print();
-    }
-}
-
-
-
-void IfExprAST::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
-}
-void IfExprAST::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "IF CLEAR " << value << "\n"; 
-        dt.Print();
-    }
-}
-
-
-void BinaryExprAST::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
-}
-void BinaryExprAST::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "BIRANY CLEAR " << value << "\n"; 
-        dt.Print();
-    }
-}
-
-
-void NameableCall::RegisterOwned(Data_Tree dt, Value *v) {
-    OwnedToClear.push_back({dt, v});
-}
-void NameableCall::ClearOwned() {
-    for(auto &[dt, value] : OwnedToClear) {
-        std::cout << "CALL CLEAR " << value << "\n"; 
-        dt.Print();
-    }
+    set_scope_obj(scope_struct, previous_obj);
 }
 
 
@@ -245,16 +240,13 @@ void DataExprAST::SetMemId(std::unordered_map<int,uint64_t> &memid_to_branch) {
   if (!data_type.IsFromArena())
       return;
 
+
+  int i=0;
   for(auto &[name, expr] : this->VarNames) {
+    int memid = Memids[i++];
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
-        int memid = *parser_struct->mem_id;
         memid_to_branch[memid] = FormatLifetime(BranchId, memid);
-        fn_memid[parser_struct->function_name][name] = (*parser_struct->mem_id)++;
-    } else {
-        int memid = expr->GetMemId();
-        if (memid > -2)
-            fn_memid[parser_struct->function_name][name] = memid;
-    }
+    } 
   }
 }
 
@@ -499,6 +491,26 @@ void GetBorrows(Parser_Struct *parser_struct,
     }
 
 
+    if (auto *binop = dynamic_cast<BinaryExprAST*>(expr)) {
+
+        if (binop->Op!='='&&!binop->is_store_sugar)
+            return;
+
+        // int lmemid = binop->LHS->GetMemId();
+        int rmemid = binop->RHS->GetMemId();
+        if (rmemid==-2)
+            return;
+
+        if (auto *lstmt = dynamic_cast<Nameable*>(binop->LHS.get())) {
+            if (lstmt->Depth==1) {
+                fn_memid[parser_struct->function_name][lstmt->GetName()] = rmemid;
+            }
+        }
+
+        return;
+    }
+
+
     if (auto *nameable = dynamic_cast<Nameable*>(expr)) {
         CheckBadBorrow(parser_struct, borrow_ids, borrow_c,
                        bad_borrows, nameable);
@@ -506,6 +518,8 @@ void GetBorrows(Parser_Struct *parser_struct,
         if (!nameable->IsAttr&&memid!=-2) {
             uint64_t branch = nameable->BranchId;
             branch = (branch&~MASK_16) | memid;
+            // if (parser_struct->function_name=="ResidualModule_infer")
+            //     std::cout << "Last Seen " << memid << " | " << expr << "\n";
             fn_memid_to_lastseen[parser_struct->function_name][memid] = expr;
         }
 
@@ -516,31 +530,17 @@ void GetBorrows(Parser_Struct *parser_struct,
         dataexpr->SetMemId(memid_to_branch);
         return;
     }
-    if (auto *dataexpr = dynamic_cast<UnkVarExprAST*>(expr)) {
-        for(auto &[name, _] : dataexpr->VarNames) {
-            if (fn_memid[parser_struct->function_name].count(name)) {
-                int memid = fn_memid[parser_struct->function_name][name];
-                // std::cout << "UNK " << name << "->"<< memid << "\n";
-                memid_to_branch[memid] = FormatLifetime(dataexpr->BranchId, memid);
-            }
+    if (auto *unkvarexpr = dynamic_cast<UnkVarExprAST*>(expr)) {
+        int i=0;
+        for(auto &[name, _] : unkvarexpr->VarNames) {
+            int memid = unkvarexpr->Memids[i++];
+            if (memid==-2)
+                continue;
+            memid_to_branch[memid] = FormatLifetime(unkvarexpr->BranchId, memid);
         }
         return;
     }
 
-    if (auto *objexpr = dynamic_cast<ObjectExprAST*>(expr)) {
-        for (unsigned i = 0, e = objexpr->VarNames.size(); i != e; ++i) {
-            if (!objexpr->HasInit[i]) {
-                std::string name = objexpr->VarNames[i].first;
-                int memid = fn_memid[parser_struct->function_name][name];
-            }
-        }
-        return;
-    }
-
-    if (auto *newexpr = dynamic_cast<NewExprAST*>(expr)) {
-        newexpr->MemId = (*parser_struct->mem_id)++;
-        return;
-    }
 
 
     if (auto *ret_expr = dynamic_cast<RetExprAST*>(expr)) {

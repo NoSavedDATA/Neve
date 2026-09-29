@@ -10,6 +10,7 @@
 // # Cannot detect whether b or c moves
 
 
+#include "escape_analysis.h"
 #include "modules.h"
 #include "ownership.h"
 #include "expressions.h"
@@ -26,20 +27,48 @@
 
 
 
-std::vector<std::pair<Data_Tree, Value*>> OwnedValues;
+std::vector<std::tuple<int, Data_Tree, Value*, int>> OwnedValues;
+std::vector<Value*> OwnedsCleared;
 
 
-void Clear_Fn_Owned_Values(Value *scope_struct) {
+inline void Clear_Fn_Owned_Values(Value *scope_struct,
+        std::vector<Value *> &returned_values) {
+
     Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[dt, ptr] : OwnedValues) {
-        std::string disown_method = dt.Type+"_disown";
-        if (fn_ret_dt.count(disown_method)>0) {
-            set_scope_obj(scope_struct, ptr);
-            call(disown_method, {scope_struct, ptr});
+    for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
+        if (in_vec(ptr, returned_values))
+            continue;
+
+        if (!in_vec(ptr, OwnedsCleared)) {
+            std::cout << "CHECK DISOWN " << "\n"; 
+            dt.Print();
+            Disown(scope_struct, dt, ptr);
         }
+    
+
+        if (owned_type==2) // possible borrow mem for returned 
+            call("free", {ptr});
     }
+
     set_scope_obj(scope_struct, previous_obj);
 }
+
+void Clear_Fn_Owned_Values(Value *scope_struct) {
+
+    Value *previous_obj = get_scope_obj(scope_struct);
+    for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
+
+        if (!in_vec(ptr, OwnedsCleared))
+            Disown(scope_struct, dt, ptr);
+    
+
+        if (owned_type==2) // possible borrow mem for returned 
+            call("free", {ptr});
+    }
+
+    set_scope_obj(scope_struct, previous_obj);
+}
+
 
 
 void GetScopeOwnedValues(ExprAST *expr,
@@ -52,24 +81,6 @@ void GetScopeOwnedValues(ExprAST *expr,
     }
 }
 
-
-void Clear_Owned_Values(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Body) {
-    std::vector<std::pair<Data_Tree,Value*>> owneds;
-    for (auto &body : Body) {
-        body->Traverse([&owneds](ExprAST *node) {
-            GetScopeOwnedValues(node, owneds);
-        });
-    }
-
-    Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[dt, ptr] : owneds) {
-        set_scope_obj(scope_struct, ptr);
-        std::string disown_method = dt.Type+"_disown";
-        if (fn_ret_dt.count(disown_method)>0)
-        call(disown_method, {scope_struct, ptr});
-    }
-    set_scope_obj(scope_struct, previous_obj);
-}
 
 
 
@@ -87,9 +98,8 @@ void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
   });
 }
 
-void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, bool clear_owned) {
-  if (clear_owned)
-    Clear_Fn_Owned_Values(scope_struct);
+void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, std::vector<Value *> &returned_values) {
+  Clear_Fn_Owned_Values(scope_struct, returned_values);
   FreeOwnedPool(scope_struct, parser_struct);
 }
 
