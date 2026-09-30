@@ -118,6 +118,7 @@ void gen_generics() {
         }
 
         fn_ast->parser_struct->function_name = fn;
+        fn_ast->parser_struct->base_name = base_name;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
         fn_ast->function_name = fn;
         // BasicBlock *CurBB = Builder->GetInsertBlock();

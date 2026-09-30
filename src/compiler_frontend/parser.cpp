@@ -92,6 +92,7 @@ Parser_Struct *Parser_Struct::Copy() {
   Parser_Struct *copy = new Parser_Struct();
   copy->class_name = class_name;
   copy->function_name = function_name;
+  copy->base_name = base_name;
   copy->prev_function_name = prev_function_name;
   copy->parse_fn = parse_fn;
   copy->can_be_string=can_be_string;
@@ -1044,6 +1045,7 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct *parser_struct, std::strin
 
   Parser_Struct *body_parser_struct = parser_struct->Copy(); 
   body_parser_struct->function_name = async_scope;
+  body_parser_struct->base_name = async_scope;
 
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok!=tok_space)
@@ -1070,6 +1072,7 @@ std::unique_ptr<ExprAST> ParseSpawnExpr(Parser_Struct *parser_struct, std::strin
 
   Parser_Struct *body_parser_struct = parser_struct->Copy();
   body_parser_struct->function_name = async_scope;
+  body_parser_struct->base_name = async_scope;
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
@@ -1099,6 +1102,7 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct *parser_struct, std::stri
 
   Parser_Struct *body_parser_struct = parser_struct->Copy();
   body_parser_struct->function_name = async_scope;
+  body_parser_struct->base_name = async_scope;
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
@@ -2261,8 +2265,10 @@ std::unique_ptr<ExprAST> ParseMapit(Parser_Struct *parser_struct,
     auto mapit_expr = std::make_unique<MapitExprAST>(parser_struct, std::move(LHS), std::move(lambda));
 
     parser_struct->function_name = lambda_fn;
+    parser_struct->base_name = lambda_fn;
     auto body = ParseExpression(parser_struct, class_name);
     parser_struct->function_name = prev_fn;
+    parser_struct->base_name = prev_fn;
     mapit_expr->Lambda->Body = std::move(body);
 
     return std::move(mapit_expr);
@@ -2813,6 +2819,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct *parser_struct, std::
     return nullptr;
 
   parser_struct->function_name = Proto->getName();
+  parser_struct->base_name = Proto->BaseName;
   parser_struct->has_compiled_args = Fn_Compiled_Args.count(parser_struct->function_name)>0;
   
   std::vector<std::unique_ptr<ExprAST>> Body;

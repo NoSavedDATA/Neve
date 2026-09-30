@@ -4007,6 +4007,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 void NewExprAST::AllocPtr(Value *scope_struct) {
 
+    std::cout << "BASE NAME: " << parser_struct->base_name << "\n";
 
     if (MemoryType==newTy) {
         // new - GC arena alloc

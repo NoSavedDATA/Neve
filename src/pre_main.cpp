@@ -262,6 +262,7 @@ void HandleTopLevelExpression() {
   
   Parser_Struct *parser_struct = new Parser_Struct();
   parser_struct->function_name = "__anon_expr";
+  parser_struct->base_name = "__anon_expr";
 
   if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr(parser_struct)) {
     CodegenTopLevelExpression(std::ref(FnAST));	
