@@ -67,6 +67,22 @@ bool in_vec(const T& str, const std::vector<T>& list) {
     return std::find(list.begin(), list.end(), str) != list.end();
 }
 
+
+template<typename T, typename U>
+bool map_has_val(std::map<T, U>& map, U x) {
+    for(auto &[key, val] : map)
+        if (val==x)
+            return true;
+    return false;
+}
+template<typename T, typename U>
+bool map_has_val(std::unordered_map<T, U>& map, U x) {
+    for(auto &[key, val] : map)
+        if (val==x)
+            return true;
+    return false;
+}
+
 bool in_vec(int value, const std::vector<char>& list);
 
 bool is_number(std::string s); 

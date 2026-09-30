@@ -88,7 +88,7 @@ struct CompValEqual {
 
 struct Parser_Struct {
   std::string class_name="";
-  std::string function_name="";
+  std::string function_name="", base_name="";
   std::string prev_function_name="";
   std::string parse_fn="";
   bool can_be_string=false;

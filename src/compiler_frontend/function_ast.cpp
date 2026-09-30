@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <execution>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -48,7 +49,6 @@ std::unordered_map<std::string, PrototypeAST*> PriorityProtos;
 std::unordered_map<std::string, std::function<llvm::Type*(std::unique_ptr<LLVMContext>&)>> data_register_fn;
 std::unordered_map<std::string, std::function<llvm::PointerType*(std::unique_ptr<LLVMContext>&)>> data_ptr_register_fn;
 
-int LastConditionalTake;
 
 
 inline void RegisterData() {
@@ -933,21 +933,33 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
 
-void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid) {
-    if (!fn_borrows[fn_name].count(memid))
+void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
+        std::string base_name, std::string fn, int memid) {
+    if (!fn_borrows[base_name].count(memid))
         return;
 
 
-    std::vector<uint64_t> branch = fn_borrows[fn_name][memid];
+    std::vector<uint64_t> branch = fn_borrows[base_name][memid];
     int cap = (branch[0] >> 16)&MASK_16;
     int branch_id = (branch[0] >> 32)&MASK_16;
-    int size = fn_borrows_c[fn_name][memid];
+    int size = fn_borrows_c[base_name][memid];
 
-    std::cout << "<>"<< fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
-    if (size<cap) {
-        std::cout << fn_name << " -- " << memid << " | " << size << " | " << cap << "\n";
-        ConditionalTakes[memid] = LastConditionalTake++;
+    // std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
 
+
+    // bool is_partial_take = size<cap;
+    bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
+
+    if (is_partial_take && ctakens[fn].count(memid)!=0) {
+        LogBlue("SKIP: " + fn + ": " + std::to_string(memid));
+    }
+
+
+    if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
+        LogBlue("Set ctaken: " + fn + ": " + std::to_string(memid));
+        AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
+        ctakens[fn][memid] = alloca;
+        Builder->CreateStore(const_bool(false),alloca);
     }
 
 
@@ -955,15 +967,10 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
 
 
-    for(auto &_branch : branch) {
-        int _branch_id = (_branch>>32) & MASK_16;
-        std::cout << "Append in " << _branch_id << "\n";
 
-    }
-
-    // uint64_t first_branch = fn_borrows[fn_name][memid][0];
+    // uint64_t first_branch = fn_borrows[base_name][memid][0];
     // int cstmt = (first_branch>>32)&MASK_16;
-    // for (auto branch : fn_borrows[fn_name][memid]) {
+    // for (auto branch : fn_borrows[base_name][memid]) {
     //     if (cstmt!=(branch>>32)&MASK_16) {
     //         std::cout << " " << first_branch << " | " << branch << "\n";
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
@@ -973,10 +980,10 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
 
 
 
-    if(!fn_bad_borrows.count(fn_name))
+    if(!fn_bad_borrows.count(base_name))
         return;
 
-    if (in_vec(memid, fn_bad_borrows[fn_name]))
+    if (in_vec(memid, fn_bad_borrows[base_name]))
         LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
 
     // auto &borrow_branches = fn_borrows[Callee][arg_memid];
@@ -985,7 +992,6 @@ void EvaluateBorrow(Parser_Struct *parser_struct, std::string fn_name, int memid
     //     if (first_borrow!=borrow_branches[j])
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
     // }
-
 }
 
 
@@ -1072,6 +1078,10 @@ Function *FunctionAST::codegen() {
         Value *stack_top_value_gep = Builder->CreateStructGEP(st, scope_struct, 3); 
         function_values[function_name]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
         fn_stack_offset[function_name] = 0;
+    } else if (begins_with(arg_name, "__ctaken_")) {
+        int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
+        LogBlue("*************"+function_name + " ARGID: " + std::to_string(arg_memid));
+        ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
         StoreVal(TheFunction, function_name, arg_name, &Arg,
@@ -1112,37 +1122,26 @@ Function *FunctionAST::codegen() {
         if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
             if (stmt->OwnedId!=-2)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
-            }
+        }
+        if (auto *stmt = dynamic_cast<NameableCall*>(node)) {
+            if (stmt->OwnedId!=-2)
+                ownid_to_memid[stmt->OwnedId] = stmt->MemId;
+        }
     });
   }
 
 
 
 
-  LastConditionalTake = 0;
 
   for (auto &[owned, memid] : ownid_to_memid)
-      EvaluateBorrow(parser_struct, P->BaseName, memid);
+      EvaluateBorrow(TheFunction, parser_struct, P->BaseName, function_name, memid);
   
-
   for (auto &[dt, name, memid] : P->CArgs.borrows) {
     std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
-    EvaluateBorrow(parser_struct, P->BaseName, memid);
+    EvaluateBorrow(TheFunction, parser_struct, P->BaseName, function_name, memid);
   }
 
-
-  if (ConditionalTakes.size()>0) {
-      // ConditionalTakesV = ConstantAggregateZero::get(ArrayType::get(intTy, ConditionalTakes.size()));
-    ConditionalTakesV = Builder->CreateAlloca(boolTy, const_int(ConditionalTakes.size()));
-    uint64_t sizeInBytes = ConditionalTakes.size() * (boolTy->getIntegerBitWidth() / 8);
-    Builder->CreateMemSet(
-        ConditionalTakesV, 
-        const_bool(0),   
-        sizeInBytes,     
-        Align(4)         
-    );
-      
-  }
 
 
   SetFnOwn(parser_struct, scope_struct, function_name, Body);
@@ -1158,9 +1157,7 @@ Function *FunctionAST::codegen() {
   OwnedValues.clear();
   OwnedsCleared.clear();
   fn_owned_ret_memory.clear();
-  ConditionalTakes.clear();
   ConditionalsQueue.clear();
-  ConditionalTakesV = nullptr;
 
 
   if (RetVal) {
@@ -1168,14 +1165,25 @@ Function *FunctionAST::codegen() {
         // Clear_Owned_Values(scope_struct, &Body);
         Clear_Fn_Owned_Values(scope_struct);
         FreeOwnedPool(scope_struct, parser_struct);
-        Builder->CreateRet(RetVal); 
+        
+        Data_Tree ret_dt = fn_ret_dt[function_name];
+        if (ret_dt.Type=="void")
+            Builder->CreateRetVoid();
+        else {
+            llvm::Type *retTy = get_type_from_data(parser_struct,
+                                    ret_dt);
+            llvm::Constant *nullValue = llvm::Constant::getNullValue(retTy);
+            Builder->CreateRet(nullValue);
+        }
     }
 
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (begins_with(function_name,"MyClass_send"))
+    // if (begins_with(function_name,"bar"))
     //     TheModule->print(llvm::errs(), nullptr);
+    // if (TheFunction->getName().starts_with("bar"))
+    //     TheFunction->print(llvm::errs());
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;
   } 

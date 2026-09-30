@@ -27,7 +27,6 @@
 
 
 
-std::map<int, int> ConditionalTakes;
 
 
 
@@ -88,7 +87,7 @@ void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     }
 }
 
-void OwnedHolder::ClearOwned(Value *scope_struct) {
+void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn) {
     if (OwnedToClear.size()==0)
         return;
     // std::cout << "\n\n------\n";
@@ -97,7 +96,7 @@ void OwnedHolder::ClearOwned(Value *scope_struct) {
     // if (dynamic_cast<NameableCall*>(this))
     //     std::cout << "CALL CLEAR OWNED " << "\n";
     // if (dynamic_cast<IfExprAST*>(this))
-        // std::cout << "IF CLEAR OWNED " << "\n";
+    //     std::cout << "IF CLEAR OWNED " << "\n";
     // if (dynamic_cast<ForExprAST*>(this))
     //     std::cout << "FOR CLEAR OWNED " << "\n";
     // if (dynamic_cast<WhileExprAST*>(this))
@@ -107,11 +106,19 @@ void OwnedHolder::ClearOwned(Value *scope_struct) {
     for(auto &[dt, memid, ptr] : OwnedToClear) {
         OwnedsCleared.push_back(ptr);
 
-        bool is_conditional = ConditionalTakes.count(memid)>0; 
+        // std::cout << "TEST " << memid << "\n";
+        // for(auto &[fn, memid_vec] : ctakens) {
+        //     std::cout << "fn: " << fn << " | " << memid_vec.size() << "\n";
+        //     for(auto &[memid_, _] : memid_vec)
+        //         std::cout << "\t " << memid_<< "\n";
+        // }
+
+        bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
         BasicBlock *AfterBB, *DisownBB;
         if (is_conditional) {
-            std::cout << "----------------------------AS CONDITIONAL " << memid << "\n";
             p2t("------------------------->conditional " + std::to_string(memid));
+            Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
+            call("print_bool", {v}); 
             Function *TheFunction = Builder->GetInsertBlock()->getParent();
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
@@ -119,10 +126,7 @@ void OwnedHolder::ClearOwned(Value *scope_struct) {
                                 TheFunction);
 
             Builder->CreateCondBr(
-                        Builder->CreateLoad(boolTy,
-                            Builder->CreateInBoundsGEP(boolTy,
-                                ConditionalTakesV,
-                                const_int(ConditionalTakes[memid]))),
+                        Builder->CreateLoad(boolTy, ctakens[fn][memid]),
                         AfterBB, DisownBB);
             Builder->SetInsertPoint(DisownBB);
         }
@@ -259,11 +263,10 @@ inline void RegisterBorrow(Parser_Struct *parser_struct,
              std::unordered_map<int,int> &borrow_c
          ) {
     int appended_memid = expr->GetMemId();
-    // std::cout << "==try register " << parser_struct->function_name << " | " << appended_memid << "\n"; 
     if (appended_memid == -2)
         return;
 
-    std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
+    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
 
     borrow_ids[appended_memid].push_back(parent_branch);
     borrow_c[appended_memid]++;
@@ -276,7 +279,8 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
             std::vector<uint64_t> &arg_parents,
             int arg_memid, uint64_t callexpr_branch,
             int memid,
-            std::unordered_map<int, std::vector<uint64_t>> &borrow_ids) {
+            std::unordered_map<int, std::vector<uint64_t>> &borrow_ids,
+            std::vector<std::tuple<int,int>> &partialtakes) {
     // Try borrow to most restrict caller owner.
     // Else, use call expr as the lifetime.
     int borrows = fn_borrows[callee][arg_memid].size();
@@ -291,15 +295,11 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
 
     bool has_incomplete = fn_borrows_c[callee][arg_memid]<cap
                             ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
-    if (has_incomplete)
+    if (has_incomplete) {
         fn_borrows_incomplete[parser_struct->function_name].push_back(memid);
-
-    // std::cout << "register borrow " << parser_struct->function_name << "|" <<memid << "\n";
-    // TODO: tackle nested if borrow
-    if (arg_parents.size()==0||has_incomplete) {
-        borrow_ids[memid].push_back(callexpr_branch);
-        return;
+        partialtakes.push_back({memid,arg_memid});
     }
+
 
     uint64_t first_branch = arg_parents[0];
     int cstmt = (first_branch>>32) & MASK_16;
@@ -340,6 +340,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
     bool has_borrow = false;
 
     std::unordered_map<int, uint64_t> arg_to_caller_memid;
+    std::vector<std::tuple<int,int>> partialtakes;
 
     int i=0,j=0;
     for (auto &argexpr : callexpr->Args) {
@@ -417,7 +418,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                             callexpr,
                             caller_parents,
                             arg_memid, callexpr->BranchId,
-                            memid, borrow_ids);
+                            memid, borrow_ids, partialtakes);
                 borrow_c[memid]++;
 
 
@@ -442,6 +443,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
     if (has_borrow) {
         CArgs.args = argnames;
         CArgs.template_ret = fn_ret_dt[callee];
+        CArgs.partialtakes = partialtakes;
         bool found = false;
 
         callee = GetFnVersion(parser_struct, base_callee, CArgs, found, true, true);
@@ -450,7 +452,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             callee = GenTemplate(parser_struct, base_callee, CArgs, found);
         }
         callexpr->Callee = callee;
-        // BorrowChecker(base_callee, callee, seen);
+        callexpr->partialtakes = partialtakes;
     }
 }
 
@@ -613,7 +615,18 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
         int cap = (fn_owner_branch>>16)&MASK_16;
 
         bool has_incomplete = borrow_c[memid]<cap;
-        if (has_incomplete)
+        if (has_incomplete) {
             fn_borrows_incomplete[fn_name].push_back(memid);
+        }
+
     }
+
+    // int i=0;
+    // for (auto &version : FnVersion[fn_name]) {
+    //     if(i==0) {
+    //         i++;
+    //         continue;
+    //     }
+    //     fn_borrows_incomplete[fn_name+"_"+std::to_string(i++)] = fn_borrows_incomplete[fn_name];
+    // }
 }

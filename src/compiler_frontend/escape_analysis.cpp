@@ -248,7 +248,8 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
 
 
 void SetToBorrowedRet(Parser_Struct *parser_struct, 
-         NameableCall *callexpr) {
+         NameableCall *callexpr,
+         std::vector<std::tuple<int,int>> &partialtakes) {
     std::string callee = callexpr->Callee;
     std::string base_callee = callexpr->BaseCallee;
     CallArgsTy CArgs = callexpr->CArgs;
@@ -265,19 +266,22 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
             argnames.push_back(argname);
         }
         CArgs.args = argnames;
+        CArgs.partialtakes = partialtakes;
          
         FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
         Template_FnAST[base_callee][CArgs] = fn_ast;
         callee = GenTemplate(parser_struct, base_callee, CArgs, found);
         
         for (auto &body : fn_ast->Body) {
-          body->TraversePost([parser_struct, &callee](ExprAST *node) {
+          body->TraversePost([parser_struct, &callee, &partialtakes](ExprAST *node) {
             if (auto *nestedcall = dynamic_cast<NameableCall*>(node)) {
                 std::string nestedcallee = nestedcall->Callee;
                 int owned_id =  nestedcall->OwnedId;
                 // std::cout << ">> " << nestedcallee << " | " << in_vec(owned_id,function_escapes[callee]) << "\n"; 
-                if (in_vec(owned_id, function_escapes[callee]))
-                    SetToBorrowedRet(parser_struct, nestedcall);
+                if (in_vec(owned_id, function_escapes[callee])) {
+                    partialtakes.clear();
+                    SetToBorrowedRet(parser_struct, nestedcall, partialtakes);
+                }
             }
           });
         }
@@ -289,6 +293,7 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
 
 
 void GetOwnedRet(Parser_Struct *parser_struct,
+                 std::string fn, std::string base_fn,
                  std::unordered_map<std::string, int> &seen,
                  ExprAST *expr,
                  std::vector<int> &owned_ids,
@@ -296,18 +301,44 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                  std::unordered_map<int, int> &ownid_to_size) {
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
-        EscapeAnalysis(callexpr->BaseCallee, callee, seen);
+        std::string basecallee = callexpr->BaseCallee;
+        EscapeAnalysis(basecallee, callee, seen);
 
         if (!function_own_ret_count.count(callee))
             return;
 
-        // std::cout << "-- " << callee << " has " << function_own_ret_count[callee] << "\n"; 
         ownid_to_size[callexpr->OwnedId] = function_own_ret_count[callee];
 
-        if (fn_borrows[parser_struct->function_name].count(callexpr->MemId)>0) {
-            LogBlue("SET TO BORrowed ret " + callee);
-            SetToBorrowedRet(parser_struct, callexpr);
+        bool caller_transfers = fn_borrows[base_fn].count(callexpr->MemId)>0;
+
+
+        int memid = callexpr->GetMemId();
+        std::vector<std::tuple<int,int>> partialtakes;
+
+        bool fn_transfers=false, is_incomplete_transfer=false;
+        for(auto &retid : function_escapes[callee]) {
+            int ret_memid = fn_escape_to_memid[callee][retid];
+
+
+            if (fn_borrows[basecallee].count(ret_memid)>0) {
+                fn_transfers=true;
+                is_incomplete_transfer = in_vec(ret_memid,
+                                    fn_borrows_incomplete[basecallee]);
+                partialtakes.push_back({memid, ret_memid});
+                std::cout << basecallee << " has partial " << ret_memid << "\n";
+                break;
+            }
         }
+
+        if (is_incomplete_transfer) {
+            fn_borrows[base_fn][memid].push_back(memid);
+            fn_borrows_incomplete[base_fn].push_back(memid);
+            std::cout << "SET INCOMPLETE " << base_fn << "\n";
+        }
+        callexpr->partialtakes = partialtakes;
+
+        if (caller_transfers||fn_transfers)
+            SetToBorrowedRet(parser_struct, callexpr, partialtakes);
 
         return;
     }
@@ -319,11 +350,11 @@ void GetOwnedRet(Parser_Struct *parser_struct,
             int owned_id = var->GetIsOwned();
             // todo: can change to >=0?
             if (owned_id>=-1) {
-                // std::cout << "******************add ret " << parser_struct->function_name << " | " << owned_id << "\n"; 
 
-                if (in_vec(var->GetMemId(), fn_borrows_incomplete[parser_struct->function_name]))
-                    LogBlue("INCOMPLETE " + std::to_string(var->GetMemId()));
+                if (in_vec(var->GetMemId(), fn_borrows_incomplete[fn]))
+                    LogBlue("INCOMPLETE " + parser_struct->function_name + "|" + std::to_string(var->GetMemId()));
 
+                fn_escape_to_memid[fn][owned_id] = var->GetMemId();
 
                 owned_ids.push_back(owned_id);
                 if(ownid_to_size.count(owned_id)) {
@@ -361,10 +392,12 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
     int new_ret=0, own_ret_count=0;
 
     for (auto &body : Body) {
-      body->TraversePost([parser_struct, &seen, &owned_ids,
+      body->TraversePost([parser_struct, &fn_name, &base_callee,
+              &seen, &owned_ids,
               &own_ret_count, &new_ret,
               &ownid_to_size](ExprAST *node) {
-        GetOwnedRet(parser_struct, seen, node,
+        GetOwnedRet(parser_struct, fn_name, base_callee,
+                    seen, node,
                     owned_ids,
                     own_ret_count, new_ret,
                     ownid_to_size);
@@ -382,5 +415,5 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
 
     function_escapes[fn_name] = owned_ids;
     function_own_ret_count[fn_name] = own_ret_count;
-    // std::cout << " " << fn_name << " has " << owned_ids.size() << " escapes\n"; 
+    std::cout << " " << fn_name << " has " << owned_ids.size() << " escapes\n"; 
 }

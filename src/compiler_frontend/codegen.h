@@ -32,6 +32,7 @@ extern Value *ConditionalTakesV;
 
 extern std::map<int,Value*> fn_owned_ret_memory;
 
+extern std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens;
 
 
 extern bool seen_var_attr;
@@ -39,6 +40,11 @@ extern bool seen_var_attr;
 
 
 
+inline void printTy(Value *v) {
+    llvm::Type *ty = v->getType();
+    ty->print(llvm::errs());
+    llvm::errs() << "\n";
+}
 
 
 Value *VoidPtr_toValue(void *vec);

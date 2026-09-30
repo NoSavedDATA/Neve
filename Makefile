@@ -22,6 +22,10 @@ SYS_LIBS += -Wl,--disable-new-dtags \
            -Wl,-rpath,'$$ORIGIN/../sys_lib'
 LDFLAGS += $(SYS_LIBS)
 
+CXXFLAGS += -fno-diagnostics-show-note-include-stack
+CXXFLAGS += -ftemplate-backtrace-limit=1
+
+
 
 # Directories
 LIB_PARSER_OBJ_DIR = lib_parser_obj

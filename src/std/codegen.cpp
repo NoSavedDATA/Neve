@@ -29,11 +29,6 @@ using namespace llvm;
 namespace fs = std::filesystem;
 
 
-inline void printTy(Value *v) {
-    llvm::Type *ty = v->getType();
-    ty->print(llvm::errs());
-    llvm::errs() << "\n";
-}
 inline void bb_name(BasicBlock *bb) {
     errs() << "bb: " << bb->getName() << "\n";
 }

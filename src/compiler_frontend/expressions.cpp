@@ -47,7 +47,7 @@ std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
 std::unordered_map<std::string,
-       std::unordered_map<int,int>> fn_borrows_c;
+       std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 std::unordered_map<std::string,
        std::vector<int>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
@@ -783,6 +783,11 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         this->Types.push_back(dt);
         data_typeVars[this->Name][name] = dt;
     }
+    for (auto &[memid, argmemid] : CArgs.partialtakes) {
+        std::cout << "ADD PARTIAL " << this->Name << " | " << argmemid << "\n";
+        this->Args.push_back("__ctaken_" + std::to_string(argmemid));
+        this->Types.push_back(Data_Tree("any"));
+    }
 
     ReturnType = CArgs.template_ret;
 
@@ -797,7 +802,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     }
 
 
-    int required_args = this->Args.size()-ctx_offset;
+    int required_args = this->Args.size()-CArgs.partialtakes.size()-ctx_offset;
     Function_Required_Arg_Count[this->Name] = required_args; // Desconsider scope_struct
     Function_Arg_Count[this->Name] = required_args;
     fn_argnames[this->Name] = this->Args;
@@ -942,7 +947,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
     FunctionAST *fn_ast=nullptr; 
 
-    print_dt_vec(CArgs.dts);
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
@@ -983,9 +987,10 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                 function_escapes[fn] = function_escapes[base_name];
                 function_own_ret_count[fn] = function_own_ret_count[base_name];
             }
-            if (fn_borrows.count(base_name))
-                fn_borrows[fn] = fn_borrows[base_name];
-
+            // if (fn_borrows.count(base_name))
+            //     fn_borrows[fn] = fn_borrows[base_name];
+            // if (fn_escape_to_memid.count(base_name))
+            //     fn_escape_to_memid[fn] = fn_escape_to_memid[base_name];
             if (fn_memid_to_lastseen.count(base_name))
                 fn_memid_to_lastseen[fn] = fn_memid_to_lastseen[base_name];
             if (fn_conditional_stmt.count(base_name))
@@ -1018,6 +1023,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
 
         fn_ast->parser_struct->function_name = fn;
+        fn_ast->parser_struct->base_name = base_name;
 
 
         for (auto &body : fn_ast->Body) {

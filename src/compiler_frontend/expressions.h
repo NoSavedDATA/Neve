@@ -128,6 +128,7 @@ struct CallArgsTy {
     std::vector<std::string> strings;
     std::vector<std::string> args;
     std::string version_str = "";
+    std::vector<std::tuple<int,int>> partialtakes;
     int version = -1;
     TemplateAST *template_ast=nullptr;
     Data_Tree template_ret;
@@ -542,7 +543,7 @@ class OwnedHolder {
     std::vector<std::tuple<Data_Tree, int, Value*>> OwnedToClear;
     virtual ~OwnedHolder() = default;
   public:
-    virtual void ClearOwned(Value*);
+    virtual void ClearOwned(Value*, std::string);
     virtual void RegisterOwned(Data_Tree, int, Value*);
 };
   
@@ -693,6 +694,7 @@ class NameableCall : public Nameable, public OwnedHolder {
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, BaseCallee, ReturnType="";
   std::vector<Data_Tree> Types;
+  std::vector<std::tuple<int,int>> partialtakes;
   CallArgsTy CompiledArgsVec, CArgs;
 
   NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy);
@@ -1307,7 +1309,7 @@ extern std::unordered_map<std::string,
             std::vector<uint64_t>>> fn_borrows;
 
 extern std::unordered_map<std::string,
-       std::unordered_map<int,int>> fn_borrows_c;
+       std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 
 
 extern std::unordered_map<std::string,
