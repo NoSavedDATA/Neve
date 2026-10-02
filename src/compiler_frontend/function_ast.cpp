@@ -934,6 +934,7 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
 
 
 void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
+        int line,
         std::string base_name, std::string fn, int memid) {
     if (!fn_borrows[base_name].count(memid))
         return;
@@ -947,32 +948,31 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     // std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
 
 
-    // bool is_partial_take = size<cap;
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
 
-    if (is_partial_take && ctakens[fn].count(memid)!=0) {
-        LogBlue("SKIP: " + fn + ": " + std::to_string(memid));
-    }
+    // if (is_partial_take && ctakens[fn].count(memid)!=0) {
+    //     LogBlue("SKIP: " + fn + ": " + std::to_string(memid));
+    // }
 
 
     if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
-        LogBlue("Set ctaken: " + fn + ": " + std::to_string(memid));
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
     }
 
 
-    if (size>cap)
-        LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+    if (size>cap&&cap!=0) {
 
-
+        LogErrorS(line, "The code may try to borrow a value in non mutually exclusive branches.");
+    }
 
     // uint64_t first_branch = fn_borrows[base_name][memid][0];
     // int cstmt = (first_branch>>32)&MASK_16;
     // for (auto branch : fn_borrows[base_name][memid]) {
-    //     if (cstmt!=(branch>>32)&MASK_16) {
-    //         std::cout << " " << first_branch << " | " << branch << "\n";
+    //     int branch_cstmt = (branch>>32)&MASK_16;
+    //     std::cout << " " << cstmt << " | " << branch_cstmt << "\n";
+    //     if (cstmt!=branch_cstmt) {
     //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
 
     //     }
@@ -983,8 +983,23 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     if(!fn_bad_borrows.count(base_name))
         return;
 
-    if (in_vec(memid, fn_bad_borrows[base_name]))
-        LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+    if (in_vec(memid, fn_bad_borrows[base_name])) {
+        int error = std::get<1>(fn_bad_borrows[base_name][0]);
+
+        switch (error) {
+            case 0:
+                LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+                break;
+            case 1:
+                LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+                break;
+            case 2:
+                LogErrorS(parser_struct->line, "Can only take ownership inside a loop when the variable is defined in the loop itself.");
+                break;
+            default:
+                break;
+        }
+    }
 
     // auto &borrow_branches = fn_borrows[Callee][arg_memid];
     // uint64_t first_borrow = borrow_branches[0];
@@ -1080,7 +1095,6 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        LogBlue("*************"+function_name + " ARGID: " + std::to_string(arg_memid));
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1135,11 +1149,11 @@ Function *FunctionAST::codegen() {
 
 
   for (auto &[owned, memid] : ownid_to_memid)
-      EvaluateBorrow(TheFunction, parser_struct, P->BaseName, function_name, memid);
+      EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   
   for (auto &[dt, name, memid] : P->CArgs.borrows) {
-    std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
-    EvaluateBorrow(TheFunction, parser_struct, P->BaseName, function_name, memid);
+    // std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
+    EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   }
 
 
@@ -1154,15 +1168,10 @@ Function *FunctionAST::codegen() {
     //     std::cout << "(fn_ast codegen of) " << stmt->Callee << "\n";
     RetVal = body->codegen(scope_struct);
   }
-  OwnedValues.clear();
-  OwnedsCleared.clear();
-  fn_owned_ret_memory.clear();
-  ConditionalsQueue.clear();
 
 
   if (RetVal) {
     if(!Builder->GetInsertBlock()->getTerminator()) {
-        // Clear_Owned_Values(scope_struct, &Body);
         Clear_Fn_Owned_Values(scope_struct);
         FreeOwnedPool(scope_struct, parser_struct);
         
@@ -1176,6 +1185,10 @@ Function *FunctionAST::codegen() {
             Builder->CreateRet(nullValue);
         }
     }
+
+    OwnedValues.clear();
+    OwnedsCleared.clear();
+    fn_owned_ret_memory.clear();
 
     // print_allBB();
     // Validate the generated code, checking for consistency.

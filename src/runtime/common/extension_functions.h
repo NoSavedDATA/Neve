@@ -61,11 +61,19 @@ std::vector<int> concat_int_vec(std::vector<int> l, std::vector<int>r);
 
 extern bool ShallCodegen;
 
+bool in_vec(int value, const std::vector<char>& list);
 
 template<typename T>
 bool in_vec(const T& str, const std::vector<T>& list) {
     return std::find(list.begin(), list.end(), str) != list.end();
 }
+template<typename T, typename U>
+bool in_vec(const T& str, const std::vector<std::tuple<T, U>>& list) {
+    return std::find_if(list.begin(), list.end(), [&str](const std::tuple<T, U>& item) {
+        return std::get<0>(item) == str;
+    }) != list.end();
+}
+
 
 
 template<typename T, typename U>
@@ -83,7 +91,6 @@ bool map_has_val(std::unordered_map<T, U>& map, U x) {
     return false;
 }
 
-bool in_vec(int value, const std::vector<char>& list);
 
 bool is_number(std::string s); 
 

@@ -49,7 +49,7 @@ std::unordered_map<std::string, std::vector<int>> function_escapes, function_cal
 std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 std::unordered_map<std::string,
-       std::vector<int>> fn_bad_borrows;
+       std::vector<std::tuple<int,int>>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
@@ -62,7 +62,7 @@ std::unordered_map<std::string,
 
 std::unordered_map<std::string,
        std::unordered_map<int,ExprAST*>>
-                    fn_memid_to_lastseen, fn_conditional_stmt;
+                    fn_memid_to_lastseen, fn_conditional_stmt, fn_loop_stmt;
 
 
 std::unordered_map<std::string,std::vector<int>> fn_rets;
@@ -752,6 +752,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
               CallArgsTy CArgs, CallArgsTy &templ)
       : BaseName(BaseName), Name(fn), CArgs(CArgs) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
     FnVersion[BaseName].push_back(CArgs);
     SetDefaultArgs(templ.dts);
@@ -784,7 +785,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         data_typeVars[this->Name][name] = dt;
     }
     for (auto &[memid, argmemid] : CArgs.partialtakes) {
-        std::cout << "ADD PARTIAL " << this->Name << " | " << argmemid << "\n";
         this->Args.push_back("__ctaken_" + std::to_string(argmemid));
         this->Types.push_back(Data_Tree("any"));
     }
@@ -1199,6 +1199,7 @@ Data_Tree ConstExprAST::GetDataTree(bool from_assignment) {
 
 ConstExprAST::ConstExprAST(Parser_Struct *parser_struct, std::string str) : str(str) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 } 
 
 LutLoExprAST::LutLoExprAST() {} 
@@ -1349,6 +1350,7 @@ NewDictExprAST::NewDictExprAST(
 {
   this->SetType(Type);
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 }
   
   
@@ -1396,6 +1398,7 @@ ObjectExprAST::ObjectExprAST(
   :  HasInit(std::move(HasInit)), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), ClassName(ClassName)
 {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
 }
 
@@ -1437,6 +1440,7 @@ EmptyStrExprAST::EmptyStrExprAST() {
 NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct *parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
                                         :  Idx(std::move(Idx)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   this->Inner_Expr = std::move(Inner_Expr);
   this->Inner_Expr->IsLeaf=false;
   this->Name = name;
@@ -1514,6 +1518,7 @@ UnkVarExprAST::UnkVarExprAST(
   : VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 }
 
 bool UnkVarExprAST::GetNeedGCSafePoint() {
@@ -1528,6 +1533,7 @@ TupleExprAST::TupleExprAST(
   Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
 
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
     
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
@@ -1550,6 +1556,7 @@ ListExprAST::ListExprAST(
   Data_Tree data_type) : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
 
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
@@ -1571,6 +1578,7 @@ DictExprAST::DictExprAST(
 
     
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
@@ -1627,10 +1635,13 @@ void DataExprAST::Checks() {
 
   for(auto &[name, expr] : this->VarNames) {
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
-        function_owns[parser_struct->function_name][name]=(*parser_struct->owned_id)++;
+        int owned_id = (*parser_struct->owned_id)++;
+        function_owns[parser_struct->function_name][name]=owned_id;
+        Ownedids.push_back(owned_id);
     } else {
         expr->Checks();
         int owned_id = expr->GetIsOwned();
+        Ownedids.push_back(owned_id);
         if (owned_id>=-1)
             function_owns[parser_struct->function_name][name] = owned_id;
     }
@@ -1647,6 +1658,7 @@ DataExprAST::DataExprAST(
   : VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsOwned(IsOwned), IsStruct(IsStruct),
                 Notes(std::move(Notes)) {   
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   dt_type = "DT_"+data_type.Type;  
 
   if(data_type.Type=="charv") {      
@@ -1696,6 +1708,7 @@ MeminferExpr::MeminferExpr(Parser_Struct *parser_struct,
         std::vector<std::unique_ptr<ExprAST>> v)
     : v(std::move(v)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
 void MeminferExpr::Checks() {
     int rhs = newTy;
@@ -1758,6 +1771,7 @@ NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::
             : DataName(DataName), Args(std::move(Args)), MemoryType(memory_type),
               meminfer_expr(std::move(meminfer_expr)){
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
     Callee = DataName + "_Create";
     // GetDataTree();
 }
@@ -1770,6 +1784,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   : LibName(LibName), IsDefault(IsDefault) {
 
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
 
   std::string ai_path = LibName+".nv";
@@ -1874,6 +1889,7 @@ ReduceExprAST::ReduceExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprA
             : LHS(std::move(LHS)),
               Op(Op), functional_type(functional_type) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
   
   
@@ -1881,6 +1897,7 @@ ReduceExprAST::ReduceExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprA
 LambdaExprAST::LambdaExprAST(Parser_Struct *parser_struct, std::string lambda_fn, std::vector<std::string> Args)
     : lambda_fn(lambda_fn), Args(std::move(Args)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
 
   
@@ -1933,6 +1950,7 @@ void MapitExprAST::Checks() {
 MapitExprAST::MapitExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> LHS, std::unique_ptr<LambdaExprAST> Lambda)
     : LHS(std::move(LHS)), Lambda(std::move(Lambda)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
 }
   
@@ -1956,6 +1974,7 @@ LayoutExprAST::LayoutExprAST(Parser_Struct *parser_struct, uint16_t type,
     : type(type), CArgs(std::move(CArgs)),
       Args(std::move(Args)), smem(smem) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
     GetDataTree();
 }
 
@@ -2033,6 +2052,7 @@ Data_Tree UnaryExprAST::GetDataTree(bool from_assignment) {
 UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct *parser_struct)
     : Opcode(Opcode), Operand(std::move(Operand)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   this->Operand->Parent = this;
 }
   
@@ -2386,6 +2406,7 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS, Parser_Struct *parser_struct)
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
   int memid = this->RHS->GetMemId();
   if (Op=='='&& memid>=-1) {
@@ -2444,6 +2465,7 @@ RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars,
                        Parser_Struct *parser_struct)
     : Vars(std::move(Vars)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
     for(auto &var : this->Vars)
         var->Parent = this;
@@ -2455,6 +2477,7 @@ fn_descriptor::fn_descriptor(const std::string &Name, const std::string &Return)
 ClassExprAST::ClassExprAST(Parser_Struct *parser_struct, const std::string &Name, const std::vector<fn_descriptor> &Functions)
   : Name(Name), Functions(Functions) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
 
 
@@ -2501,6 +2524,7 @@ ClassExprAST::ClassExprAST(Parser_Struct *parser_struct, const std::string &Name
   
 GCSafePointExprAST::GCSafePointExprAST(Parser_Struct *parser_struct) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 }
   
 void ForExprAST::Checks() {
@@ -2540,6 +2564,7 @@ IfExprAST::IfExprAST(Parser_Struct *parser_struct,
           uint64_t scope_depth, uint64_t control_stmt_id, uint64_t branch_id)
     : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 
   uint64_t depth = scope_depth+1;
   branch_id = (depth<<48) | (control_stmt_id << 32) | (2 << 16) | branch_id;
@@ -2578,12 +2603,14 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
       Step(std::move(Step)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
   uint64_t depth = scope_depth+1;
   uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
   BranchId = branch_id;
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
 
 
 
@@ -2608,6 +2635,7 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName,
           uint64_t scope_depth, uint64_t control_stmt_id)
     : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
     this->data_type = data_type;
     typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
 
@@ -2617,6 +2645,7 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName,
   BranchId = branch_id;
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
 
 
   for (auto &body : this->Body) {
@@ -2649,12 +2678,14 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
         uint64_t scope_depth, uint64_t control_stmt_id)
   : Cond(std::move(Cond)), Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
   uint64_t depth = scope_depth+1;
   uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
   BranchId = branch_id;
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
 
   for (auto &body : this->Body) {
       if (body->BranchId>2)
@@ -2685,6 +2716,7 @@ ExitCheckExprAST::ExitCheckExprAST() {}
 ChannelExprAST::ChannelExprAST(Parser_Struct *parser_struct, Data_Tree data_type,
                                std::string Name, bool isSelf) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   this->data_type = data_type;
   this->Name = Name;
   this->isSelf = isSelf;
@@ -2692,6 +2724,7 @@ ChannelExprAST::ChannelExprAST(Parser_Struct *parser_struct, Data_Tree data_type
 
 SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct) : Body(std::move(Body)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 }
 
 
@@ -2729,11 +2762,13 @@ void AsyncsExprAST::Checks() {
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct *parser_struct)
   : Body(std::move(Body)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
   
 AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, std::unique_ptr<ExprAST> Count, Parser_Struct *parser_struct)
   : Body(std::move(Body)), Count(std::move(Count)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
 
 IncThreadIdExprAST::IncThreadIdExprAST()
@@ -2858,6 +2893,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         IsOperator(IsOperator), Args(std::move(Args)), Types(std::move(Types)),
         Precedence(Prec) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 
     BaseName = this->Name;
     bool has_generic=false;
@@ -2969,6 +3005,7 @@ ViewExprAST::ViewExprAST(std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *parser_struct) \
             : LHS(std::move(LHS)), RHS(std::move(RHS)) {
     this->parser_struct = parser_struct;
+    Line = parser_struct->line;
 }
 
 
@@ -3219,6 +3256,7 @@ Nameable::Nameable(Parser_Struct *parser_struct) {
 
 Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth) : Depth(Depth) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
@@ -3227,6 +3265,7 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth) : 
 
 Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bool IsUnique, bool IsOwnedUnique) : Depth(Depth), IsUnique(IsUnique), IsOwnedUnique(IsOwnedUnique) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
   this->Name = Name;
   this->isAttribute = Depth>1;
   this->isSelf = (Depth==1&&Name=="self");
@@ -3234,12 +3273,10 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
   if (IsUnique && !in_vec(Name, Global_Uniques)) {
     Global_Uniques.push_back(Name);
     FunctionChecks(Name+"___init__");
-    LogBlue("ADD UNIQUE " + Name);
   }
   if (IsOwnedUnique && !in_vec(Name, Global_Owneds)) {
     Global_Owneds.push_back(Name);
     FunctionChecks(Name+"___init__");
-    LogBlue("ADD OWNED " + Name);
   }
 }
 
@@ -3480,6 +3517,7 @@ void NameableCall::Checks() {
 PositionalArgExprAST::PositionalArgExprAST(Parser_Struct *parser_struct, const std::string & ArgName, std::unique_ptr<ExprAST> Inner)
     : ArgName(ArgName), Inner(std::move(Inner)) {
   this->parser_struct = parser_struct;
+  Line = parser_struct->line;
 }
 
 Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {

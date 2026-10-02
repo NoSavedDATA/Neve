@@ -330,7 +330,7 @@ class UnkVarExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
     bool checked=false;
-    std::vector<int> Memids;
+    std::vector<int> Memids, Ownedids;
 
     UnkVarExprAST(
       Parser_Struct *,
@@ -432,7 +432,7 @@ class ObjectExprAST : public VarExprAST {
 public:
   std::unique_ptr<ExprAST> Init;
   std::vector<bool> HasInit;
-  std::vector<int> Memids;
+  std::vector<int> Memids, Ownedids;
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args;
   std::string ClassName;
 
@@ -463,7 +463,7 @@ class DataExprAST : public VarExprAST {
     Data_Tree data_type;
     bool HasNotes, IsStruct, DtHasCreateFn, IsOwned, checked=false;
     std::string dt_type, create_fn; 
-    std::vector<int> Memids;
+    std::vector<int> Memids, Ownedids;
 
     DataExprAST(
       Parser_Struct *,
@@ -543,7 +543,7 @@ class OwnedHolder {
     std::vector<std::tuple<Data_Tree, int, Value*>> OwnedToClear;
     virtual ~OwnedHolder() = default;
   public:
-    virtual void ClearOwned(Value*, std::string);
+    virtual void ClearOwned(Value*, std::string, std::string);
     virtual void RegisterOwned(Data_Tree, int, Value*);
 };
   
@@ -1232,7 +1232,7 @@ public:
 class PrototypeAST {  
     public:
     std::string BaseName, Name, Class, Method;
-    int version=0;
+    int version=0, Line=-1;
   
     unsigned Precedence; // Precedence if a binary op.
   
@@ -1314,14 +1314,14 @@ extern std::unordered_map<std::string,
 
 
 extern std::unordered_map<std::string,
-       std::vector<int>> fn_bad_borrows;
+       std::vector<std::tuple<int,int>>> fn_bad_borrows;
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,uint64_t>> fn_memid_to_branch;
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,ExprAST*>>
-                    fn_memid_to_lastseen, fn_conditional_stmt;
+                    fn_memid_to_lastseen, fn_conditional_stmt, fn_loop_stmt;
 
 
 extern std::unordered_map<std::string,

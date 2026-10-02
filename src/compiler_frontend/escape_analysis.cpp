@@ -31,41 +31,37 @@ std::vector<std::tuple<int, Data_Tree, Value*, int>> OwnedValues;
 std::vector<Value*> OwnedsCleared;
 
 
+inline void ClearOne(Value *scope_struct, int memid, Data_Tree dt, Value *ptr,
+                int owned_type) {
+    if (owned_type==3) // borrow
+        return;
+
+    // bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
+
+    if (!in_vec(ptr, OwnedsCleared)) {
+        if (dt.Type=="array")
+            ArrayClearOwned(scope_struct, dt, ptr);
+        Disown(scope_struct, dt, ptr);
+    }
+
+    if (owned_type==2) // possible borrow mem for returned 
+        call("free", {ptr});
+}
 inline void Clear_Fn_Owned_Values(Value *scope_struct,
         std::vector<Value *> &returned_values) {
-
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
         if (in_vec(ptr, returned_values))
             continue;
-
-        if (!in_vec(ptr, OwnedsCleared)) {
-            std::cout << "CHECK DISOWN " << "\n"; 
-            dt.Print();
-            Disown(scope_struct, dt, ptr);
-        }
-    
-
-        if (owned_type==2) // possible borrow mem for returned 
-            call("free", {ptr});
+        ClearOne(scope_struct, memid, dt, ptr, owned_type);
     }
-
     set_scope_obj(scope_struct, previous_obj);
 }
-
 void Clear_Fn_Owned_Values(Value *scope_struct) {
-
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
-
-        if (!in_vec(ptr, OwnedsCleared))
-            Disown(scope_struct, dt, ptr);
-    
-
-        if (owned_type==2) // possible borrow mem for returned 
-            call("free", {ptr});
+        ClearOne(scope_struct, memid, dt, ptr, owned_type);
     }
-
     set_scope_obj(scope_struct, previous_obj);
 }
 
@@ -212,7 +208,7 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         callexpr->OwnedPoolOffset = last_offset;
         callexpr->OwnedPoolCap = size;
         last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-        std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
+        // std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
         return;
     }
 }
@@ -240,7 +236,7 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
     bool has_owned_pool = last_offset>0;
 
     if (has_owned_pool) {
-        LogBlue("=="+parser_struct->function_name + " has offset " + std::to_string(last_offset));
+        // LogBlue("=="+parser_struct->function_name + " has offset " + std::to_string(last_offset));
         parser_struct->has_owned_pool = true;
         Value *ownedpool = callret("malloc", {const_int(last_offset)});
         set_scope_owned_pool(scope_struct, ownedpool);
@@ -332,7 +328,6 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 is_incomplete_transfer = in_vec(ret_memid,
                                     fn_borrows_incomplete[basecallee]);
                 partialtakes.push_back({memid, ret_memid});
-                std::cout << basecallee << " has partial " << ret_memid << "\n";
                 break;
             }
         }
@@ -340,7 +335,6 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         if (is_incomplete_transfer) {
             fn_borrows[base_fn][memid].push_back(memid);
             fn_borrows_incomplete[base_fn].push_back(memid);
-            std::cout << "SET INCOMPLETE " << base_fn << "\n";
         }
         callexpr->partialtakes = partialtakes;
 
@@ -358,8 +352,8 @@ void GetOwnedRet(Parser_Struct *parser_struct,
             // todo: can change to >=0?
             if (owned_id>=-1) {
 
-                if (in_vec(var->GetMemId(), fn_borrows_incomplete[fn]))
-                    LogBlue("INCOMPLETE " + parser_struct->function_name + "|" + std::to_string(var->GetMemId()));
+                // if (in_vec(var->GetMemId(), fn_borrows_incomplete[fn]))
+                //     LogBlue("INCOMPLETE " + parser_struct->function_name + "|" + std::to_string(var->GetMemId()));
 
                 fn_escape_to_memid[fn][owned_id] = var->GetMemId();
 
@@ -422,5 +416,4 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
 
     function_escapes[fn_name] = owned_ids;
     function_own_ret_count[fn_name] = own_ret_count;
-    std::cout << " " << fn_name << " has " << owned_ids.size() << " escapes\n"; 
 }

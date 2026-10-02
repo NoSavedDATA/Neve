@@ -61,6 +61,9 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 std::vector<Value *> GetStrides(Parser_Struct *parser_struct, Data_Tree layout, Value *ctx);
 
 
+void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr);
+
+
 std::string mangle_cargs_proto(std::string fn_name, bool inc=false);
 
 Value *load_alloca(std::string name, std::string type, std::string from_function);

@@ -12,6 +12,7 @@
 
 #include "ownership.h"
 #include "expressions.h"
+#include "include.h"
 #include "logging.h"
 #include "modules.h"
 #include "scope.h"
@@ -87,7 +88,8 @@ void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     }
 }
 
-void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn) {
+void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
+                             std::string base_fn) {
     if (OwnedToClear.size()==0)
         return;
     // std::cout << "\n\n------\n";
@@ -104,9 +106,9 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn) {
 
     Value *previous_obj = get_scope_obj(scope_struct);
     for(auto &[dt, memid, ptr] : OwnedToClear) {
+        std::cout << "TEST " << memid << " | " << fn_borrows[base_fn].count(memid) << "\n";
         OwnedsCleared.push_back(ptr);
 
-        // std::cout << "TEST " << memid << "\n";
         // for(auto &[fn, memid_vec] : ctakens) {
         //     std::cout << "fn: " << fn << " | " << memid_vec.size() << "\n";
         //     for(auto &[memid_, _] : memid_vec)
@@ -130,6 +132,9 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn) {
                         AfterBB, DisownBB);
             Builder->SetInsertPoint(DisownBB);
         }
+
+        if (dt.Type=="array")
+            ArrayClearOwned(scope_struct, dt, ptr);
         Disown(scope_struct, dt, ptr);
         if (is_conditional) {
             call("free", {ptr});
@@ -161,44 +166,55 @@ int innermost_cstmt(std::string fn_name,
     return cstmt;
 }
 bool match_cstmt_parent(std::string fn_name,
-                    int tgt_cstmt, int cstmt) {
-    if (tgt_cstmt==0) // tgt in depth 0 scope
-        return true;
+                    int tgt_cstmt, int cstmt, bool &has_loop) {
     if (cstmt==tgt_cstmt)
         return true;
+
+    if (fn_loop_stmt[fn_name].count(cstmt)>0)
+        has_loop=true;
+    // Remove the check below, because it cuts the if above
+    // if (tgt_cstmt==0) // tgt in depth 0 scope
+    //     return true; 
+
     if (cstmt_parents.count(fn_name)==0)
         return false;
     if (cstmt_parents[fn_name].count(cstmt)==0)
         return false;
     return match_cstmt_parent(fn_name, tgt_cstmt,
-                cstmt_parents[fn_name][cstmt]);
+                cstmt_parents[fn_name][cstmt], has_loop);
 }
 
 
 
 void CheckBadBorrow(Parser_Struct *parser_struct, 
                  std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
+                 std::unordered_map<int,std::vector<uint64_t>> &borrow_branches,
                  std::unordered_map<int,int> &borrow_c,
-                 std::vector<int> &bad_borrows, ExprAST *nameable
+                 std::vector<std::tuple<int,int>> &bad_borrows, ExprAST *nameable
             ) {
     int memid = nameable->GetMemId();
     if (memid==-2)
         return;
 
     if (borrow_ids.count(memid)) {
-
-
         uint64_t expr_branch = nameable->BranchId;
         int expr_control_stmt = (expr_branch>>32)&MASK_16;
         int expr_depth = (expr_branch>>48)&MASK_16;
 
-        for (auto &branch : borrow_ids[memid]) {
+        int i=0;
+        uint64_t first_taken_branch = borrow_branches[memid][0];
+        for (auto &lifetime : borrow_ids[memid]) {
+            uint64_t taken_branch = borrow_branches[memid][i++];
 
-            int control_stmt = (branch>>32)&MASK_16;
-            int depth = (branch>>48)&MASK_16;
-            bool match = (expr_depth>=depth&&match_cstmt_parent(
+
+
+            bool has_loop=false;
+            int control_stmt = (lifetime>>32)&MASK_16;
+            int depth = (lifetime>>48)&MASK_16;
+            bool match = (expr_depth>=depth&&(match_cstmt_parent(
                         parser_struct->function_name,
-                    control_stmt, expr_control_stmt));
+                    control_stmt, expr_control_stmt,
+                    has_loop))||control_stmt==0);
 
             if (!match)  {
                 // std::cout << "\ncstmt " << control_stmt << " | " << expr_control_stmt << "\n";
@@ -208,7 +224,21 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
                 //         control_stmt, expr_control_stmt) << "\n";
                 // std::cout << parser_struct->function_name << "\n\n";
 
-                bad_borrows.push_back(memid);
+                bad_borrows.push_back({memid,0});
+                return;
+            }
+
+
+            if (i!=0
+                &&((first_taken_branch>>32)&MASK_16) != ((taken_branch>>32)&MASK_16)) {
+                std::cout << "SET BAD BORROW " << memid << "\n";
+                bad_borrows.push_back({memid,1});
+                return;
+            }
+
+            if (has_loop)  {
+                bad_borrows.push_back({memid,2});
+                return;
             }
         }
     } 
@@ -257,29 +287,40 @@ void DataExprAST::SetMemId(std::unordered_map<int,uint64_t> &memid_to_branch) {
 
 
 inline void RegisterBorrow(Parser_Struct *parser_struct,
-             uint64_t parent_branch,
+             uint64_t parent_lifetime,
              std::unique_ptr<ExprAST> &expr,
              std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
-             std::unordered_map<int,int> &borrow_c
+             std::unordered_map<int,std::vector<uint64_t>> &borrow_branches,
+             std::unordered_map<int,int> &borrow_c,
+             std::vector<std::tuple<int,int>> &bad_borrows
          ) {
     int appended_memid = expr->GetMemId();
     if (appended_memid == -2)
         return;
+    uint64_t branch = expr->BranchId;
 
-    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << "\n"; 
+    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << " in branch " << ((branch>>32)&MASK_16) << "\n"; 
 
-    borrow_ids[appended_memid].push_back(parent_branch);
+    borrow_ids[appended_memid].push_back(parent_lifetime);
+    borrow_branches[appended_memid].push_back(branch);
     borrow_c[appended_memid]++;
+
+    CheckBadBorrow(parser_struct, borrow_ids, borrow_branches, borrow_c,
+                   bad_borrows, expr.get());
 }
 
 
 void GetCallMostRestrictive(Parser_Struct *parser_struct,
             std::string callee,
             NameableCall *callexpr,
+            ExprAST *argexpr,
             std::vector<uint64_t> &arg_parents,
             int arg_memid, uint64_t callexpr_branch,
             int memid,
             std::unordered_map<int, std::vector<uint64_t>> &borrow_ids,
+            std::unordered_map<int,int> &borrow_c,
+            std::vector<std::tuple<int,int>> &bad_borrows,
+            std::unordered_map<int,std::vector<uint64_t>> &borrow_branches,
             std::vector<std::tuple<int,int>> &partialtakes) {
     // Try borrow to most restrict caller owner.
     // Else, use call expr as the lifetime.
@@ -304,11 +345,13 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
     uint64_t first_branch = arg_parents[0];
     int cstmt = (first_branch>>32) & MASK_16;
     borrow_ids[memid].push_back(first_branch);
+    borrow_branches[memid].push_back(callexpr_branch);
     int most_restrictive = 0;
     for (int i=1; i<arg_parents.size(); ++i) {
         uint64_t branch = arg_parents[i];
 
         borrow_ids[memid].push_back(branch);
+        borrow_branches[memid].push_back(callexpr_branch);
 
         int cstmt_i = (branch>>32) & MASK_16;
         if (cstmt_i>cstmt)
@@ -316,14 +359,18 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
     }
     // std::cout << "most restrictive " << most_restrictive << " | " << arg_parents.size()<< "\n";
 
+    CheckBadBorrow(parser_struct, borrow_ids, borrow_branches, borrow_c,
+                   bad_borrows, argexpr);
+
     return;
 }
 
 void RegisterCallBorrow(Parser_Struct *parser_struct,
             NameableCall *callexpr, std::string callee,
             std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
+            std::unordered_map<int,std::vector<uint64_t>> &borrow_branches,
             std::unordered_map<int,int> &borrow_c,
-            std::vector<int> &bad_borrows,
+            std::vector<std::tuple<int,int>> &bad_borrows,
             std::unordered_map<int,uint64_t> &memid_to_branch,
             std::unordered_map<std::string, int> &seen) {
     std::string fn_name = parser_struct->function_name;
@@ -416,9 +463,12 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                 GetCallMostRestrictive(parser_struct,
                             base_callee,
                             callexpr,
+                            argexpr.get(),
                             caller_parents,
                             arg_memid, callexpr->BranchId,
-                            memid, borrow_ids, partialtakes);
+                            memid, borrow_ids, borrow_c,
+                            bad_borrows,
+                            borrow_branches, partialtakes);
                 borrow_c[memid]++;
 
 
@@ -467,8 +517,9 @@ void GetBorrows(Parser_Struct *parser_struct,
                 std::unordered_map<std::string, int> &seen,
                 ExprAST *expr,
                 std::unordered_map<int,std::vector<uint64_t>> &borrow_ids,
+                std::unordered_map<int,std::vector<uint64_t>> &borrow_branches,
                 std::unordered_map<int,int> &borrow_c,
-                std::vector<int> &bad_borrows,
+                std::vector<std::tuple<int,int>> &bad_borrows,
                 std::unordered_map<int,uint64_t> &memid_to_branch,
                 std::vector<int> &retids, int &retcount
              ) {
@@ -484,12 +535,13 @@ void GetBorrows(Parser_Struct *parser_struct,
                             GetLifetime(parser_struct, (Nameable*)callexpr,
                                 callexpr->Args[0].get(), memid_to_branch),
                            callexpr->Args[0],
-                           borrow_ids, borrow_c);
+                           borrow_ids, borrow_branches, borrow_c, bad_borrows);
             return;
         }
         RegisterCallBorrow(parser_struct,
-                callexpr, callee, borrow_ids, borrow_c,
+                callexpr, callee, borrow_ids, borrow_branches, borrow_c,
                 bad_borrows, memid_to_branch, seen);
+
         return;
     }
 
@@ -515,8 +567,6 @@ void GetBorrows(Parser_Struct *parser_struct,
 
 
     if (auto *nameable = dynamic_cast<Nameable*>(expr)) {
-        CheckBadBorrow(parser_struct, borrow_ids, borrow_c,
-                       bad_borrows, nameable);
         int memid = nameable->GetMemId();
         if (!nameable->IsAttr&&memid!=-2) {
             uint64_t branch = nameable->BranchId;
@@ -576,10 +626,11 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
-    std::unordered_map<int,std::vector<uint64_t>> borrow_ids;
+    std::unordered_map<int,std::vector<uint64_t>> borrow_ids, borrow_branches;
     std::unordered_map<int,int> borrow_c;
     std::unordered_map<int,uint64_t> memid_to_branch;
-    std::vector<int> retids, bad_borrows;
+    std::vector<std::tuple<int,int>> bad_borrows;
+    std::vector<int> retids;
     int retcount=0;
     parser_struct->function_name = fn_name;
 
@@ -588,11 +639,11 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
 
     for (auto &body : Body) {
       body->Traverse([parser_struct, &seen,
-              &borrow_ids, &borrow_c, &bad_borrows, &memid_to_branch,
+              &borrow_ids, &borrow_branches, &borrow_c, &bad_borrows, &memid_to_branch,
               &retids, &retcount](ExprAST *node) {
 
         GetBorrows(parser_struct, seen, node,
-                    borrow_ids,
+                    borrow_ids, borrow_branches,
                     borrow_c,
                     bad_borrows,
                     memid_to_branch,

@@ -55,7 +55,7 @@ std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vec
 
 std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Value*>>> layout_strides;
 
-std::vector<std::string> Global_Uniques, Global_Owneds, ConditionalsQueue;
+std::vector<std::string> Global_Uniques, Global_Owneds;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
 std::unordered_map<std::string, llvm::GlobalVariable*> global_values;
 
@@ -300,6 +300,21 @@ Value *str_view_llvm_hash(Value *str_value, Function *F) {
 
     return phiHash;
 }
+
+void GetOwnedType(Parser_Struct *parser_struct, Data_Tree dt, int memid, int ownedid, Value *ptr) {
+    int type = 0;
+    if (fn_borrows[parser_struct->base_name].count(memid)>0) {
+        type = 3;
+        
+    } else if (in_vec(ownedid, function_escapes[parser_struct->function_name])) {
+        if (parser_struct->borrow_ret)
+            type = 2;
+        else
+            type = 1;
+    }
+    OwnedValues.push_back({memid, dt, ptr, type});
+}
+
 
 inline Value *get_smem_offset(Parser_Struct *parser_struct, bool &had) {
     if (function_values[parser_struct->function_name].count("smem_offset")>0) {
@@ -1269,6 +1284,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
             StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
         }
+
+        if (IsOwned) {
+            std::cout << "\n\033[32mMemid " << Memids[i]<< "\033[0m\n\n";
+            std::cout << "OwnedId: " << Ownedids[i] << "\n";
+
+            GetOwnedType(parser_struct, data_type, Memids[i], Ownedids[i], initial_value);
+        }
     }
     return const_float(0.0f);
 }
@@ -1293,9 +1315,9 @@ Value *GCSafePointExprAST::codegen(Value *scope_struct) {
 }
 
 void BlockConditionals(std::string fn) {
-    for(auto &var_to_remove : ConditionalsQueue)
-        function_values[fn].erase(var_to_remove);
-    ConditionalsQueue.clear();
+    // for(auto &var_to_remove : ConditionalsQueue)
+    //     function_values[fn].erase(var_to_remove);
+    // ConditionalsQueue.clear();
 }
 
 
@@ -1387,7 +1409,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     Builder->SetInsertPoint(MergeBB);
 
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     BlockConditionals(parser_struct->function_name);
 
 
@@ -1509,7 +1531,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
 
     // Emit merge block.
     Builder->SetInsertPoint(MergeBB);
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     BlockConditionals(parser_struct->function_name);
 
 
@@ -1777,7 +1799,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     // verifyFunction(*TheFunction);
     // CurModule->print(llvm::errs(), nullptr);
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
 
     return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
@@ -1924,7 +1946,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values, BreakBB, CondBB);
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     return const_float(0.0f);
 }
 
@@ -2006,7 +2028,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
     SetBreakPHIS(parser_struct, assigned_vars,
             old_function_values, function_phi_values, BreakBB, CondBB);
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
 
@@ -2629,7 +2651,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (Op == '=' || (Op==tok_arrow&&!begins_with(Elements, "channel"))) {
         BinaryStore(parser_struct, scope_struct, Op, Operation, LHS, RHS, R, L_dt, R_dt);
-        ClearOwned(scope_struct, parser_struct->function_name);
+        ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
         return const_int(0);
     }
 
@@ -2647,7 +2669,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (auto *rstmt = dynamic_cast<BinaryExprAST*>(RHS.get())) {
         if (rstmt->is_fused) {
-            ClearOwned(scope_struct, parser_struct->function_name);
+            ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
             return const_int(0);
         }
     }
@@ -3049,12 +3071,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         BinaryStore(parser_struct, scope_struct,
                     '=', Operation, LHS, LHS,
                     ret, LHS->GetDataTree(true), L_dt);
-        ClearOwned(scope_struct, parser_struct->function_name);
+        ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
         return const_int(0);
     }
 
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     return ret;
 
 
@@ -4064,6 +4086,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
+
 void NewExprAST::AllocPtr(Value *scope_struct) {
 
 
@@ -4076,12 +4099,10 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
               });
     } else if(fn_borrows[parser_struct->base_name].count(MemId)>0) {
         // taken
-        LogBlue("Taken " + parser_struct->base_name + ": " + std::to_string(MemId));
         ptr = callret("malloc",
                     {const_int(
                         data_name_to_type()[DataName])
               });
-        OwnedValues.push_back({MemId, Data_Tree(DataName), ptr, 3});
     } else {
         if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
             if (parser_struct->borrow_ret) {
@@ -4090,21 +4111,21 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
                         {const_int(
                             data_name_to_type()[DataName])
                       });
-                OwnedValues.push_back({MemId, Data_Tree(DataName), ptr, 2});
             }
-            else { // escape
+            else// escape
                 ptr = fn_owned_ret_memory[OwnedId];
-                OwnedValues.push_back({MemId, Data_Tree(DataName), ptr, 1});
-            }
         } else {
             // own
             Value *ownedpool = get_scope_owned_pool(scope_struct);
             ptr = Builder->CreateGEP(
                         int8Ty, ownedpool, const_int(OwnedPoolOffset)
                    ); 
-            OwnedValues.push_back({MemId, Data_Tree(DataName), ptr, 0});
         }
     }
+
+
+    if (MemoryType!=newTy)
+        GetOwnedType(parser_struct, Data_Tree(DataName), MemId, OwnedId, ptr);
 }
 
 
@@ -4789,17 +4810,14 @@ void DispatchOwnedFree(std::string fn, Value *memV, int memid, Data_Tree &dt, Ex
         }
         // std::cout << "Parent post  " << parent << "\n";
         if (auto *parent_stmt = dynamic_cast<NameableCall*>(parent)) {
-            std::cout << "REGISTER CALL CLEAR FOR  " << memV << "\n";
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<BinaryExprAST*>(parent)) {
-            std::cout << "dispatch owned  BinOp" << "\n"; 
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<RetExprAST*>(parent)) {
-            std::cout << "RetExpr dispatch " << memV << "\n";
             // parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
@@ -4860,7 +4878,6 @@ Value *Nameable::codegen(Value *scope_struct) {
         if (function_values[fn].count(Name)>0) {
             int memid = GetMemId();
             bool is_owned = dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
-
 
             if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
                 if (this==fn_memid_to_lastseen[fn][memid]) {
@@ -5389,23 +5406,19 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
         offset = Builder->CreateAdd(offset, product);
     }
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     return Builder->CreateGEP(ty, ptr, offset);
 }
 
 
 
 
-void ArrayClearOwned(Data_Tree &dt, Value *ptr) {  
+void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {  
     Data_Tree inner_dt = dt.Nested_Data[0];
     if (!inner_dt.IsFromArena())
         return;
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-    std::cout << "\n\t\033[32marray clear" << "\033[0m\n\n"; 
-    dt.Print();
-
 
 
     Value *array_ptr = Builder->CreateLoad(
@@ -5424,6 +5437,7 @@ void ArrayClearOwned(Data_Tree &dt, Value *ptr) {
     BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
     BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
     
+    Value *previous_obj = get_scope_obj(scope_struct);
 
     Builder->CreateBr(CondBB);
     Builder->SetInsertPoint(CondBB);
@@ -5446,18 +5460,18 @@ void ArrayClearOwned(Data_Tree &dt, Value *ptr) {
                         Builder->CreateMul(loop_var, const_int(8))
                     )
             );
-    call("print_void_ptr", {elem});
-
-    call("print_int", {loop_var}); 
+    Disown(scope_struct, inner_dt, elem);
+    call("free", {elem});
 
     Value *next_val = Builder->CreateAdd(loop_var, const_int(1));
     loop_var->addIncoming(next_val, LoopBB);
     Builder->CreateBr(CondBB);
 
     Builder->SetInsertPoint(AfterBB);
+    set_scope_obj(scope_struct, previous_obj);
 }
 
-void ArrayClear(Value *scope_struct, ExprAST *expr) {  
+inline void ArrayClear(Value *scope_struct, ExprAST *expr) {  
     if (expr->GetIsOwned()==-2)
         return;
 
@@ -5467,7 +5481,7 @@ void ArrayClear(Value *scope_struct, ExprAST *expr) {
         return; // Better double check than redundant value load
 
 
-    ArrayClearOwned(dt, expr->codegen(scope_struct));
+    ArrayClearOwned(scope_struct, dt, expr->codegen(scope_struct));
 }
 
 
@@ -5561,7 +5575,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
     Builder->SetInsertPoint(postBB); 
     // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
 
-    ClearOwned(scope_struct, parser_struct->function_name);
+    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
     return const_int(0);
 }
 
@@ -5681,6 +5695,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
         );
     ret = Builder->CreateCall(fnTy, fn, ArgsV);
   } else {
+    auto OwnedValuesPre = OwnedValues;
     if (gpu_fn.count(Callee)>0) {
         std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
         ArgsV_slice.push_back(get_smem_offset(parser_struct));
@@ -5688,6 +5703,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
         ret = callret(Callee, ArgsV_slice);
     } else
         ret = callret(Callee, ArgsV);
+    OwnedValues = OwnedValuesPre;
   }
   
 
@@ -5735,7 +5751,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     struct_ret = Builder->CreateInsertValue(struct_ret, packed_bool, {1});
     ret = struct_ret;
   }
-  ClearOwned(scope_struct, parser_struct->function_name);
+  ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
   return ret;
 }
 
