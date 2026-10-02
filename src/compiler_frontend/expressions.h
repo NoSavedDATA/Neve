@@ -634,12 +634,12 @@ class Nameable : public ExprAST {
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1, MemId=-2, OwnedId=-2;
-  bool IsUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
+  bool IsUnique=false,IsOwnedUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
   bool checked=false, IsAttr=false;
 
   Nameable(Parser_Struct *);
   Nameable(Parser_Struct *, std::string, int);
-  Nameable(Parser_Struct *, std::string, int, bool);
+  Nameable(Parser_Struct *, std::string, int, bool, bool);
 
   void AddNested(std::unique_ptr<Nameable>);
 
@@ -725,6 +725,7 @@ class NameableIdx : public Nameable {
   Data_Tree GetLayoutDT(Data_Tree dt, bool from_assignment=false);
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
+  int GetIsOwned() override;
 };
 
 

@@ -60,7 +60,7 @@ extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 extern std::unordered_map<std::string, int> ClassSize;
 extern std::unordered_map<std::string, int> Classes;
 
-extern std::vector<std::string> Global_Uniques;
+extern std::vector<std::string> Global_Uniques, Global_Owneds;
 
 extern std::map<std::string, std::vector<std::string>> Equivalent_Types;
 

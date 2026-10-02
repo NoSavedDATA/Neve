@@ -3158,9 +3158,10 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 
 
 Data_Tree Nameable::GetDataTree(bool from_assignment) {  
-  if(IsUnique) 
+  if(IsUnique||IsOwnedUnique)
       return Data_Tree(Name);
   
+
   if(Depth==1) {
     if(Name=="self")
         data_type = Data_Tree(parser_struct->class_name);
@@ -3224,7 +3225,7 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth) : 
   this->Line = parser_struct->line;
 }
 
-Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bool IsUnique) : Depth(Depth), IsUnique(IsUnique) {
+Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bool IsUnique, bool IsOwnedUnique) : Depth(Depth), IsUnique(IsUnique), IsOwnedUnique(IsOwnedUnique) {
   this->parser_struct = parser_struct;
   this->Name = Name;
   this->isAttribute = Depth>1;
@@ -3233,6 +3234,12 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
   if (IsUnique && !in_vec(Name, Global_Uniques)) {
     Global_Uniques.push_back(Name);
     FunctionChecks(Name+"___init__");
+    LogBlue("ADD UNIQUE " + Name);
+  }
+  if (IsOwnedUnique && !in_vec(Name, Global_Owneds)) {
+    Global_Owneds.push_back(Name);
+    FunctionChecks(Name+"___init__");
+    LogBlue("ADD OWNED " + Name);
   }
 }
 

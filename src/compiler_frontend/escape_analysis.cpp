@@ -132,8 +132,10 @@ int Nameable::GetIsOwned() {
     // Check Depth 1 owned for borrowed
     if (OwnedId!=-2)
         return OwnedId;
+    if (IsOwnedUnique)
+        return -1;
     if (Depth>1)
-        return -2;
+        return Inner->GetIsOwned();
     std::string scope = parser_struct->function_name;
 
     if (function_owns[scope].count(Name)==0)
@@ -141,9 +143,14 @@ int Nameable::GetIsOwned() {
     // std::cout << "(owned) " << scope << " | " << Name << ": " << function_owns[scope].count(Name) << "\n";
     return function_owns[scope][Name];
 }
+int NameableIdx::GetIsOwned() {
+    if (OwnedId!=-2)
+        return OwnedId;
+    return Inner->GetIsOwned();
+}
 int NameableCall::GetIsOwned() {
     // allocates return
-    if (OwnedPoolOffset>=0||OwnedId > -2)
+    if (OwnedPoolOffset>=0||OwnedId != -2)
         return OwnedId;
     // returns into reserved memory
     // if (function_callee_escapes.count(Callee)>0)

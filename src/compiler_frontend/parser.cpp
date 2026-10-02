@@ -358,13 +358,15 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct *parser_struct, std::un
   depth++;
     
   bool is_unique = CurTok=='$';
-  if (is_unique)
+  bool is_owned_unique= CurTok=='&';
+  if (is_owned_unique||is_unique)
         getNextToken();
     
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct, IdName, depth, is_unique);
+  std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct,
+                                                IdName, depth, is_unique, is_owned_unique);
   nameable->AddNested(std::move(inner));
   
 
@@ -2084,6 +2086,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
   }
   case '$':
     return ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, can_be_list);
+  case '&':
+    return ParseNameableExpr(parser_struct, std::make_unique<NameableRoot>(parser_struct), class_name, can_be_list);
   case '~':
     return ParseMemInferExpr(parser_struct, class_name);
   case tok_self:
@@ -2185,7 +2189,7 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct *parser_struct, std::string cl
   // std::cout <<"Parse unary got can_be_list: " << can_be_list <<  "\n";
   // If the current token is not an operator, it must be a primary expr.
   
-  if ((!isascii(CurTok) || CurTok=='$' || CurTok=='~' || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')&&CurTok!=tok_not)
+  if ((!isascii(CurTok) || CurTok=='$' || CurTok=='&' || CurTok=='~' || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')&&CurTok!=tok_not)
   {
     // std::cout << "Returning, non-ascii found.\n";
     // std::cout << "" << CurTok << "|" << ReverseToken(CurTok) << "\n";
@@ -2318,8 +2322,8 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(Parser_Struct *parser_struct, int ExprPre
       return std::move(LHS);
     
 
-    if (CurTok==tok_space || CurTok=='$') {
-      if(CurTok!='$')
+    if (CurTok==tok_space || CurTok=='$'||CurTok=='&') {
+      if(CurTok!='$'||CurTok=='&')
           getNextToken();
       // std::cout << "Returning tok space with " << SeenTabs << " tabs. \n\n\n";
       return std::move(LHS);

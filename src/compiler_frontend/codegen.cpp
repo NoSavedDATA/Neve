@@ -55,8 +55,9 @@ std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vec
 
 std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Value*>>> layout_strides;
 
-std::vector<std::string> Global_Uniques, ConditionalsQueue;
+std::vector<std::string> Global_Uniques, Global_Owneds, ConditionalsQueue;
 std::unordered_map<std::string, int> Global_Uniques_Idx;
+std::unordered_map<std::string, llvm::GlobalVariable*> global_values;
 
 std::vector<Value *> thread_pointers;
 
@@ -2815,7 +2816,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
                 for (auto &[name, _, dt] : DynamicArgs) {
                     std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct,
-                            name, 1, false);
+                            name, 1);
                     nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
                     Args.push_back(nameable->codegen(scope_struct));
                 }
@@ -3030,7 +3031,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
             for (auto &[name, _, dt] : parser_struct->dyn_args) {
                 std::unique_ptr<Nameable> nameable = std::make_unique<Nameable>(parser_struct,
-                        name, 1, false);
+                        name, 1);
                 nameable->AddNested(std::make_unique<NameableRoot>(parser_struct));
                 Args.push_back(nameable->codegen(scope_struct));
             }
@@ -3592,7 +3593,7 @@ Value *LockExprAST::codegen(Value *scope_struct){
 
 
 
-void SetUniques(Value *scope_struct) {
+inline void SetUniques(Value *scope_struct) {
     int idx = 0;
     for (auto class_name : Global_Uniques) {
         Value *ptr = callret("allocate_pool", {scope_struct, const_int(ClassSize[class_name]),
@@ -3632,8 +3633,65 @@ void SetUniques(Value *scope_struct) {
         set_scope_obj(scope_struct, previous_obj);
         Global_Uniques_Idx[class_name] = idx++;
     }
-
 }
+
+
+inline void SetGlobalOwneds(Value *scope_struct) {
+    int idx = 0;
+    for (auto class_name : Global_Owneds) {
+        Value *ptr = callret("malloc", {const_int(ClassSize[class_name])});
+
+        std::string function_name = "__anon_expr";
+        StructType *st = struct_types["class_"+class_name]; 
+        for (auto attr : ClassAttrsName[class_name]) {
+          Data_Tree dt = data_typeVars[class_name][attr];
+          std::string type = dt.Type;
+          std::string create_fn = type+"_Create";
+          if (in_vec(type, compound_tokens)) {
+            int attr_idx = ClassAttrs[class_name][attr];
+            std::vector<Value *> ArgsDT_Create = {scope_struct};
+            if (create_fn=="array_Create") {
+                ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(const_int(2));
+            }
+            else if (type=="channel") { 
+                ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
+            } else { //map
+                Data_Tree *dt_ptr = new Data_Tree(type);
+                dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
+                if(type=="map")
+                    dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
+                ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+            }
+            Value *compound = callret(create_fn, ArgsDT_Create);
+            Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
+            Builder->CreateStore(compound, compound_gep);
+          }
+        }
+        Value *previous_obj = get_scope_obj(scope_struct);
+        set_scope_obj(scope_struct, ptr);
+        call(class_name+"___init__", {scope_struct});
+        set_scope_obj(scope_struct, previous_obj);
+        Global_Uniques_Idx[class_name] = idx++;
+
+
+        llvm::GlobalVariable* globalPtr = new llvm::GlobalVariable(
+            *TheModule,
+            int8PtrTy,                            // Type is a pointer
+            false,                              // isConstant = false
+            llvm::GlobalValue::InternalLinkage,
+            llvm::ConstantPointerNull::get(int8PtrTy), // Init to null pointer
+            "global_class_instance"
+        );
+        call("print_void_ptr", {ptr});
+        Builder->CreateStore(ptr, globalPtr);
+        global_values[class_name] = globalPtr;
+    }
+}
+
+
+
 
 Value *MainExprAST::codegen(Value *scope_struct) {
     Checks();
@@ -3644,6 +3702,7 @@ Value *MainExprAST::codegen(Value *scope_struct) {
     std::string functionName = TheFunction->getName().str();
 
     SetUniques(scope_struct);
+    SetGlobalOwneds(scope_struct);
     for (auto &prebuild_fn : prebuild_functions)
         call(prebuild_fn, {scope_struct});
 
@@ -4007,7 +4066,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 void NewExprAST::AllocPtr(Value *scope_struct) {
 
-    std::cout << "BASE NAME: " << parser_struct->base_name << "\n";
 
     if (MemoryType==newTy) {
         // new - GC arena alloc
@@ -4785,8 +4843,14 @@ Value *Nameable::codegen(Value *scope_struct) {
     std::string base_fn = parser_struct->base_name;
 
     if(Depth==1) {
-        if(IsUnique)
+        if(IsUnique) {
             return RecoverUniqueGlobal(scope_struct, Name);
+        }
+        if(IsOwnedUnique) {
+            dt.Print();
+            std::cout << "\n\t\033[34m Is owned: " << GetIsOwned() << " | " << GetMemId() << "\033[0m\n\n";
+            return Builder->CreateLoad(int8PtrTy, global_values[Name]);
+        }
         if(Name=="self") {
             return get_scope_obj(scope_struct);
         }
@@ -5331,6 +5395,82 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
 
 
 
+
+void ArrayClearOwned(Data_Tree &dt, Value *ptr) {  
+    Data_Tree inner_dt = dt.Nested_Data[0];
+    if (!inner_dt.IsFromArena())
+        return;
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    std::cout << "\n\t\033[32marray clear" << "\033[0m\n\n"; 
+    dt.Print();
+
+
+
+    Value *array_ptr = Builder->CreateLoad(
+                int8PtrTy,
+                Builder->CreateStructGEP(struct_types["array"], ptr, 3)
+            );
+
+    Value *array_size = Builder->CreateLoad(
+                intTy,
+                Builder->CreateStructGEP(struct_types["array"], ptr, 0)
+            );
+
+
+    BasicBlock *CondBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
+    BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
+    BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
+    BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
+    
+
+    Builder->CreateBr(CondBB);
+    Builder->SetInsertPoint(CondBB);
+
+    PHINode *loop_var = Builder->CreatePHI(intTy, 2);
+    loop_var->addIncoming(const_int(0), CurBB);
+
+
+
+    Builder->CreateCondBr(
+            Builder->CreateICmpSLT(loop_var, array_size),
+            LoopBB, AfterBB
+        );
+
+    Builder->SetInsertPoint(LoopBB);
+
+    Value *elem = Builder->CreateLoad(int8PtrTy,
+                Builder->CreateInBoundsGEP(
+                        int8Ty, array_ptr, 
+                        Builder->CreateMul(loop_var, const_int(8))
+                    )
+            );
+    call("print_void_ptr", {elem});
+
+    call("print_int", {loop_var}); 
+
+    Value *next_val = Builder->CreateAdd(loop_var, const_int(1));
+    loop_var->addIncoming(next_val, LoopBB);
+    Builder->CreateBr(CondBB);
+
+    Builder->SetInsertPoint(AfterBB);
+}
+
+void ArrayClear(Value *scope_struct, ExprAST *expr) {  
+    if (expr->GetIsOwned()==-2)
+        return;
+
+    Data_Tree dt = expr->GetDataTree();
+    Data_Tree inner_dt = dt.Nested_Data[0];
+    if (!inner_dt.IsFromArena())
+        return; // Better double check than redundant value load
+
+
+    ArrayClearOwned(dt, expr->codegen(scope_struct));
+}
+
+
 Value *NameableCall::codegen_append(Value *scope_struct) {  
 
     Data_Tree inner_dt = Inner->GetDataTree();
@@ -5513,6 +5653,12 @@ Value *NameableCall::codegen(Value *scope_struct) {
         previous_obj = swap_scope_obj(scope_struct, obj_ptr); 
 
   Codegen_Partialtakes(parser_struct, Callee, partialtakes, ArgsV);
+
+
+
+  if (Callee=="array_clear")
+      ArrayClear(scope_struct, Inner.get());
+  
 
 
   Value *ret;
