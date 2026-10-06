@@ -9,7 +9,7 @@ extern std::vector<Value*> OwnedsCleared;
 
 
 
-void Clear_Fn_Owned_Values(Value *scope_struct);
+void Clear_Fn_Owned_Values(Value *scope_struct, Parser_Struct*);
 
 
 void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct);

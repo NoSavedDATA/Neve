@@ -262,6 +262,24 @@ Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct *pa
   return data_tree;
 }
 
+Data_Tree ParseDataTree(std::string &data_type, bool &is_struct, Parser_Struct *parser_struct, bool &is_owned, bool &is_view) {
+
+    if (CurTok==tok_view) {
+        is_view=true;
+        is_owned=true;
+        getNextToken();
+    }
+    if (CurTok==tok_owned) {
+        is_owned=true;
+        getNextToken();
+    }
+    is_struct=is_struct||(CurTok==tok_struct);
+    data_type = IdentifierStr; 
+    Data_Tree ret_dt = ParseDataTree(data_type, is_struct, parser_struct);
+    ret_dt.is_view = is_view;
+    return ret_dt;
+}
+
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct *parser_struct,
@@ -353,12 +371,13 @@ inline void handle_tok_space() {
 }
 
 
-std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct *parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, bool can_be_list, int depth)
-{
+std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct *parser_struct,
+        std::unique_ptr<Nameable> inner, std::string class_name,
+        bool can_be_list, int depth) {
   depth++;
     
   bool is_unique = CurTok=='$';
-  bool is_owned_unique= CurTok=='&';
+  bool is_owned_unique = CurTok=='&';
   if (is_owned_unique||is_unique)
         getNextToken();
     
@@ -1731,14 +1750,14 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct *parser_struct, std::strin
 
 
 
-std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string class_name, bool is_owned) {
-  if (is_owned)
-      getNextToken();
+std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct *parser_struct, std::string class_name) {
+  bool is_owned=false, is_view=false;
 
   bool is_struct=(CurTok==tok_struct);
 
   std::string data_type = IdentifierStr; 
-  Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct);
+  Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct,
+                            is_owned, is_view);
   data_tree.is_own = is_owned;
 
 
@@ -2150,8 +2169,10 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct *parser_struct, std::string 
     return ParseMainExpr(parser_struct, class_name);
   case tok_ret:
     return ParseRetExpr(parser_struct, class_name);
+  case tok_view:
+    return ParseDataExpr(parser_struct, class_name);
   case tok_owned:
-    return ParseDataExpr(parser_struct, class_name,true);
+    return ParseDataExpr(parser_struct, class_name);
   case tok_data:
     return ParseDataExpr(parser_struct, class_name);
   case tok_channel:
@@ -2927,12 +2948,16 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
   
 
   int last_offset=0, last_attr_idx=0;
-  while(CurTok==tok_data||CurTok==tok_identifier||CurTok==tok_struct||CurTok==tok_channel) { 
+  while (in_vec(CurTok, {tok_data, tok_view, tok_identifier, tok_struct, tok_channel})) {
     std::string data_type = IdentifierStr;
     bool is_object = Classes.count(data_type)>0;
     bool is_channel=CurTok==tok_channel;
+
+    bool is_owned=false,is_view=false;
+    bool is_struct = in_vec(data_type,compound_tokens)||data_type=="channel"; 
     
-    Data_Tree data_tree = ParseDataTree(data_type, in_vec(data_type, compound_tokens)||data_type=="channel", parser_struct);
+    Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct,
+                                        is_owned, is_view);
 
     
     
@@ -2951,6 +2976,12 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
       ClassVariables[Name][IdentifierStr] = last_offset;
       ClassAttrs[Name][IdentifierStr] = last_attr_idx++;
       ClassAttrsName[Name].push_back(IdentifierStr);
+
+      if(is_view) {
+          std::cout << "\n\t\033[32mset view " <<Name << " | " << IdentifierStr << "\033[0m\n\n";
+          fn_class_views[Name].push_back(IdentifierStr);
+      }
+
       llvm::Type *Ty;
 
 

@@ -57,6 +57,8 @@ std::map<int, std::string> token_to_string = {
 
   { tok_new, "tok new" },
   { tok_own, "tok own" },
+  { tok_owned, "tok owned" },
+  { tok_view, "tok view" },
 
 
   // functional
@@ -250,6 +252,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"continue", tok_continue},
                                              {"offby", tok_offby},
                                              {"new", tok_new},
+                                             {"view", tok_view},
                                              {"owned", tok_owned},
                                              {"own", tok_own}
                                     };

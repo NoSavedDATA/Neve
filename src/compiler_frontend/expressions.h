@@ -166,6 +166,8 @@ struct ArgsEqual {
                 return false;
             if(a.dts[i].is_own!=b.dts[i].is_own)
                 return false;
+            if(a.dts[i].is_view!=b.dts[i].is_view)
+                return false;
         }
 
         if (!a.has)
@@ -651,6 +653,7 @@ class Nameable : public ExprAST {
 
   int GetIsOwned() override;
   int GetMemId() override;
+  bool GetIsView();
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
@@ -708,6 +711,7 @@ class NameableCall : public Nameable, public OwnedHolder {
   void Checks() override;
   int GetIsOwned() override;
   int GetMemId() override;
+  bool GetIsView();
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
@@ -726,6 +730,7 @@ class NameableIdx : public Nameable {
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
+  bool GetIsView();
 };
 
 
@@ -1314,7 +1319,7 @@ extern std::unordered_map<std::string,
 
 
 extern std::unordered_map<std::string,
-       std::vector<std::tuple<int,int>>> fn_bad_borrows;
+       std::vector<std::tuple<int,int,int>>> fn_bad_borrows;
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,uint64_t>> fn_memid_to_branch;
@@ -1328,11 +1333,17 @@ extern std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete;
 
 
+
+extern std::unordered_map<std::string,std::vector<int>> fn_views;
+extern std::unordered_map<std::string,std::vector<std::string>> fn_class_views;
+
+
 extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
 extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 extern std::vector<std::string> ConditionalsQueue;
 
+extern std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_dt;
 
 
 extern std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;

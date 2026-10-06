@@ -41,6 +41,7 @@ std::unordered_map<std::string, llvm::StructType*> tuple_cache;
 std::map<std::string, int> fn_stack_offset;
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
 std::map<std::string, std::map<std::string, Value *>> function_values;
+std::map<std::string, std::map<int, Value *>> fn_memid_to_val;
 std::map<BasicBlock*, std::map<std::string, Value *>> block_values;
 std::map<std::string, std::map<Value *, Value *>> function_vecs;
 std::map<std::string, std::map<Value *, Value *>> function_vecs_size;
@@ -1136,6 +1137,7 @@ void SetConditionalTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
     if(!ctakens[fn].count(memid))
         return;
 
+    p2t("set ctaken");
     Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
     p2t("-----------COND " + fn + " - " + std::to_string(memid));
     Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
@@ -1220,11 +1222,17 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                 if(Check_Required_Args_Count(create_fn, Notes.size(), parser_struct)) {
 
                     std::vector<Value *> ArgsV = {scope_struct};
+                    std::string postfix = "";
+                    if (IsOwned) {
+                        if (fn_borrows[parser_struct->base_name].count(Memids[i])>0)
+                            postfix="_Taken";
+                        else
+                            postfix="_Owned";
+                    }
 
                     if (create_fn=="array_Create" || create_fn=="map_Create" || create_fn=="channel_Create") {
                         if (create_fn=="array_Create") {
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
-                            ArgsV.push_back(const_int(IsOwned ? 1 : 0));
                         }
                         else if (create_fn=="channel_Create") {
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
@@ -1248,6 +1256,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
                     }
 
+                    create_fn += postfix;
+
                     if(struct_create_fn.count(dt_type)>0) {
                         initial_value = (struct_type_size.count(Type)>0) ? callret("allocate_pool", {scope_struct,
                                     const_int(struct_type_size[Type]),
@@ -1260,8 +1270,9 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                                 Notes,
                                 ArgsV_slice);
                     }
-                    else
+                    else {
                         initial_value = callret(create_fn, ArgsV);
+                    }
                 }
             }
         }
@@ -1286,11 +1297,12 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         }
 
         if (IsOwned) {
-            std::cout << "\n\033[32mMemid " << Memids[i]<< "\033[0m\n\n";
-            std::cout << "OwnedId: " << Ownedids[i] << "\n";
-
             GetOwnedType(parser_struct, data_type, Memids[i], Ownedids[i], initial_value);
         }
+
+
+        if (Memids[i]!=-2)
+            fn_memid_to_val[parser_struct->function_name][Memids[i]] = initial_value;
     }
     return const_float(0.0f);
 }
@@ -3632,7 +3644,6 @@ inline void SetUniques(Value *scope_struct) {
             std::vector<Value *> ArgsDT_Create = {scope_struct};
             if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
-                ArgsDT_Create.push_back(const_int(0));
             }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
@@ -3674,7 +3685,6 @@ inline void SetGlobalOwneds(Value *scope_struct) {
             std::vector<Value *> ArgsDT_Create = {scope_struct};
             if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
-                ArgsDT_Create.push_back(const_int(2));
             }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
@@ -3686,6 +3696,7 @@ inline void SetGlobalOwneds(Value *scope_struct) {
                     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
                 ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
             }
+            create_fn+="_Taken";
             Value *compound = callret(create_fn, ArgsDT_Create);
             Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
             Builder->CreateStore(compound, compound_gep);
@@ -4050,9 +4061,17 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                   if (in_vec(type, compound_tokens)||type=="channel") {
                     int attr_idx = ClassAttrs[ClassName][attr];
                     std::vector<Value *> ArgsDT_Create = {scope_struct};
+
+                    std::string postfix = "";
+                    if (Ownedids[i]!=-2) {
+                        if (fn_borrows[parser_struct->base_name].count(Memids[i])>0)
+                            postfix="_Taken";
+                        else
+                            postfix="_Owned";
+                    }
+
                     if (create_fn=="array_Create") {
                         ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
-                        ArgsDT_Create.push_back(const_int(0));
                     }
                     else if (type=="channel") { 
                         ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
@@ -4064,6 +4083,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                             dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
                         ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
                     }
+                    create_fn += postfix;
                     Value *compound = callret(create_fn, ArgsDT_Create);
                     Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
 
@@ -4088,8 +4108,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 void NewExprAST::AllocPtr(Value *scope_struct) {
-
-
     if (MemoryType==newTy) {
         // new - GC arena alloc
         ptr = callret("allocate_pool", 
@@ -4123,7 +4141,7 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
         }
     }
 
-
+    fn_memid_to_val[parser_struct->function_name][MemId] = ptr;
     if (MemoryType!=newTy)
         GetOwnedType(parser_struct, Data_Tree(DataName), MemId, OwnedId, ptr);
 }
@@ -4171,9 +4189,20 @@ Value *NewExprAST::codegen(Value *scope_struct) {
           if (in_vec(type, compound_tokens)) {
             int attr_idx = ClassAttrs[DataName][attr];
             std::vector<Value *> ArgsDT_Create = {scope_struct};
+
+            std::string postfix = "";
+            if (MemoryType!=newTy) {
+                if (fn_borrows[parser_struct->base_name].count(MemId)>0)
+                    postfix="_Taken";
+                else
+                    postfix="_Owned";
+            }
+
             if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
-                ArgsDT_Create.push_back(const_int(0));
+                // ArgsDT_Create.push_back(const_int(
+                //         (MemoryType==newTy) ? 0 : 2 
+                //     ));
             }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
@@ -4185,6 +4214,7 @@ Value *NewExprAST::codegen(Value *scope_struct) {
                     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
                 ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
             }
+            create_fn+=postfix;
             Value *compound = callret(create_fn, ArgsDT_Create);
             Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
             // Builder->CreateStore(compound, compound_gep);
@@ -4801,19 +4831,26 @@ void DispatchOwnedFree(std::string fn, Value *memV, int memid, Data_Tree &dt, Ex
         ||map_has_val(fn_escape_to_memid[fn], memid))
         return;
 
-    // std::cout << "dispatch " << "\n";
+    // std::cout << "dispatch " << memid << "\n";
     // dt.Print();
     if (auto *stmt = dynamic_cast<Nameable*>(expr)) {
         ExprAST *parent = expr->Parent;
+        // std::cout << "dispatch named" << "\n";
         while (parent->Parent!=nullptr) {
             parent = parent->Parent;
         }
-        // std::cout << "Parent post  " << parent << "\n";
+        // std::cout << "****Parent post  " << parent << "\n";
         if (auto *parent_stmt = dynamic_cast<NameableCall*>(parent)) {
+            // std::cout << "parent call: " << parent_stmt->Callee << "\n";
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<BinaryExprAST*>(parent)) {
+            parent_stmt->RegisterOwned(dt, memid, memV);
+        }
+
+        if (auto *parent_stmt = dynamic_cast<ForEachExprAST*>(parent)) {
+            // std::cout << "parent call: " << parent_stmt->Callee << "\n";
             parent_stmt->RegisterOwned(dt, memid, memV);
         }
 
@@ -4822,7 +4859,6 @@ void DispatchOwnedFree(std::string fn, Value *memV, int memid, Data_Tree &dt, Ex
         }
 
     }
-
 
 
     if (auto *stmt = dynamic_cast<OwnedHolder*>(expr))
@@ -4860,6 +4896,30 @@ Value *Nameable::codegen(Value *scope_struct) {
     std::string fn = parser_struct->function_name;
     std::string base_fn = parser_struct->base_name;
 
+    if (map_has_val(fn_memid_to_lastseen[fn], (ExprAST*)this)) {
+        for(auto &[memid, expr] : fn_memid_to_lastseen[fn]) {
+            if (expr!=this)
+                continue;
+            if (!fn_memid_to_dt[fn].count(memid))
+                continue;
+            Data_Tree cleared_dt = fn_memid_to_dt[fn][memid];
+
+            bool is_owned = cleared_dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
+            if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
+                // std::cout << "last seen " << memid << ": " << this << "\n";
+                cleared_dt.Print();
+                ExprAST *outermost = this;
+                GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
+                        (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
+                // if (fn=="Conv2d_infer")
+                //     std::cout << "<<>> DISPATCH " << memid << "\n";
+                if (!fn_memid_to_val[fn].count(memid))
+                    LogErrorS(Line, "Cannot track memid Value*: " + std::to_string(memid));
+                DispatchOwnedFree(fn, fn_memid_to_val[fn][memid], memid, cleared_dt, outermost);
+            }
+        }
+    }
+
     if(Depth==1) {
         if(IsUnique) {
             return RecoverUniqueGlobal(scope_struct, Name);
@@ -4876,19 +4936,19 @@ Value *Nameable::codegen(Value *scope_struct) {
         if (function_allocas[fn].count(Name)>0)
             return function_allocas[fn][Name]; 
         if (function_values[fn].count(Name)>0) {
-            int memid = GetMemId();
-            bool is_owned = dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
+            // int memid = GetMemId();
+            // bool is_owned = dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
 
-            if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
-                if (this==fn_memid_to_lastseen[fn][memid]) {
-                    ExprAST *outermost = this;
-                    GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
-                            (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
-                    // if (fn=="Conv2d_infer")
-                    //     std::cout << "<<>> DISPATCH " << memid << "\n";
-                    DispatchOwnedFree(fn, function_values[fn][Name], memid, dt, outermost);
-                }
-            }
+            // if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
+            //     if (fn_memid_to_lastseen[fn][memid]==this) {
+            //         std::cout << "last seen " << memid << ": " << this << "\n";
+            //         ExprAST *outermost = this;
+            //         GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
+            //                 (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
+            //         DispatchOwnedFree(fn, fn_memid_to_val[fn][memid], memid, dt, outermost);
+            //     }
+            // }
+            //
             return function_values[fn][Name];
         }
         if (Name=="tid") {
@@ -5521,6 +5581,8 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
         Builder->CreateCondBr(marking, MarkingBB, StandardBB);
         Builder->SetInsertPoint(MarkingBB);
 
+        p2t("append");
+
         if (elem_type=="str") {
             Value *str  = Builder->CreateExtractValue(appended_val, {0});
             Value *size = Builder->CreateExtractValue(appended_val, {1});
@@ -5751,6 +5813,10 @@ Value *NameableCall::codegen(Value *scope_struct) {
     struct_ret = Builder->CreateInsertValue(struct_ret, packed_bool, {1});
     ret = struct_ret;
   }
+
+  if (MemId!=-2)
+    fn_memid_to_val[parser_struct->function_name][MemId] = ret;
+
   ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
   return ret;
 }

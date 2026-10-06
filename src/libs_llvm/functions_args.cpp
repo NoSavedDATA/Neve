@@ -876,15 +876,30 @@ void set_functions_args_type() {
 		
 		Function_Arg_Types["array_Create"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_Create"]["1"] = "i16";
-		Function_Arg_Types["array_Create"]["2"] = "int";
 		
 		Function_Arg_DataTypes["array_Create"]["0"] = Data_Tree("Scope_Struct");
 		Function_Arg_DataTypes["array_Create"]["1"] = Data_Tree("i16");
-		Function_Arg_DataTypes["array_Create"]["2"] = Data_Tree("int");
 		
 		fn_argnames["array_Create"].push_back("0");
 		fn_argnames["array_Create"].push_back("1");
-		fn_argnames["array_Create"].push_back("2");
+		
+		Function_Arg_Types["array_Create_Owned"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_Create_Owned"]["1"] = "i16";
+		
+		Function_Arg_DataTypes["array_Create_Owned"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_Create_Owned"]["1"] = Data_Tree("i16");
+		
+		fn_argnames["array_Create_Owned"].push_back("0");
+		fn_argnames["array_Create_Owned"].push_back("1");
+		
+		Function_Arg_Types["array_Create_Taken"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_Create_Taken"]["1"] = "i16";
+		
+		Function_Arg_DataTypes["array_Create_Taken"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_Create_Taken"]["1"] = Data_Tree("i16");
+		
+		fn_argnames["array_Create_Taken"].push_back("0");
+		fn_argnames["array_Create_Taken"].push_back("1");
 		
 		Function_Arg_Types["array_clone"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_clone"]["1"] = "array";

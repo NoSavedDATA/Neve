@@ -73,6 +73,12 @@ bool in_vec(const T& str, const std::vector<std::tuple<T, U>>& list) {
         return std::get<0>(item) == str;
     }) != list.end();
 }
+template<typename T, typename U, typename W>
+bool in_vec(const T& str, const std::vector<std::tuple<T,U,W>>& list) {
+    return std::find_if(list.begin(), list.end(), [&str](const std::tuple<T,U,W>& item) {
+        return std::get<0>(item) == str;
+    }) != list.end();
+}
 
 
 

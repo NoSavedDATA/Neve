@@ -16,9 +16,9 @@
 DT_array::DT_array() {}
 
 
-void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type, int memTy) {
-    if (memTy==0)
-        ctx->stw_wait();
+void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type) {
+    ctx->stw_wait();
+
     __atomic_store_n(&this->virtual_size, size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->elem_size, elem_size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->type, type, __ATOMIC_RELEASE);
@@ -27,13 +27,30 @@ void DT_array::New(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t
     if (size<8)
         size = 8;
 
-    void *mem = (memTy==0)
-        ? cache_pop(size*elem_size, tid)
-        : malloc(size*elem_size);
+    void *mem = cache_pop(size*elem_size, tid);
+        // : malloc(size*elem_size);
 
     __atomic_store_n(&this->size, size, __ATOMIC_RELEASE);
     __atomic_store_n(&this->data, mem, __ATOMIC_RELEASE);
 }
+
+void DT_array::NewOwned(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type) {
+
+    __atomic_store_n(&this->virtual_size, size, __ATOMIC_RELEASE);
+    __atomic_store_n(&this->elem_size, elem_size, __ATOMIC_RELEASE);
+    __atomic_store_n(&this->type, type, __ATOMIC_RELEASE);
+
+    size = ((size + 7) / 8)*8;
+    if (size<8)
+        size = 8;
+
+    void *mem = malloc(size*elem_size);
+
+
+    __atomic_store_n(&this->size, size, __ATOMIC_RELEASE);
+    __atomic_store_n(&this->data, mem, __ATOMIC_RELEASE);
+}
+
 
 void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
     ctx->stw_wait();
@@ -51,37 +68,57 @@ void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
 
 
 extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
-        uint16_t elem_type, int memTy) { 
-  // std::cout << "array_Create: " << memTy << "\n";
+        uint16_t elem_type) { 
+    std::cout << "(GC) array" << "\n";
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]
       : 8;
 
-
-  DT_array *vec;
-
-  switch (memTy) {
-      case 0:
-          vec = newT<DT_array>(scope_struct, "array");
-          break;
-      case 1:
-          vec = (DT_array*)malloc(sizeof(DT_array));
-          break;
-      case 2:
-          vec = (DT_array*)malloc(sizeof(DT_array));
-          break;
-      default:
-          break;
-  }
+  DT_array *vec = newT<DT_array>(scope_struct, "array");
 
   vec->New(scope_struct,
           8, elem_size, scope_struct->thread_id,
-          elem_type, memTy);
+          elem_type);
 
   __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
 
   return vec;
 }
+extern "C" DT_array *array_Create_Owned(Scope_Struct *scope_struct,
+        uint16_t elem_type) { 
+    std::cout << "(Owned) array" << "\n";
+  int elem_size = (data_type_to_size.count(elem_type)>0)
+      ? data_type_to_size[elem_type]
+      : 8;
+
+  DT_array *vec = (DT_array*)malloc(sizeof(DT_array));
+  vec->NewOwned(scope_struct,
+          8, elem_size, scope_struct->thread_id,
+          elem_type);
+
+  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
+  return vec;
+}
+extern "C" DT_array *array_Create_Taken(Scope_Struct *scope_struct,
+        uint16_t elem_type) { 
+    std::cout << "(Taken) array" << "\n";
+  int elem_size = (data_type_to_size.count(elem_type)>0)
+      ? data_type_to_size[elem_type]
+      : 8;
+
+  DT_array *vec = (DT_array*)malloc(sizeof(DT_array));
+
+  vec->NewOwned(scope_struct,
+          8, elem_size, scope_struct->thread_id,
+          elem_type);
+
+  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
+  return vec;
+}
+
+
 
 extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) { 
     

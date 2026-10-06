@@ -146,6 +146,7 @@ enum Token {
     tok_new = -68,
     tok_own = -104,
     tok_owned = -105,
+    tok_view = -106,
     tok_struct = -54,
     tok_var = -45,
     tok_tuple = -46,

@@ -31,7 +31,8 @@ std::vector<std::tuple<int, Data_Tree, Value*, int>> OwnedValues;
 std::vector<Value*> OwnedsCleared;
 
 
-inline void ClearOne(Value *scope_struct, int memid, Data_Tree dt, Value *ptr,
+inline void ClearOne(Value *scope_struct, std::string fn,
+                int memid, Data_Tree dt, Value *ptr,
                 int owned_type) {
     if (owned_type==3) // borrow
         return;
@@ -39,7 +40,7 @@ inline void ClearOne(Value *scope_struct, int memid, Data_Tree dt, Value *ptr,
     // bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
 
     if (!in_vec(ptr, OwnedsCleared)) {
-        if (dt.Type=="array")
+        if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
             ArrayClearOwned(scope_struct, dt, ptr);
         Disown(scope_struct, dt, ptr);
     }
@@ -48,19 +49,22 @@ inline void ClearOne(Value *scope_struct, int memid, Data_Tree dt, Value *ptr,
         call("free", {ptr});
 }
 inline void Clear_Fn_Owned_Values(Value *scope_struct,
+        Parser_Struct *parser_struct,
         std::vector<Value *> &returned_values) {
+    std::string fn = parser_struct->function_name;
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
         if (in_vec(ptr, returned_values))
             continue;
-        ClearOne(scope_struct, memid, dt, ptr, owned_type);
+        ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
     }
     set_scope_obj(scope_struct, previous_obj);
 }
-void Clear_Fn_Owned_Values(Value *scope_struct) {
+void Clear_Fn_Owned_Values(Value *scope_struct, Parser_Struct *parser_struct) {
+    std::string fn = parser_struct->function_name;
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
-        ClearOne(scope_struct, memid, dt, ptr, owned_type);
+        ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
     }
     set_scope_obj(scope_struct, previous_obj);
 }
@@ -96,7 +100,7 @@ void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
 }
 
 void FreeOwnedPoolRet(Value *scope_struct, Parser_Struct *parser_struct, std::vector<Value *> &returned_values) {
-  Clear_Fn_Owned_Values(scope_struct, returned_values);
+  Clear_Fn_Owned_Values(scope_struct, parser_struct, returned_values);
   FreeOwnedPool(scope_struct, parser_struct);
 }
 

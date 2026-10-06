@@ -945,7 +945,7 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     int branch_id = (branch[0] >> 32)&MASK_16;
     int size = fn_borrows_c[base_name][memid];
 
-    // std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
+    std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
 
 
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
@@ -962,8 +962,7 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     }
 
 
-    if (size>cap&&cap!=0) {
-
+    if (size>cap&&cap!=0 || (cap==0&&size>1)) {
         LogErrorS(line, "The code may try to borrow a value in non mutually exclusive branches.");
     }
 
@@ -977,24 +976,22 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
 
     //     }
     // }
-
-
-
     if(!fn_bad_borrows.count(base_name))
         return;
 
     if (in_vec(memid, fn_bad_borrows[base_name])) {
         int error = std::get<1>(fn_bad_borrows[base_name][0]);
+        int line = std::get<2>(fn_bad_borrows[base_name][0]);
 
         switch (error) {
             case 0:
-                LogErrorS(parser_struct->line, "Tried to use borrowed variable after its owner has been deleted.");
+                LogErrorS(line, "Tried to use borrowed variable after its owner has been deleted.");
                 break;
             case 1:
-                LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
+                LogErrorS(line, "The code may try to borrow a value in non mutually exclusive branches.");
                 break;
             case 2:
-                LogErrorS(parser_struct->line, "Can only take ownership inside a loop when the variable is defined in the loop itself.");
+                LogErrorS(line, "Can only take ownership inside a loop when the variable is defined in the loop itself.");
                 break;
             default:
                 break;
@@ -1059,10 +1056,6 @@ Function *FunctionAST::codegen() {
   Builder->SetInsertPoint(BB);
 
 
-  //   LogBlue("Execute function: " + function_name);
-  
-
-  
 
   Value *scope_struct;
   if(function_name=="__anon_expr") {
@@ -1095,6 +1088,7 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
+        LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1105,6 +1099,8 @@ Function *FunctionAST::codegen() {
         Data_Tree dt = data_typeVars[function_name][arg_name];
         if (memid!=-2&&fn_borrows[function_name].count(memid)>0)
             OwnedValues.push_back({memid, dt, &Arg, 3});
+        if (memid!=-2)
+            fn_memid_to_val[function_name][memid] = &Arg;
     }
   }
 
@@ -1134,7 +1130,7 @@ Function *FunctionAST::codegen() {
             node->parser_struct->cvalues = parser_struct->cvalues;
         }
         if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
-            if (stmt->OwnedId!=-2)
+            if (stmt->OwnedId!=-2) 
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
         }
         if (auto *stmt = dynamic_cast<NameableCall*>(node)) {
@@ -1158,7 +1154,10 @@ Function *FunctionAST::codegen() {
 
 
 
+
   SetFnOwn(parser_struct, scope_struct, function_name, Body);
+
+
 
 
   // Codegen
@@ -1172,7 +1171,7 @@ Function *FunctionAST::codegen() {
 
   if (RetVal) {
     if(!Builder->GetInsertBlock()->getTerminator()) {
-        Clear_Fn_Owned_Values(scope_struct);
+        Clear_Fn_Owned_Values(scope_struct, parser_struct);
         FreeOwnedPool(scope_struct, parser_struct);
         
         Data_Tree ret_dt = fn_ret_dt[function_name];

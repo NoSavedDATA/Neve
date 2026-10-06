@@ -42,6 +42,9 @@ std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
 std::unordered_map<std::string,int> FnLastVersion;
 std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
+
+std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_dt;
+
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
@@ -49,7 +52,7 @@ std::unordered_map<std::string, std::vector<int>> function_escapes, function_cal
 std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 std::unordered_map<std::string,
-       std::vector<std::tuple<int,int>>> fn_bad_borrows;
+       std::vector<std::tuple<int,int,int>>> fn_bad_borrows;
 std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
@@ -64,6 +67,8 @@ std::unordered_map<std::string,
        std::unordered_map<int,ExprAST*>>
                     fn_memid_to_lastseen, fn_conditional_stmt, fn_loop_stmt;
 
+std::unordered_map<std::string,std::vector<int>> fn_views;
+std::unordered_map<std::string,std::vector<std::string>> fn_class_views;
 
 std::unordered_map<std::string,std::vector<int>> fn_rets;
 
@@ -706,10 +711,14 @@ bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_
         //
         if (l[i].Type=="any"||r[i].Type=="any")
             continue;
-        if (match_borrows&&(l[i].is_borrow!=r[i].is_borrow))
-            return false;
-        if (match_borrows&&l[i].is_own!=r[i].is_own)
-            return false;
+        if (match_borrows) {
+            if (l[i].is_borrow!=r[i].is_borrow)
+                return false;
+            if (l[i].is_own!=r[i].is_own)
+                return false;
+            if (l[i].is_view!=r[i].is_view)
+                return false;
+        }
         if (!accept_layout&&l[i].Type=="layout")
             return false;
         if (l[i].Compare(r[i])>0)
@@ -733,10 +742,14 @@ bool CompareDTs(CallArgsTy cargs, CallArgsTy rcargs, bool accept_layout=true, bo
         //
         if (l[i].Type=="any"||r[i].Type=="any")
             continue;
-        if (match_borrows&&(l[i].is_borrow!=r[i].is_borrow))
-            return false;
-        if (match_borrows&&l[i].is_own!=r[i].is_own)
-            return false;
+        if (match_borrows) {
+            if (l[i].is_borrow!=r[i].is_borrow)
+                return false;
+            if (l[i].is_own!=r[i].is_own)
+                return false;
+            if (l[i].is_view!=r[i].is_view)
+                return false;
+        }
         if (!accept_layout&&l[i].Type=="layout")
             return false;
         if (l[i].Compare(r[i])>0)
@@ -775,8 +788,11 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
+          fn_memid_to_dt[this->Name][memid] = dt;
           fn_memid[this->Name][arg_name] = memid;
           fn_arg_memid[this->Name][arg_name] = memid;
+          if (dt.is_view)
+              fn_views[fn].push_back(memid);
         }
     }
     for (auto &[_, name, dt] : CArgs.dyn_args) {
@@ -1645,6 +1661,7 @@ void DataExprAST::Checks() {
         if (owned_id>=-1)
             function_owns[parser_struct->function_name][name] = owned_id;
     }
+
   }
   SetMemId();
 }
@@ -1683,6 +1700,7 @@ void DataExprAST::SetMemId() {
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
     // std::cout << "---(owned)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
         memid = (*parser_struct->mem_id)++;
+        fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
         fn_memid[parser_struct->function_name][name] = memid;
         Memids.push_back(memid);
     } else {
@@ -1692,6 +1710,8 @@ void DataExprAST::SetMemId() {
             fn_memid[parser_struct->function_name][name] = memid;
     }
     Memids.push_back(memid);
+    if (data_type.is_view)
+        fn_views[parser_struct->base_name].push_back(memid);
   }
 }
 
@@ -1750,7 +1770,7 @@ void NewExprAST::Checks() {
     if (checked)
         return;
     checked=true;
-    GetDataTree();
+    Data_Tree dt = GetDataTree();
     if (meminfer_expr) {
         if (auto *meminfer_stmt = dynamic_cast<MeminferExpr*>(meminfer_expr.get())) {
             meminfer_expr->Checks();
@@ -1763,6 +1783,7 @@ void NewExprAST::Checks() {
     
     // std::cout << "---(own)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
     MemId = (*parser_struct->mem_id)++;
+    fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
 }
 
 
@@ -2324,6 +2345,7 @@ void BinaryExprAST::Checks() {
           fn_memid[parser_struct->function_name][name] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
+          data_typeVars[parser_struct->function_name][name].is_view = R_dt.is_view;
         }
     }
   }
@@ -2944,6 +2966,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         if (arg.IsFromArena()) {
         // std::cout << "---(proto)SET ID memid " << this->Name << "|" << (*parser_struct->mem_id) << "\n"; 
           int MemId = (*parser_struct->mem_id)++;
+          fn_memid_to_dt[this->Name][MemId] = arg;
           fn_memid[this->Name][arg_name] = MemId;
           fn_arg_memid[this->Name][arg_name] = MemId;
           fn_memid_to_branch[this->Name][MemId] = MemId;
@@ -3308,6 +3331,7 @@ std::unique_ptr<ExprAST> Nameable::Copy() {
 
 
 NameableCall::NameableCall(Parser_Struct *parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy CompiledArgsVec) : Nameable(parser_struct), Args(std::move(Args)), CompiledArgsVec(CompiledArgsVec) {
+  this->Line = parser_struct->line;
   this->Inner = std::move(Inner);
   this->Inner->Parent = this;
   this->Inner->IsLeaf = false;
@@ -3508,6 +3532,7 @@ void NameableCall::Checks() {
   }
 
   MemId = (*parser_struct->mem_id)++;
+  fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
   if (fn_with_owned_ret.count(Callee)>0)
       OwnedId = (*parser_struct->owned_id)++;
 }
