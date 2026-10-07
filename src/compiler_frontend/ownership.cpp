@@ -106,19 +106,16 @@ std::vector<int> Nameable::GetMemId() {
         return {-2};
 
     std::string scope = parser_struct->base_name;
-
-
+    // std::string scope = parser_struct->function_name;
 
     // if(fn_cond_memid[scope].count(Name)==0)
     //     return {-2};
-
-    if (Name=="b") {
-        std::unordered_map<int, int> memids_to_filter = fn_cond_memid[scope][Name];
-        for(auto &[br, id] : memids_to_filter) {
-            std::cout << " " << scope << "|" << Name << "  HAS  " << id << " in branch: " << (br>>16) << "\n";
-        }
-    }
-    
+    // if (Name=="b") {
+    //     std::unordered_map<int, int> memids_to_filter = fn_cond_memid[scope][Name];
+    //     for(auto &[br, id] : memids_to_filter) {
+    //         std::cout << " " << scope << "|" << Name << "  HAS  " << id << " in branch: " << (br>>16) << "\n";
+    //     }
+    // }
 
     if (fn_memid[scope].count(Name)==0)
         return {-2};
@@ -217,8 +214,10 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
     if (OwnedToClear.size()==0)
         return;
     // std::cout << "\n\n------\n";
-    // if (dynamic_cast<BinaryExprAST*>(this))
+    // if (dynamic_cast<BinaryExprAST*>(this)) {
+    //     std::cout << "\n\t\033[32mPASS: " << fn << "\033[0m\n\n";
     //     std::cout << "BinOp CLEAR OWNED " << "\n";
+    // }
     // if (auto *stmt = dynamic_cast<NameableCall*>(this)) {
     //     std::cout << "CALL CLEAR OWNED " << "\n";
     //     p2t("clear owned " + stmt->Callee);
@@ -232,14 +231,25 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
 
     Value *previous_obj = get_scope_obj(scope_struct);
     for(auto &[dt, memid, ptr] : OwnedToClear) {
-        // std::cout << "TEST " << memid << " | " << fn_borrows[base_fn].count(memid) << "\n";
+
+        // if (begins_with(fn, "ResidualBlock")) {
+        //     return;
+        // }
+        if (begins_with(fn, "ResidualModule")||begins_with(fn, "ResidualBlock")) {
+            // std::cout << "\n\t\033[31mEVAL " << fn << " -> " << memid << "\033[0m\n\n";
+            dt.Print();
+            std::cout << " " << ptr << "\n";
+            // return;
+        }
+
         OwnedsCleared.push_back(ptr);
+        // p2t("------------------------->clear " + fn + " -- " + std::to_string(memid));
 
 
         bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
-        BasicBlock *AfterBB, *DisownBB;
+        BasicBlock *AfterBB, *DisownBB, *created_okBB;
         if (is_conditional) {
-            p2t("------------------------->conditional " + std::to_string(memid));
+            p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
             Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
             call("print_bool", {v}); 
             Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -248,6 +258,18 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
             DisownBB = BasicBlock::Create(*TheContext, "disown.disown",
                                 TheFunction);
 
+
+            if (ctakens_maybe[fn].count(memid)>0) {
+                created_okBB = BasicBlock::Create(*TheContext, "disown.disown",
+                                    TheFunction);
+                Value *was_created = Builder->CreateLoad(boolTy, ctakens_maybe[fn][memid]);
+                p2t("Was created???????");
+                call("print_bool", {was_created}); 
+                Builder->CreateCondBr(
+                            was_created, created_okBB, AfterBB);
+                Builder->SetInsertPoint(created_okBB);
+            }
+
             Builder->CreateCondBr(
                         Builder->CreateLoad(boolTy, ctakens[fn][memid]),
                         AfterBB, DisownBB);
@@ -255,13 +277,18 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
         }
         if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
             ArrayClearOwned(scope_struct, dt, ptr);
-        p2t("disown dispatch");
+        // p2t("disown dispatch");
         // call("print_void_ptrC", {ptr});
         Disown(scope_struct, dt, ptr);
         if (is_conditional) {
-            p2t("cond free: ");
-            call("print_void_ptr", {ptr});
+            // p2t("cond free: ");
+            // call("print_void_ptr", {ptr});
             call("free", {ptr});
+
+            if (ctakens_maybe[fn].count(memid)>0) {
+                Builder->CreateStore(const_bool(false), ctakens_maybe[fn][memid]);
+            }
+
             block_values[DisownBB] = function_values[fn];
             Builder->CreateBr(AfterBB);
             Builder->SetInsertPoint(AfterBB);
@@ -429,7 +456,8 @@ inline void RegisterBorrow(Parser_Struct *parser_struct,
         return;
     uint64_t branch = expr->BranchId;
 
-    // std::cout << "==========REGISTER " << parser_struct->base_name << " | " << appended_memid << " in branch " << ((branch>>32)&MASK_16) << "\n"; 
+    // if (begins_with(parser_struct->base_name, "BatchNorm2d_forward"))
+    //     std::cout << "==========REGISTER " << parser_struct->base_name << " | " << appended_memid << " in branch " << ((branch>>32)&MASK_16) << "\n"; 
 
     borrow_ids[appended_memid].push_back(parent_lifetime);
     borrow_branches[appended_memid].push_back(branch);
@@ -461,12 +489,13 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
 
     int cap = (fn_owner_branch>>16)&MASK_16;
 
-    // std::cout << "cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
-    // std::cout << " " << in_vec(arg_memid,fn_borrows_incomplete[callee]) << "\n";
+    // std::cout << "-------__>cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
+    // std::cout << "(((((((<<<<<)))))))"  << callee << " has_incomplete? " << in_vec(arg_memid,fn_borrows_incomplete[callee]) << "\n";
 
 
     bool has_incomplete = fn_borrows_c[callee][arg_memid]<cap
-                            ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
+                    ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
+
     if (has_incomplete) {
         fn_borrows_incomplete[parser_struct->base_name].push_back(memid);
         partialtakes.push_back({memid,arg_memid});
@@ -477,6 +506,9 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
     int cstmt = (first_branch>>32) & MASK_16;
     borrow_ids[memid].push_back(first_branch);
     borrow_branches[memid].push_back(callexpr_branch);
+
+    // std::cout << "\n\t\033[34mpush " << parser_struct->base_name << "|" << callee << ((callexpr_branch>>16)&MASK_16) << "\033[0m\n\n";
+
     int most_restrictive = 0;
     for (int i=1; i<arg_parents.size(); ++i) {
         uint64_t branch = arg_parents[i];
@@ -577,8 +609,9 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
 
 
 
-            // std::cout << " " << callee << "|" << arg_memid << " | " <<fn_borrows[base_callee].count(arg_memid) << "\n"; 
+            // std::cout << " " << callee << "|" << arg_memid << " >>> " <<fn_borrows[base_callee].count(arg_memid) << "\n"; 
             if (fn_borrows[base_callee].count(arg_memid)>0) {
+                // std::cout << "FOLLOWUP IF " << "\n";
 
                 std::vector<uint64_t> caller_parents;
                 for (auto &borrow : fn_borrows[base_callee][arg_memid]) {
@@ -589,6 +622,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                         );
                     }
                 }
+                std::cout << "GetCallMostRestrictive" << "\n";
 
                 GetCallMostRestrictive(parser_struct,
                             base_callee,
@@ -610,7 +644,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                     dt.is_own=false;
                     dt.is_borrow=true;
                     CArgs.borrows.push_back({
-                            dt, argname, arg_memid
+                            dt, argname, arg_memid, memid
                         });
                 }
             }
@@ -704,7 +738,13 @@ void GetBorrows(Parser_Struct *parser_struct,
         if (!nameable->IsAttr&&memid!=-2) {
             uint64_t branch = nameable->BranchId;
             branch = (branch&~MASK_16) | memid;
+
+
             // std::cout << "Last Seen " << nameable->GetName() << ": " << memid << " | " << expr << "\n";
+
+            if (begins_with(parser_struct->function_name, "ResidualModule")) {
+                std::cout << "\n\t\033[33mLast seen " << parser_struct->base_name << "|" << nameable->GetName() << ": " << memid << " -- " << expr << "\033[0m\n\n";
+            }
 
             fn_memid_to_lastseen[parser_struct->base_name][memid] = expr;
 
@@ -753,13 +793,15 @@ void GetBorrows(Parser_Struct *parser_struct,
 void BorrowChecker(std::string base_callee, std::string fn_name,
                     std::unordered_map<std::string, int> &seen) {
     // fn_name = base_callee;
-    // std::cout << "BorrowChecker " << base_callee << "|" << fn_name << "\n";
+        // std::cout << "BorrowChecker " << base_callee << "|" << fn_name << "\n";
     if (in_vec(base_callee, native_fn)
             ||fn_borrows.count(fn_name)>0
             ||seen.count(fn_name)>0
             ||!TheJIT->fn_map.count(base_callee))
         return; // skip llvm fn
-    // std::cout << "BorrowChecker 2:" << base_callee << "|" << fn_name << "\n";
+
+    // if (ends_with(base_callee, "forward")||ends_with(base_callee, "infer"))
+    //     std::cout << "BorrowChecker 2:" << base_callee << "|" << fn_name << "\n";
 
     seen[fn_name] = 1;
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
@@ -791,35 +833,40 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
       });
     }
 
+
+
     if (fn_borrows.count(base_callee)==0) {
         fn_borrows[base_callee] = borrow_ids;
+        fn_takens_branch[base_callee] = borrow_branches;
         fn_borrows_c[base_callee] = borrow_c;
         fn_bad_borrows[base_callee] = bad_borrows;
         fn_rets[base_callee] = retids;
         fn_retscount[base_callee] = retcount;
+
+
+        if (ends_with(base_callee, "forward")||ends_with(base_callee, "infer"))
+            std::cout << base_callee << " has " << borrow_ids.size() << "\n";
+
         for(auto &[memid, branch] : memid_to_branch)
             fn_memid_to_branch[base_callee][memid] = branch;
-        for(auto &[memid,borrows]: borrow_ids) {
-            uint64_t fn_owner_branch = borrows[0];
-            int cap = (fn_owner_branch>>16)&MASK_16;
+
+        for(auto &[memid,borrows]: borrow_branches) {
+            uint64_t take_branch = borrows[0];
+            int cap = (take_branch>>16)&MASK_16;
 
             bool has_incomplete = borrow_c[memid]<cap;
             if (has_incomplete) {
                 fn_borrows_incomplete[base_callee].push_back(memid);
             }
-
         }
+
     }
     fn_bad_borrows[fn_name] = bad_borrows;
 
-
-
-    // int i=0;
-    // for (auto &version : FnVersion[fn_name]) {
-    //     if(i==0) {
-    //         i++;
-    //         continue;
-    //     }
-    //     fn_borrows_incomplete[fn_name+"_"+std::to_string(i++)] = fn_borrows_incomplete[fn_name];
+    // for(auto &mid : fn_borrows_incomplete[base_callee]) {
+    //     std::cout << " " << base_callee << " incomplete -> " << mid << "\n";
     // }
+
+
+
 }

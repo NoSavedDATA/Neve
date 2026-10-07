@@ -135,7 +135,7 @@ struct CallArgsTy {
     FnCompiledValues cvalues;
     std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
     std::unordered_map<std::string, int> dyn_args_dict;
-    std::vector<std::tuple<Data_Tree, std::string, int>> borrows;
+    std::vector<std::tuple<Data_Tree, std::string, int, int>> borrows;
 
     CallArgsTy(std::vector<Data_Tree> dts);
     CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *stmt=nullptr);
@@ -1323,7 +1323,12 @@ extern std::unordered_map<std::string, std::vector<int>> function_escapes, funct
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,
-            std::vector<uint64_t>>> fn_borrows;
+            std::vector<uint64_t>>> fn_borrows, fn_takens_branch;
+
+extern std::unordered_map<std::string,
+       std::vector<int>> fn_conditional_created_memid;
+
+
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;

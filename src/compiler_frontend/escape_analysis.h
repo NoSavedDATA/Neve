@@ -26,5 +26,5 @@ void GetScopeOwnedValues(ExprAST *expr,
 
 
 
-void SetFnOwn(Parser_Struct *parser_struct, Value*, std::string fn_name, 
+void SetFnOwn(Parser_Struct *parser_struct, Value*, std::string, std::string fn_name, 
         std::vector<std::unique_ptr<ExprAST>> &Body);

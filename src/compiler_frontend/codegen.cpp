@@ -62,7 +62,7 @@ std::unordered_map<std::string, llvm::GlobalVariable*> global_values;
 
 std::vector<Value *> thread_pointers;
 
-std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens;
+std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens, ctakens_maybe;
 
 
 
@@ -1112,40 +1112,65 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct,
 }
 
 
-
-inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
-        std::string callee,
-        std::vector<std::tuple<int,int>> &partialtakes,
-        std::vector<Value*> &ArgsV) {
-    std::string fn = parser_struct->function_name;
-
-    for(auto &[memid, argmemid] : partialtakes) {
-        if (!ctakens.count(fn))
-            return; // fix for when partial registered for the wrong generic
-        if (!ctakens[fn].count(memid))
-            return; // fix for when partial registered for the wrong generic
-
-        p2t("&&&&&&&&&&&&&&&& partialtake " + callee + ": " + std::to_string(memid));
-        ArgsV.push_back(ctakens[fn][memid]);
-    }
+inline void SetConditionalMaybeTake(std::string fn, int memid) {
+    if(!ctakens_maybe.count(fn))
+        return;
+    if(!ctakens_maybe[fn].count(memid))
+        return;
+    p2t("<<--------->>SET.MAYBE " + fn + " - " + std::to_string(memid));
+    Builder->CreateStore(const_bool(1), ctakens_maybe[fn][memid]);
 }
-
-void SetConditionalTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
-    int memid = taken->GetMemId()[0];
-
-
+inline void SetConditionalTake(std::string fn, int memid) {
     if(!ctakens.count(fn))
         return;
     if(!ctakens[fn].count(memid))
         return;
 
-
-
+    p2t("-----------SET.COND " + fn + " - " + std::to_string(memid));
     Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
-    // p2t("-----------SET.COND " + fn + " - " + std::to_string(memid));
     Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
     // call("print_bool", {v}); 
+
+    SetConditionalMaybeTake(fn, memid);
 }
+void SetConditionalMaybeTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
+    int memid = taken->GetMemId()[0];
+    SetConditionalMaybeTake(fn, memid);
+}
+void SetConditionalTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
+    int memid = taken->GetMemId()[0];
+    SetConditionalTake(fn, memid);
+}
+
+
+inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
+        CallArgsTy &CArgs,
+        std::string callee,
+        std::vector<std::tuple<int,int>> &partialtakes,
+        std::vector<std::unique_ptr<ExprAST>> &Args,
+        std::vector<Value*> &ArgsV) {
+    std::string fn = parser_struct->function_name;
+
+
+    // When they are partial in the current function, but not in the callee
+    for(auto &[_,_,arg_memid,taken_id] : CArgs.borrows) {
+        if (!in_vec(arg_memid,fn_borrows_incomplete[callee])) {
+            SetConditionalTake(parser_struct->function_name, taken_id);
+        }
+    }
+
+    // Partials in the callee only
+    for(auto &[memid, argmemid] : partialtakes) {
+        if (!ctakens.count(fn))
+            return; // fix for when partial registered for the wrong generic
+        if (!ctakens[fn].count(memid))
+            return; // fix for when partial registered for the wrong generic
+        // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
+        ArgsV.push_back(ctakens[fn][memid]);
+        SetConditionalMaybeTake(parser_struct->function_name, memid);
+    }
+}
+
 
 
 
@@ -1305,8 +1330,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         }
 
 
-        if (Memids[i]!=-2)
+        if (Memids[i]!=-2) {
+            // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << Memids[i] <<  "\033[0m\n\n";
             fn_memid_to_val[parser_struct->function_name][Memids[i]] = initial_value;
+        }
     }
 
 
@@ -4172,6 +4199,7 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
     }
 
     fn_memid_to_val[parser_struct->function_name][MemId] = ptr;
+    // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << MemId <<  "\033[0m\n\n";
     if (MemoryType!=newTy)
         GetOwnedType(parser_struct, Data_Tree(DataName), MemId, OwnedId, ptr);
 }
@@ -4230,9 +4258,6 @@ Value *NewExprAST::codegen(Value *scope_struct) {
 
             if (create_fn=="array_Create") {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
-                // ArgsDT_Create.push_back(const_int(
-                //         (MemoryType==newTy) ? 0 : 2 
-                //     ));
             }
             else if (type=="channel") { 
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
@@ -4856,8 +4881,8 @@ Value *NameableLLVMIRCall::codegen(Value *scope_struct) {
 }
 
 
-void DispatchOwnedFree(std::string fn, Value *memV, int memid, Data_Tree &dt, ExprAST *expr) {
-    if (map_has_val(fn_arg_memid[fn], memid)
+void DispatchOwnedFree(std::string base_fn, std::string fn, Value *memV, int memid, Data_Tree &dt, ExprAST *expr) {
+    if (map_has_val(fn_arg_memid[base_fn], memid)
         ||map_has_val(fn_escape_to_memid[fn], memid))
         return;
 
@@ -4926,8 +4951,12 @@ Value *Nameable::codegen(Value *scope_struct) {
     std::string fn = parser_struct->function_name;
     std::string base_fn = parser_struct->base_name;
 
-    if (map_has_val(fn_memid_to_lastseen[fn], (ExprAST*)this)) {
-        for(auto &[memid, expr] : fn_memid_to_lastseen[fn]) {
+    // std::cout << "\ncheck " << fn << " | " << base_fn << "\n";
+    // std::cout << "has fn? "  << fn_memid_to_lastseen.count(base_fn) << "\n"; 
+    // std::cout << "has val? " << map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this) << "\n"; 
+
+    if (map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this)) {
+        for(auto &[memid, expr] : fn_memid_to_lastseen[base_fn]) {
             if (expr!=this)
                 continue;
             if (!fn_memid_to_dt[fn].count(memid))
@@ -4944,13 +4973,8 @@ Value *Nameable::codegen(Value *scope_struct) {
                     LogErrorS(Line, "Cannot track memid Value*: " + std::to_string(memid) + " in function " + fn);
                 }
 
-                if (memid==13&&begins_with(fn,"ResidualModule_forward")) {
-                    p2t("COMPARE");
-                    call("print_void_ptr", {function_values[fn]["z"]});
-                    p2t("AGAINST");
-                    call("print_void_ptr", {fn_memid_to_val[fn][memid]});
-                }
-                DispatchOwnedFree(fn, fn_memid_to_val[fn][memid], memid, cleared_dt, outermost);
+                // p2t("dispatch " + fn + " -> " + std::to_string(memid));
+                DispatchOwnedFree(base_fn, fn, fn_memid_to_val[fn][memid], memid, cleared_dt, outermost);
             }
         }
     }
@@ -5226,8 +5250,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
             new_array = callret("array_Create",
                 {scope_struct,
                  const_int16(
-                   data_name_to_type()[val_dt.Nested_Data[0].Type]),
-                 const_int(0)});
+                   data_name_to_type()[val_dt.Nested_Data[0].Type])});
             append_node = new_map_node(scope_struct, query, new_array, key_type, value_type);
             Value *ptr_to_store = Builder->CreateSelect(
                                     Builder->CreateICmpEQ(node, nullPtr),
@@ -5419,7 +5442,6 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     std::vector<Value*> ArgsV = {scope_struct};
     std::vector<Data_Tree> ArgTypes;
 
-    std::cout << "LAUNCH: " << fn_name << "\n";
     ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
             scope_struct,\
             fn_name, false, 0);
@@ -5521,9 +5543,10 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
                 Builder->CreateStructGEP(struct_types["array"], ptr, 3)
             );
 
+    Value *array_size_gep = Builder->CreateStructGEP(struct_types["array"], ptr, 0);
+
     Value *array_size = Builder->CreateLoad(
-                intTy,
-                Builder->CreateStructGEP(struct_types["array"], ptr, 0)
+                intTy, array_size_gep
             );
 
 
@@ -5556,8 +5579,8 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
                     )
             );
     Disown(scope_struct, inner_dt, elem);
-    p2t("array clear:");
-    call("print_void_ptr", {elem});
+    // p2t("array clear:");
+    // call("print_void_ptr", {elem});
     call("free", {elem});
 
     Value *next_val = Builder->CreateAdd(loop_var, const_int(1));
@@ -5566,6 +5589,7 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
 
     Builder->SetInsertPoint(AfterBB);
     set_scope_obj(scope_struct, previous_obj);
+    Builder->CreateStore(const_int(0), array_size_gep);
 }
 
 inline void ArrayClear(Value *scope_struct, Nameable *expr) {  
@@ -5767,7 +5791,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (shall_swap)
         previous_obj = swap_scope_obj(scope_struct, obj_ptr); 
 
-  Codegen_Partialtakes(parser_struct, Callee, partialtakes, ArgsV);
+  Codegen_Partialtakes(parser_struct, CArgs, BaseCallee, partialtakes, Args, ArgsV);
 
 
 
@@ -5854,6 +5878,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
   }
 
   if (MemId!=-2) {
+      // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << MemId <<  "\033[0m\n\n";
     fn_memid_to_val[parser_struct->function_name][MemId] = ret;
   }
 

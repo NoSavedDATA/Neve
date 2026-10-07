@@ -189,13 +189,13 @@ int NameableCall::GetIsOwned() {
 
 
 void GetOwnedValues(ExprAST *expr, Value *scope_struct,
-        std::string fn_name, int &last_offset) {
+        std::string base_name, std::string fn_name, int &last_offset) {
     if (auto *new_expr = dynamic_cast<NewExprAST*>(expr)) {
         int owned_id = new_expr->GetIsOwned();
         if (new_expr->MemoryType>0) {
             if(in_vec(owned_id,function_escapes[fn_name]))
                 fn_owned_ret_memory[owned_id] = get_scope_escape_retoffset(scope_struct);
-            else if(!fn_borrows[fn_name].count(new_expr->GetMemId()[0])) {
+            else if(!fn_borrows[base_name].count(new_expr->GetMemId()[0])) {
                 new_expr->OwnedPoolOffset = last_offset;
                 last_offset += ClassSize[new_expr->DataName];
             }
@@ -213,8 +213,8 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
 
         int memid = callexpr->MemId;
         if (fn_name=="ResidualModule_forward")
-            std::cout << callee << " | " << memid << " | " << fn_borrows[fn_name].count(memid) << "\n";
-        if (fn_borrows[fn_name].count(memid)!=0)
+            std::cout << callee << " | " << memid << " | " << fn_borrows[base_name].count(memid) << "\n";
+        if (fn_borrows[base_name].count(memid)!=0)
             return;
 
         int size = function_own_ret_count[callee];
@@ -228,7 +228,7 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
 
 
 void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
-        std::string fn_name, 
+        std::string base_name, std::string fn_name, 
         std::vector<std::unique_ptr<ExprAST>> &Body) {
 
     if (fn_ret_dt.count(fn_name)>0) {
@@ -242,8 +242,8 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
     // Set own pool
     int last_offset=0;
     for (auto &body : Body) {
-        body->Traverse([&last_offset, &scope_struct, fn_name](ExprAST *node) {
-            GetOwnedValues(node, scope_struct, fn_name, last_offset);
+        body->Traverse([&last_offset, &scope_struct, base_name, fn_name](ExprAST *node) {
+            GetOwnedValues(node, scope_struct, base_name, fn_name, last_offset);
         });
     }
     bool has_owned_pool = last_offset>0;
@@ -364,12 +364,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
             int owned_id = var->GetIsOwned();
             // todo: can change to >=0?
             if (owned_id>=-1) {
-
-                // if (in_vec(var->GetMemId(), fn_borrows_incomplete[fn]))
-                //     LogBlue("INCOMPLETE " + parser_struct->function_name + "|" + std::to_string(var->GetMemId()));
-
                 fn_escape_to_memid[fn][owned_id] = var->GetMemId()[0];
-
                 owned_ids.push_back(owned_id);
                 if(ownid_to_size.count(owned_id)) {
                     own_ret_count+=ownid_to_size[owned_id];
@@ -422,8 +417,7 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
         LogError(parser_struct->line, "Ambiguous return for \"" + fn_name + "\". Cannot return GC arena and owned pointers from the same function.");
     }
 
-
-
+    
     if (own_ret_count==0)
         return;
 

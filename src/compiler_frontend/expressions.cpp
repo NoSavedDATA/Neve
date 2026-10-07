@@ -59,11 +59,12 @@ std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 std::unordered_map<std::string,
        std::vector<std::tuple<int,int,int>>> fn_bad_borrows;
-std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows;
+std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows, fn_takens_branch;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
+
 std::unordered_map<std::string,
-       std::vector<int>> fn_borrows_incomplete;
+       std::vector<int>> fn_borrows_incomplete, fn_conditional_created_memid;
 
 std::unordered_map<std::string,
        std::unordered_map<int,uint64_t>> fn_memid_to_branch;
@@ -1106,9 +1107,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
           fn_memid_to_dt[this->Name][memid] = dt;
-          fn_memid[this->Name][arg_name] = memid;
+          fn_memid[BaseName][arg_name] = memid;
           fn_cond_memid[this->Name][arg_name][0] = memid;
-          fn_arg_memid[this->Name][arg_name] = memid;
+          fn_arg_memid[BaseName][arg_name] = memid;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
         }
@@ -1447,9 +1448,11 @@ void ObjectExprAST::Checks() {
         if (owned_id!=-2) 
             function_owns[parser_struct->function_name][name] = owned_id;
         if (memid != -2) {
-            fn_memid[parser_struct->function_name][name] = memid;
+            fn_memid[parser_struct->base_name][name] = memid;
             fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
+
+
         Memids.push_back(memid);
         Ownedids.push_back(owned_id);
     }
@@ -1568,7 +1571,7 @@ void UnkVarExprAST::Checks() {
         function_owns[parser_struct->function_name][name] = owned_id;
     int memid = expr->GetMemId()[0];
     if (memid != -2) {
-        fn_memid[parser_struct->function_name][name] = memid; 
+        fn_memid[parser_struct->base_name][name] = memid; 
         fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
     }
     Memids.push_back(memid);
@@ -1746,15 +1749,17 @@ void DataExprAST::SetMemId() {
         memid = (data_type.IsFromArena())
                     ? (*parser_struct->mem_id)++
                     : -2;
+        if (check_branch!=0)
+            fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
         fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
-        fn_memid[parser_struct->function_name][name] = memid;
+        fn_memid[parser_struct->base_name][name] = memid;
         fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         Memids.push_back(memid);
     } else {
         expr->Checks();
         memid = expr->GetMemId()[0];
         if (memid != -2) {
-            fn_memid[parser_struct->function_name][name] = memid;
+            fn_memid[parser_struct->base_name][name] = memid;
             fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
     }
@@ -1832,6 +1837,8 @@ void NewExprAST::Checks() {
     
     MemId = (*parser_struct->mem_id)++;
     fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
+    if (check_branch!=0)
+        fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
 }
 
 
@@ -2397,6 +2404,8 @@ void BinaryExprAST::Checks() {
   if (IsCall) {
       memid = (*parser_struct->mem_id)++;
       Memids.push_back(memid);
+      if (check_branch!=0)
+          fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(Operation)>0) {
           OwnedId = (*parser_struct->owned_id)++;
       }
@@ -2413,7 +2422,7 @@ void BinaryExprAST::Checks() {
           if (check_branch==0)
               fn_cond_memid[parser_struct->function_name][name].clear();
 
-          fn_memid[parser_struct->function_name][name] = memid;
+          fn_memid[parser_struct->base_name][name] = memid;
           fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
@@ -3043,9 +3052,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         if (arg.IsFromArena()) {
           int MemId = (*parser_struct->mem_id)++;
           fn_memid_to_dt[this->Name][MemId] = arg;
-          fn_memid[this->Name][arg_name] = MemId;
+          fn_memid[BaseName][arg_name] = MemId;
           fn_cond_memid[this->Name][arg_name][0] = MemId;
-          fn_arg_memid[this->Name][arg_name] = MemId;
+          fn_arg_memid[BaseName][arg_name] = MemId;
           fn_memid_to_branch[this->Name][MemId] = MemId;
         }
     }
@@ -3623,6 +3632,8 @@ void NameableCall::Checks() {
 
   MemId = (*parser_struct->mem_id)++;
   fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
+  if (check_branch!=0)
+    fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
   if (fn_with_owned_ret.count(Callee)>0)
       OwnedId = (*parser_struct->owned_id)++;
 }

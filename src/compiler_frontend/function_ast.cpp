@@ -954,15 +954,19 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     //     LogBlue("SKIP: " + fn + ": " + std::to_string(memid));
     // }
 
-
-    
-
-
     if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
         std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
+        // std::cout << "\n\tSET Ctaken " << fn << " | " << memid << "\n\n";
+        if (in_vec(memid, fn_conditional_created_memid[base_name])) {
+            // conditionally created memid
+            std::cout << "\n\t\033[33mAS CONDITINOALLY" << "\033[0m\n\n";
+            AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_maybe", boolTy);
+            ctakens_maybe[fn][memid] = alloca;
+            Builder->CreateStore(const_bool(false),alloca);
+        }
     }
 
 
@@ -1045,6 +1049,7 @@ Function *FunctionAST::codegen() {
 
   if (function_name == "")
       function_name = P->getName();
+  std::string base_name = P->BaseName;
   parser_struct->function_name = function_name;
 
 
@@ -1092,19 +1097,25 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
+        // LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
         StoreVal(TheFunction, function_name, arg_name, &Arg,
                     data_typeVars[function_name][arg_name]);
 
-        int memid = fn_memid[function_name][arg_name];
+        if (!fn_arg_memid[base_name].count(arg_name))
+            continue;
+        int memid = fn_arg_memid[base_name][arg_name];
         Data_Tree dt = data_typeVars[function_name][arg_name];
-        if (memid!=-2&&fn_borrows[function_name].count(memid)>0)
+        if (memid!=-2&&fn_borrows[base_name].count(memid)>0)
             OwnedValues.push_back({memid, dt, &Arg, 3});
-        if (memid!=-2)
+        if(begins_with(function_name, "ResidualModul"))
+            std::cout << "\n\t\033[32marg to val " << function_name << ": " << arg_name << " -- " << memid <<  "\033[0m\n\n";
+        if (memid!=-2) {
+
             fn_memid_to_val[function_name][memid] = &Arg;
+        }
     }
   }
 
@@ -1151,7 +1162,7 @@ Function *FunctionAST::codegen() {
   for (auto &[owned, memid] : ownid_to_memid)
       EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   
-  for (auto &[dt, name, memid] : P->CArgs.borrows) {
+  for (auto &[dt, name, memid, _] : P->CArgs.borrows) {
     // std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
     EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   }
@@ -1159,7 +1170,7 @@ Function *FunctionAST::codegen() {
 
 
 
-  SetFnOwn(parser_struct, scope_struct, function_name, Body);
+  SetFnOwn(parser_struct, scope_struct, base_name, function_name, Body);
 
 
 
