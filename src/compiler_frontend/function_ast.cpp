@@ -945,7 +945,7 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     int branch_id = (branch[0] >> 32)&MASK_16;
     int size = fn_borrows_c[base_name][memid];
 
-    std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
+    // std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
 
 
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
@@ -955,10 +955,14 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     // }
 
 
+    
+
+
     if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
+        std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
     }
 
 
@@ -1034,7 +1038,7 @@ Function *FunctionAST::codegen() {
         // parser_struct->cvalues = proto->CArgs.cvalues;
         // function_name = fn;
   }
-
+  parser_struct->self_obj_owned = P->CArgs.self_obj_owned;
 
 
   int idx = P->CArgs.version;
@@ -1192,10 +1196,12 @@ Function *FunctionAST::codegen() {
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    // if (begins_with(function_name,"bar"))
-    //     TheModule->print(llvm::errs(), nullptr);
-    // if (TheFunction->getName().starts_with("bar"))
+    //
+    // if (TheFunction->getName().ends_with("ResidualModule_forward"))
     //     TheFunction->print(llvm::errs());
+    //
+    // TheModule->print(llvm::errs(), nullptr);
+    //
     // verifyFunction(*TheFunction, &errs());
     return TheFunction;
   } 

@@ -125,12 +125,16 @@ inline Function *getFunctionCheck(std::string Name) {
   if (FI != FunctionProtos.end())
     return FI->second->codegen();
 
+  bt(10);
   LogError(-1, "(getFunctionCheck) The function " + Name + " was not found.");
   return nullptr;
 }
 
 inline void call(std::string fn, const std::vector<Value *> &args) {
-    // std::cout << "call" << fn << "\n";
+    // if (fn=="free")  {
+    //     p2t("free");
+    //     call("print_void_ptr", {args[0]});
+    // }
     if(!Shall_Exit)
         Builder->CreateCall(getFunctionCheck(fn), args);
 }

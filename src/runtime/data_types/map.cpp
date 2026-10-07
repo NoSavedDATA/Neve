@@ -66,6 +66,32 @@ extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
     return map;
 }
 
+extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, Data_Tree dt) {
+    if (dt.Nested_Data.size()<2)
+        LogErrorC(scope_struct->code_line, "map requires key and value info");
+
+    std::string key_type = dt.Nested_Data[0].Type;
+    int key_size;
+    if(data_name_to_size.count(key_type)>0)
+        key_size = data_name_to_size[key_type];
+    else
+        key_size = 8;
+
+    std::string value_type = dt.Nested_Data[1].Type;
+    int value_size;
+    if(data_name_to_size.count(value_type)>0)
+        value_size = data_name_to_size[value_type];
+    else
+        value_size = 8;
+
+    DT_map *map = newT<DT_map>(scope_struct, "map");
+    map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
+
+    
+    return map;
+}
+
+
 
 std::unordered_map<DT_map_node*,int> cleaned_nodes;
 

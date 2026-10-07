@@ -62,7 +62,9 @@ bool Data_Tree::IsPrimary() const {
 }
 
 bool Data_Tree::IsFromArena() const {
-    return in_vec(Type, {"array", "map"}) || Classes.count(Type)>0;
+    //todo: remove float_pp, change to float[]
+    // return in_vec(Type, {"array", "map", "str", "any"}) || Classes.count(Type)>0;
+    return in_vec(Type, {"array", "map", "str", "any"}) || Classes.count(Type)>0;
 }
 
 

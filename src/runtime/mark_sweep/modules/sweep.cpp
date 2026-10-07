@@ -410,7 +410,8 @@ void GC::Sweep(Scope_Struct *scope_struct) {
     int tid = scope_struct->thread_id;
     __atomic_store_n(&marking, true, __ATOMIC_RELEASE);
 
-    // std::cout << "sweep" << "\n";
+    // std::cout << "<>>>>>>>>>>>sweep" << "\n";
+    // std::exit(0);
     arena->gen += 2;
 
     stw();

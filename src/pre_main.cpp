@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <execution>
 #include <map>
 #include <memory>
 #include <string>
@@ -160,6 +161,7 @@ void HandleDefinition() {
         return;
     }
 
+
     FunctionProtos[FnAST->getProto().getName()] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
 
@@ -167,6 +169,13 @@ void HandleDefinition() {
         ExitOnErr(TheJIT->addAST(std::move(FnAST)));
     else
         AllFunctions.push_back(std::move(FnAST));
+
+    // std::string base_name = parser_struct->base_name;
+    // if(ends_with(base_name, "disown")) {
+    //     std::cout << "FN CHECK---------------------_______> " << base_name << "\n";
+    //     FunctionChecks(base_name);
+    // }
+
 
   } else {
     // Skip token for error recovery.

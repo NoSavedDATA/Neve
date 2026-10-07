@@ -22,7 +22,7 @@ void set_functions_return_type() {
   functions_return_type = {{"_glob_b_", "str_vec"}, {"glob", "str_vec"},
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"ShuffleStrVec", "str_vec"},
-						{"map_Create", "map"}, {"map_node_reclaim", "int"}, {"hash_ptr", "int"}, {"map_size", "int"}, {"map_has_str", "bool"}, {"map_has_void_ptr", "bool"}, {"map_has_int", "bool"}, {"map_has_i64", "bool"}, {"map_get_str_int", ""}, {"map_get_i64_any", ""}, {"map_get_i64_int", ""}, {"map_has_float", "bool"}, {"map_has_char", "bool"}, {"map_print", "int"}, {"map_node_set_bucket", "int"}, {"map_node_set_next", "int"}, {"map_node_overwrite_bucket", "int"}, {"map_node_overwrite", "int"}, {"map_keys_str", "array"}, {"map_keys_void_ptr", "array"}, {"map_keys_array", "array"}, {"map_keys_i64", "array"}, {"map_keys", "array"}, {"map_values", "array"}, {"map_values_int", "array"}, {"map_clear", "int"}, 
+						{"map_Create", "map"}, {"map_Create_Taken", "map"}, {"map_node_reclaim", "int"}, {"hash_ptr", "int"}, {"map_size", "int"}, {"map_has_str", "bool"}, {"map_has_void_ptr", "bool"}, {"map_has_int", "bool"}, {"map_has_i64", "bool"}, {"map_get_str_int", ""}, {"map_get_i64_any", ""}, {"map_get_i64_int", ""}, {"map_has_float", "bool"}, {"map_has_char", "bool"}, {"map_print", "int"}, {"map_node_set_bucket", "int"}, {"map_node_set_next", "int"}, {"map_node_overwrite_bucket", "int"}, {"map_node_overwrite", "int"}, {"map_keys_str", "array"}, {"map_keys_void_ptr", "array"}, {"map_keys_array", "array"}, {"map_keys_i64", "array"}, {"map_keys", "array"}, {"map_values", "array"}, {"map_values_int", "array"}, {"map_clear", "int"}, 
 						{"read_float", "float"}, {"float_ptr_print", "float"}, {"float_to_str", "str"}, {"float_to_str_buffer", "int"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
 						{"charv_print", "int"}, 
 						{"is_null", "bool"}, 
@@ -70,6 +70,7 @@ void set_functions_return_type() {
 	fn_ret_dt["bf16_to_float"] = Data_Tree("float");
 	fn_ret_dt["bf16_to_str_buffer"] = Data_Tree("int");
 	fn_ret_dt["map_Create"] = Data_Tree("map");
+	fn_ret_dt["map_Create_Taken"] = Data_Tree("map");
 	fn_ret_dt["map_node_reclaim"] = Data_Tree("int");
 	fn_ret_dt["hash_ptr"] = Data_Tree("int");
 	fn_ret_dt["map_size"] = Data_Tree("int");

@@ -500,6 +500,15 @@ void set_functions_args_type() {
 		fn_argnames["map_Create"].push_back("0");
 		fn_argnames["map_Create"].push_back("1");
 		
+		Function_Arg_Types["map_Create_Taken"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_Create_Taken"]["1"] = "Data_Tree";
+		
+		Function_Arg_DataTypes["map_Create_Taken"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_Create_Taken"]["1"] = Data_Tree("Data_Tree");
+		
+		fn_argnames["map_Create_Taken"].push_back("0");
+		fn_argnames["map_Create_Taken"].push_back("1");
+		
 		Function_Arg_Types["map_node_reclaim"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_node_reclaim"]["1"] = "map";
 		Function_Arg_Types["map_node_reclaim"]["2"] = "map_node";
@@ -973,6 +982,17 @@ void set_functions_args_type() {
 		fn_argnames["array_bad_idx"].push_back("1");
 		fn_argnames["array_bad_idx"].push_back("2");
 		fn_argnames["array_bad_idx"].push_back("3");
+		
+		Function_Arg_Types["array_double_size_Owned"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_double_size_Owned"]["1"] = "array";
+		
+		Function_Arg_DataTypes["array_double_size_Owned"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_double_size_Owned_1 = Data_Tree("array");
+		array_double_size_Owned_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_double_size_Owned"]["1"] = array_double_size_Owned_1;
+		
+		fn_argnames["array_double_size_Owned"].push_back("0");
+		fn_argnames["array_double_size_Owned"].push_back("1");
 		
 		Function_Arg_Types["array_double_size"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_double_size"]["1"] = "array";

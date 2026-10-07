@@ -103,7 +103,7 @@ class ExprAST {
     virtual bool GetIsMsg(); 
     virtual void SetCValues(Parser_Struct *);
 
-    virtual int GetMemId(); 
+    virtual std::vector<int> GetMemId(); 
 
     virtual int GetBranchId();
 
@@ -119,7 +119,7 @@ void GetOutermostConditionalExpr(int cstmt, std::string fn_name, ExprAST *&expr,
 
 struct CallArgsTy {
     std::vector<Data_Tree> dts;
-    bool has=false, is_op=false;
+    bool has=false, is_op=false, self_obj_owned=false;
     std::vector<int8_t> i8s;
     std::vector<int16_t> i16s;
     std::vector<int> ints;
@@ -161,6 +161,8 @@ struct ArgsEqual {
             return false;
         if (a.template_ret.is_borrow!=b.template_ret.is_borrow)
             return false;
+        if (a.self_obj_owned!=b.self_obj_owned)
+            return false;
         for (int i=0;i<a.dts.size();++i) {
             if (a.dts[i].Compare(b.dts[i])>0)
                 return false;
@@ -197,7 +199,9 @@ class IndexExprAST : public ExprAST {
     int size() {
       return Size;
     }
+    void Checks() override;
 }; 
+
 
   
   
@@ -518,7 +522,7 @@ class NewExprAST : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   int GetIsOwned() override;
-  int GetMemId() override;
+  std::vector<int> GetMemId() override;
   void AllocPtr(Value *ptr);
   void Checks();
 };
@@ -568,7 +572,7 @@ public:
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
-  int GetMemId() override;
+  std::vector<int> GetMemId() override;
 };
   
   
@@ -579,8 +583,10 @@ class BinaryExprAST : public ExprAST, public OwnedHolder {
 
 public:
   std::string Elements, Operation;
-  bool is_store_sugar=false, is_fused=false;
+  bool is_store_sugar=false, is_fused=false, IsCall=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
+  std::vector<int> Memids;
+  int OwnedId=-2;
   std::unique_ptr<ExprAST> LHS, RHS;
   char Op;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
@@ -595,7 +601,7 @@ public:
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
-  int GetMemId() override;
+  std::vector<int> GetMemId() override;
 };
 
 
@@ -635,7 +641,8 @@ class Nameable : public ExprAST {
   public:
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
-  int Depth=1, MemId=-2, OwnedId=-2;
+  int Depth=1;
+  std::vector<int> Memids={-2}, Ownedids={-2};
   bool IsUnique=false,IsOwnedUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
   bool checked=false, IsAttr=false;
 
@@ -652,7 +659,7 @@ class Nameable : public ExprAST {
   Nameable *Obj();
 
   int GetIsOwned() override;
-  int GetMemId() override;
+  std::vector<int> GetMemId() override;
   bool GetIsView();
 
   std::string GetLibCallee();
@@ -710,7 +717,7 @@ class NameableCall : public Nameable, public OwnedHolder {
   bool GetNeedGCSafePoint() override;
   void Checks() override;
   int GetIsOwned() override;
-  int GetMemId() override;
+  std::vector<int> GetMemId() override;
   bool GetIsView();
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
@@ -731,6 +738,7 @@ class NameableIdx : public Nameable {
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   bool GetIsView();
+  void Checks() override;
 };
 
 
@@ -1094,6 +1102,8 @@ class LockExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void Checks() override;
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -1308,6 +1318,7 @@ extern std::vector<std::string> fn_called;
 extern std::unordered_map<std::string,std::vector<std::unique_ptr<CompiledArgs>>> Fn_Compiled_Args;
 
 extern std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
+extern std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<int, int>>> fn_cond_memid;
 extern std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
 
 extern std::unordered_map<std::string,
@@ -1345,6 +1356,9 @@ extern std::vector<std::string> ConditionalsQueue;
 
 extern std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_dt;
 
+
+extern int check_branch;
+extern std::unordered_map<std::string, std::vector<std::string>> fn_deps;
 
 extern std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;

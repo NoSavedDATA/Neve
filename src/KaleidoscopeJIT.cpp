@@ -110,7 +110,7 @@ llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
 
 
 void gen_generics() {
-    for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
+    for(auto &[fn_ast, _, parser_struct, fn, base_name] : generics_fn) {
         if (in_vec(base_name, fn_called)) {
             erase(fn_called, base_name);
             fn_ast->parser_struct->function_name = base_name;
@@ -121,11 +121,8 @@ void gen_generics() {
         fn_ast->parser_struct->base_name = base_name;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
         fn_ast->function_name = fn;
-        // BasicBlock *CurBB = Builder->GetInsertBlock();
-        // FunctionProtos[fn]->codegen();
         fn_ast->Proto = nullptr;
         fn_ast->codegen();
-        // Builder->SetInsertPoint(CurBB);
     }
 }
 
@@ -146,15 +143,30 @@ void warmup_generics() {
     }
 }
 
+
+void gen_fn(std::string fn, std::vector<std::string> &seen,
+        std::unordered_map<std::string,FunctionAST*> &fn_map
+        ) {
+    if (!fn_map.count(fn)||in_vec(fn, seen))
+        return; // skip llvm defined fn
+    seen.push_back((fn));
+
+    // for(auto &dep : fn_deps[fn])
+    //     gen_fn(dep, seen, fn_map);
+
+    fn_map[fn]->codegen();
+}
+
 llvm::Error KaleidoscopeJIT::genAST() {
     std::cout << " -- codegen --" << "\n";
     warmup_generics();
     fn_map["__anon_expr"]->codegen(); // let main setup globals
     gen_generics();
+
+    std::vector<std::string> seen;
+
     for (int i=fn_called.size()-1;i>=0;--i) {
-        if (!fn_map.count(fn_called[i]))
-            continue; // skip llvm defined fn
-        fn_map[fn_called[i]]->codegen();
+        gen_fn(fn_called[i], seen, fn_map);
     }
     
 

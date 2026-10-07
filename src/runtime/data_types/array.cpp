@@ -3,6 +3,9 @@
 #include <vector>
 #include <unistd.h>
 
+// #include <execinfo.h>
+#include <iostream>
+
 #include "../codegen/random.h"
 
 #include "../compiler_frontend/logging_execution.h"
@@ -69,7 +72,7 @@ void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
 
 extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
         uint16_t elem_type) { 
-    std::cout << "(GC) array" << "\n";
+    // std::cout << "(GC) array" << "\n";
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]
       : 8;
@@ -86,7 +89,7 @@ extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
 }
 extern "C" DT_array *array_Create_Owned(Scope_Struct *scope_struct,
         uint16_t elem_type) { 
-    std::cout << "(Owned) array" << "\n";
+    // std::cout << "(Owned) array" << "\n";
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]
       : 8;
@@ -102,7 +105,7 @@ extern "C" DT_array *array_Create_Owned(Scope_Struct *scope_struct,
 }
 extern "C" DT_array *array_Create_Taken(Scope_Struct *scope_struct,
         uint16_t elem_type) { 
-    std::cout << "(Taken) array" << "\n";
+    // std::cout << "(Taken) array" << "\n";
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]
       : 8;
@@ -175,6 +178,16 @@ void array_Clean_Up(void *data_ptr, int tid) {
 }
 
 extern "C" int array_size(Scope_Struct *scope_struct, DT_array *vec) {
+    // std::cout << "array_size: " << vec << "\n";
+    // void *frames[64];
+    // int n = backtrace(frames, 64);
+
+    // char **symbols = backtrace_symbols(frames, n);
+    // for (int i = 0; i < n; ++i)
+    //     std::cout << symbols[i] << '\n';
+
+    // free(symbols);
+
     return vec->virtual_size;
 }
 
@@ -191,6 +204,25 @@ extern "C" int array_bad_idx(Scope_Struct *scope_struct, int line, int idx, int 
 DT_array_retire::DT_array_retire(void *data, int size, int tid)
             : data(data), size(size), tid(tid) {}
 
+
+
+
+extern "C" void array_double_size_Owned(Scope_Struct *scope_struct, DT_array *vec) {
+    int tid = scope_struct->thread_id;
+    void *data = vec->data;
+    int vsize = vec->virtual_size;
+    int elem_size = vec->elem_size;
+    int old_size = vsize*elem_size;
+    int vec_size = old_size*4;
+
+    void *new_data = malloc(vec_size);//cache_pop(vec_size, tid);
+    memcpy(new_data, data, old_size);
+
+    // scope_struct->gc->retire_arr(data, old_size, tid);
+
+    vec->data = new_data;
+    vec->size*=4;
+}
 
 extern "C" void array_double_size(Scope_Struct *scope_struct, DT_array *vec) {
     int tid = scope_struct->thread_id;

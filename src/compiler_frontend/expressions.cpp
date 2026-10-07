@@ -48,6 +48,12 @@ std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
+
+
+std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<int, int>>> fn_cond_memid;
+
+
+std::unordered_map<std::string, std::vector<std::string>> fn_deps;
 std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
 std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
@@ -76,6 +82,8 @@ std::vector<std::tuple<FunctionAST *,
        std::unique_ptr<PrototypeAST>,
        Parser_Struct*,
        std::string, std::string>> generics_fn;
+
+int check_branch=0;
 
 
 void bt(int cut) {
@@ -229,12 +237,379 @@ bool BinaryExprAST::GetNeedGCSafePoint() {
 }
 
 
+
+int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite) {
+    if (FnLastVersion.count(fn)==0||overwrite) {
+        FnLastVersion[fn] = 1;
+        CArgs.version = 0;
+        CArgs.version_str = fn;
+        if (overwrite)
+            FnVersion[fn].clear();
+        FnVersion[fn].push_back(CArgs);
+        return 0;
+    }
+    FnLastVersion[fn]++;
+    int id = FnLastVersion[fn];
+    CArgs.version = id;
+    CArgs.version_str = fn+"_"+std::to_string(id);
+    FnVersion[fn].push_back(CArgs);
+    return id;
+}
+void AddFnVersion(std::string fn, CallArgsTy CArgs, int idx) {
+    if (FnLastVersion.count(fn)==0)
+        LogErrorS(-1, "Can't AddFn " + fn + ". No previous version existed.");
+    CArgs.version_str = (idx==0) ? fn : fn+"_"+std::to_string(idx);
+    CArgs.version = idx;
+
+    FnVersion[fn].push_back(CArgs);
+}
+
+bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_layout=true, bool match_borrows=false) {
+    if(l.size()!=r.size())
+        return false;
+    for (int i=0; i<l.size(); ++i) {
+        // std::cout << "COMPARE" << "\n";
+        // l[i].Print();
+        // r[i].Print();
+        //
+        if (l[i].Type=="any"||r[i].Type=="any")
+            continue;
+        if (match_borrows) {
+            if (l[i].is_borrow!=r[i].is_borrow)
+                return false;
+            if (l[i].is_own!=r[i].is_own)
+                return false;
+            if (l[i].is_view!=r[i].is_view)
+                return false;
+        }
+        if (!accept_layout&&l[i].Type=="layout")
+            return false;
+        if (l[i].Compare(r[i])>0)
+            return false;
+    }
+    return true;
+}
+
+bool CompareDTs(CallArgsTy cargs, CallArgsTy rcargs, bool accept_layout=true, bool match_borrows=false) {
+    if(match_borrows&&
+       (cargs.template_ret.is_borrow!=rcargs.template_ret.is_borrow
+       ||cargs.self_obj_owned!=rcargs.self_obj_owned))
+        return false;
+    std::vector<Data_Tree> l = cargs.dts;
+    std::vector<Data_Tree> r = rcargs.dts;
+    if(l.size()!=r.size())
+        return false;
+    for (int i=0; i<l.size(); ++i) {
+        // std::cout << "COMPARE" << "\n";
+        // l[i].Print();
+        // r[i].Print();
+        //
+        if (l[i].Type=="any"||r[i].Type=="any")
+            continue;
+        if (match_borrows) {
+            if (l[i].is_borrow!=r[i].is_borrow)
+                return false;
+            if (l[i].is_own!=r[i].is_own)
+                return false;
+            if (l[i].is_view!=r[i].is_view)
+                return false;
+        }
+        if (!accept_layout&&l[i].Type=="layout")
+            return false;
+        if (l[i].Compare(r[i])>0)
+            return false;
+    }
+    return true;
+}
+
+
+void AssignGenericTree(Parser_Struct *parser_struct,
+        Data_Tree &dt, Data_Tree &templ_dt,
+        std::unordered_map<std::string,Data_Tree> &generics_map,
+        CallArgsTy &templ,
+        FnCompiledValues &cvalues) {
+
+
+    // std::cout << "\n\ntree in layout" << "\n";
+    // dt.Print();
+    // templ_dt.Print();
+    // std::cout << "generic? " << templ_dt.is_generic << "\n";
+
+    // if (templ_dt.Type=="any") {
+    //     dt = Data_Tree("any");
+    //     return;
+    // }
+
+    std::string templ_type = templ_dt.Type;
+    if (templ_dt.is_generic) {
+        if (generics_map.count(templ_type)>0) {
+            generics_map[templ_type].Print();
+            if (dt.Compare(generics_map[templ_type])>0) {
+                LogErrorS(-1, "Assigned 2 different values for a single generic type.");
+                return;
+            }
+        }
+        templ_dt = GenericUnmangleType(dt, templ_dt);
+        generics_map[templ_type] = templ_dt;
+        return;
+    }
+    else if (templ_type!="layout"&&\
+               !in_vec(templ_type, data_tokens) && !in_vec(templ_type, compound_tokens)&&\
+               ClassSize.count(templ_type)==0) {
+        // like a layout nested data
+
+        // is dynamic
+        if (parser_struct->cvalues.dts.count(dt.Type)==0) {
+            if(templ.dyn_args_dict.count(templ_type)>0)
+                return;
+            templ.dyn_args_dict[templ_type] = 1;
+            templ.dyn_args.push_back(
+                                    {dt.Type, templ_type,
+                                    data_typeVars[parser_struct->function_name][dt.Type]}
+                                );
+            return;
+        } else
+            std::cout << "SKIP " << dt.Type << "=" << templ_type << "\n";
+        std::string type = parser_struct->cvalues.dts[dt.Type].Type;
+        if (type=="int")
+            cvalues.AddInt(templ_type, parser_struct->cvalues.ints[dt.Type]);
+    }
+
+    for (int i=0; i<templ_dt.Nested_Data.size(); ++i) {
+        if (templ_dt.Nested_Data[i].Type=="smem")
+            continue;
+        AssignGenericTree(parser_struct,
+                          dt.Nested_Data[i], templ_dt.Nested_Data[i],
+                          generics_map, templ, cvalues);
+    }
+}
+
+void DeriveTypedGeneric(Data_Tree templ_dt, Data_Tree &ret_dt,
+        std::unordered_map<std::string,Data_Tree> &generics_map) {
+
+    if (generics_map.count(templ_dt.Type)>0) {
+        std::cout << "SKIP " << templ_dt.Type << "\n";
+        ret_dt = generics_map[templ_dt.Type].Type;
+    }
+    else
+        ret_dt.Type = templ_dt.Type;
+    
+
+    for (int i=0; i<ret_dt.Nested_Data.size(); ++i) {
+        ret_dt.Nested_Data.push_back(Data_Tree(""));
+        DeriveTypedGeneric(templ_dt.Nested_Data[i], ret_dt.Nested_Data[i],
+                            generics_map);
+    }
+}
+
+void AssignGenericTypes(Parser_Struct *parser_struct, CallArgsTy &cargs, CallArgsTy &templ,
+                              FnCompiledValues &cvalues) {
+    std::unordered_map<std::string,Data_Tree> generics_map;
+
+    for (int i=0; i<templ.dts.size(); ++i)
+        AssignGenericTree(parser_struct, cargs.dts[i], templ.dts[i], generics_map, templ, cvalues);
+
+    if (templ.template_ret.HasGeneric()) {
+        Data_Tree ret_dt = Data_Tree("");
+        DeriveTypedGeneric(templ.template_ret, ret_dt, generics_map);
+        templ.template_ret = ret_dt;
+    }
+
+    for (auto &[name, dt] : generics_map) {
+        std::cout << name << "\n";
+    }
+}
+
+
+std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Parser_Struct *parser_struct, std::string fn,
+                        CallArgsTy CArgs, bool &found) {
+    FunctionAST *fn_ast=nullptr; 
+    for (auto &tpair : Template_FnAST[fn]) {
+        CallArgsTy t_templ = tpair.first;
+        CallArgsTy templ = t_templ;
+
+        if (!CompareDTs(CArgs.dts, templ.dts, true, false))
+            continue;
+
+        fn_ast = tpair.second;
+        FnCompiledValues cvalues;
+        AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
+
+        return templ.dyn_args;
+    }
+
+    int i=0;
+    std::cout << "\nFound" << "\n";
+    for (auto &tpair : Template_FnAST[fn]) {
+        if (i>3) {
+            std::cout << "...\n";
+            break;
+        }
+        print_dt_vec(tpair.first.dts);
+    } 
+    std::cout << "\nSent" << "\n";
+    print_dt_vec(CArgs.dts);
+    LogErrorS(parser_struct->line, "Could not match arguments for "+fn);
+
+}
+
+
+std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout, bool match_owned) {
+    found = true;
+    for (auto cargs : FnVersion[fn]) {
+        // if(fn=="bar") {
+        //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
+        //     print_dt_vec(CArgs.dts);
+        //     print_dt_vec(cargs.dts);
+        // }
+        if(CompareDTs(cargs, CArgs, accept_layout, match_owned) && CArgs.cvalues==cargs.cvalues) {
+            return cargs.version_str;
+        }
+    }
+    found = false;
+    return fn;
+}
+
+std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
+                        CallArgsTy CArgs, bool &found,
+                        bool is_op) {
+
+    FunctionAST *fn_ast=nullptr; 
+
+    for (auto &tpair : Template_FnAST[fn]) {
+        CallArgsTy t_templ = tpair.first;
+        CallArgsTy templ = t_templ;
+
+        if (!CompareDTs(CArgs, templ, true, true))
+            continue;
+
+
+
+        fn_ast = tpair.second;
+        FnCompiledValues cvalues;
+        AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
+
+        if (is_op) {
+            std::cout << "\n\t\033[32mAS OP " << fn << "\033[0m\n\n";
+            fn = templ.dts[0].Type + "_" + templ.dts[1].Type + "_" + fn;
+        }
+
+        std::string base_name = fn;
+        int idx;
+        if (FnLastVersion.count(fn)==0) {
+            idx = 0;
+            FnLastVersion[fn] = 1;
+        } else
+            idx = FnLastVersion[fn]++;
+        fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
+        CArgs.version = idx;
+        CArgs.version_str = fn;
+
+        // std::cout << "\n\nassign for " << fn << "\n";
+        // print_dt_vec(CArgs.dts);
+        // print_dt_vec(templ.dts);
+        // CArgs.template_ret.Print();
+        // templ.template_ret.Print();
+
+
+        if (fn!=base_name) {
+            if (function_escapes.count(base_name)) {
+                function_escapes[fn] = function_escapes[base_name];
+                function_own_ret_count[fn] = function_own_ret_count[base_name];
+            }
+            // if (fn_borrows.count(base_name))
+            //     fn_borrows[fn] = fn_borrows[base_name];
+            // if (fn_escape_to_memid.count(base_name))
+            //     fn_escape_to_memid[fn] = fn_escape_to_memid[base_name];
+            if (fn_memid_to_lastseen.count(base_name))
+                fn_memid_to_lastseen[fn] = fn_memid_to_lastseen[base_name];
+            if (fn_conditional_stmt.count(base_name))
+                fn_conditional_stmt[fn] = fn_conditional_stmt[base_name];
+            if (cstmt_parents.count(base_name))
+                cstmt_parents[fn] = cstmt_parents[base_name];
+
+        }
+
+
+        
+        CArgs.dyn_args = templ.dyn_args;
+        FnDynArgs[fn] = templ.dyn_args;
+        CArgs.cvalues = cvalues;
+        
+        CArgs.args = templ.args;
+        CArgs.template_ret = templ.template_ret;
+        fn_ret_dt[fn] = CArgs.template_ret;
+
+
+        int memid = *parser_struct->mem_id;
+        int ownid = *parser_struct->owned_id;
+        *parser_struct->mem_id = 0;
+        *parser_struct->owned_id = 0;
+
+
+        auto proto = std::make_unique<PrototypeAST>(parser_struct,
+                        base_name, fn,
+                        CArgs, templ);
+
+
+        fn_ast->parser_struct->function_name = fn;
+        fn_ast->parser_struct->base_name = base_name;
+
+
+        // if(parser_struct->gpu==0)
+            for (auto &body : fn_ast->Body) {
+                  body->Traverse([parser_struct, &fn](ExprAST *node) {
+                      std::string prev_name;
+                      if(node->parser_struct) {
+                          prev_name = node->parser_struct->function_name;
+                          node->parser_struct->function_name = fn;
+                      }
+                      node->Checks();
+                      if(node->parser_struct)
+                          node->parser_struct->function_name = prev_name;
+                  });
+            }
+        generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
+        *parser_struct->mem_id = memid;
+        *parser_struct->owned_id = ownid;
+
+        // if (parser_struct->gpu>0) {
+        //     int gpu = parser_struct->gpu;
+        //     parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
+        //     proto->codegen();
+        //     parser_struct->gpu = gpu;
+        // }
+
+        // if (!fn_ast)
+        //     LogErrorC(-1, "Template for " +base_name + " failed");
+        // fn_ast->Proto = std::move(proto);
+        // fn_ast->parser_struct->function_name = fn;
+        // fn_ast->parser_struct->cvalues = cvalues;
+        // BasicBlock *CurBB = Builder->GetInsertBlock();
+
+        // fn_ast->codegen();
+
+        // Builder->SetInsertPoint(CurBB);
+        
+        found = true;
+        return fn;
+    }
+
+    return fn;
+}
+
+
 bool MatchOwned(Parser_Struct *parser_struct,
+        std::unique_ptr<Nameable> &inner,
         std::string Callee, CallArgsTy &CArgs) {
-    if (fn_arg_memid.count(Callee)==0)
+
+    bool obj_owned = inner->GetIsOwned()!=-2;
+    bool has_owned=obj_owned;
+
+
+    if (fn_arg_memid.count(Callee)==0&&!has_owned)
         return false;
 
-    bool has_owned=false;
     for (auto &dt : CArgs.dts)
       if (dt.is_own) {
           has_owned=true;
@@ -256,26 +631,30 @@ bool MatchOwned(Parser_Struct *parser_struct,
     }
  
     CArgs.args = argnames;
+    CArgs.self_obj_owned = obj_owned;
     CArgs.template_ret = fn_ret_dt[Callee];
     return true;
 }
 
 
-std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, CallArgsTy &CArgs) {
+std::string SolveTemplate(Parser_Struct *parser_struct, 
+        std::unique_ptr<Nameable> &inner, std::string Callee, CallArgsTy &CArgs) {
 
   // std::string base_callee = Callee;
-  bool has_owned = MatchOwned(parser_struct, Callee, CArgs);
+  bool has_owned = MatchOwned(parser_struct, inner, Callee, CArgs);
 
 
   bool found = true;
   Callee = GetFnVersion(parser_struct, Callee, CArgs, found,
                         true, !in_vec(Callee, native_fn));
 
+
+
   if (!found) {
       if (Template_FnAST.count(Callee)>0) {
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
       }
-      else if (has_owned) {
+      if (!found && has_owned) {
         Template_FnAST[Callee][CArgs] = TheJIT->fn_map[Callee];
         Callee = GenTemplate(parser_struct, Callee, CArgs, found);
         // fn_called.push_back(Callee);
@@ -284,6 +663,11 @@ std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, Call
       
 
       if (!found) {
+          if (begins_with(Callee, "backprop_reg")) {
+
+              std::cout << "try " << Callee << "\n"; 
+              std::cout << "has owned? " << has_owned << "\n";
+          }
           if (FnLastVersion.count(Callee)==0) {
                 LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
           } else 
@@ -291,7 +675,6 @@ std::string SolveTemplate(Parser_Struct *parser_struct, std::string Callee, Call
       }
   }
   FunctionChecks(Callee);
-  // FunctionChecks(base_callee);
   return Callee;
 }
 
@@ -323,6 +706,12 @@ void FinishExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
         expr->Traverse(fn);
 }
 
+void LockExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &body : Bodies)
+        body->Traverse(fn);
+}
+
 void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     Body[0]->Traverse(fn);
@@ -339,10 +728,14 @@ void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 
 void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
+    Cond->Traverse(fn);
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
     for (auto &expr : Then) 
         expr->Traverse(fn);
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
     for (auto &expr : Else) 
         expr->Traverse(fn);
+    check_branch=0;
 }
 
 
@@ -452,6 +845,11 @@ void FinishExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
         expr->TraversePost(fn);
     fn(this);
 }
+void LockExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &body : Bodies)
+        body->TraversePost(fn);
+    fn(this);
+}
 
 void IntervalLoopExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
     Body[0]->TraversePost(fn);
@@ -468,10 +866,14 @@ void ForExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
 }
 
 void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
+    Cond->TraversePost(fn);
     for (auto &expr : Then) 
         expr->TraversePost(fn);
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
     for (auto &expr : Else) 
         expr->TraversePost(fn);
+    check_branch=0;
     fn(this);
 }
 
@@ -675,88 +1077,6 @@ CallArgsTy::CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *exprs) {
     }
 }
 
-int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite) {
-    if (FnLastVersion.count(fn)==0||overwrite) {
-        FnLastVersion[fn] = 1;
-        CArgs.version = 0;
-        CArgs.version_str = fn;
-        if (overwrite)
-            FnVersion[fn].clear();
-        FnVersion[fn].push_back(CArgs);
-        return 0;
-    }
-    FnLastVersion[fn]++;
-    int id = FnLastVersion[fn];
-    CArgs.version = id;
-    CArgs.version_str = fn+"_"+std::to_string(id);
-    FnVersion[fn].push_back(CArgs);
-    return id;
-}
-void AddFnVersion(std::string fn, CallArgsTy CArgs, int idx) {
-    if (FnLastVersion.count(fn)==0)
-        LogErrorS(-1, "Can't AddFn " + fn + ". No previous version existed.");
-    CArgs.version_str = (idx==0) ? fn : fn+"_"+std::to_string(idx);
-    CArgs.version = idx;
-
-    FnVersion[fn].push_back(CArgs);
-}
-
-bool CompareDTs(std::vector<Data_Tree> l, std::vector<Data_Tree> r, bool accept_layout=true, bool match_borrows=false) {
-    if(l.size()!=r.size())
-        return false;
-    for (int i=0; i<l.size(); ++i) {
-        // std::cout << "COMPARE" << "\n";
-        // l[i].Print();
-        // r[i].Print();
-        //
-        if (l[i].Type=="any"||r[i].Type=="any")
-            continue;
-        if (match_borrows) {
-            if (l[i].is_borrow!=r[i].is_borrow)
-                return false;
-            if (l[i].is_own!=r[i].is_own)
-                return false;
-            if (l[i].is_view!=r[i].is_view)
-                return false;
-        }
-        if (!accept_layout&&l[i].Type=="layout")
-            return false;
-        if (l[i].Compare(r[i])>0)
-            return false;
-    }
-    return true;
-}
-
-bool CompareDTs(CallArgsTy cargs, CallArgsTy rcargs, bool accept_layout=true, bool match_borrows=false) {
-    if(match_borrows&&
-       cargs.template_ret.is_borrow!=rcargs.template_ret.is_borrow)
-        return false;
-    std::vector<Data_Tree> l = cargs.dts;
-    std::vector<Data_Tree> r = rcargs.dts;
-    if(l.size()!=r.size())
-        return false;
-    for (int i=0; i<l.size(); ++i) {
-        // std::cout << "COMPARE" << "\n";
-        // l[i].Print();
-        // r[i].Print();
-        //
-        if (l[i].Type=="any"||r[i].Type=="any")
-            continue;
-        if (match_borrows) {
-            if (l[i].is_borrow!=r[i].is_borrow)
-                return false;
-            if (l[i].is_own!=r[i].is_own)
-                return false;
-            if (l[i].is_view!=r[i].is_view)
-                return false;
-        }
-        if (!accept_layout&&l[i].Type=="layout")
-            return false;
-        if (l[i].Compare(r[i])>0)
-            return false;
-    }
-    return true;
-}
 
 
 PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
@@ -780,9 +1100,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         data_typeVars[this->Name][arg_name] = dt;
         this->Args.push_back(arg_name);
         this->Types.push_back(dt);
-        // std::cout << "SET ID owned " << (*parser_struct->owned_id) << "\n"; 
-        // std::cout << "SET ID memid " << (*parser_struct->mem_id) << "\n"; 
-        // dt.Print();
         if (dt.is_own==ownTy)
           function_owns[fn][arg_name] = (*parser_struct->owned_id)++;
 
@@ -790,6 +1107,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           int memid = (*parser_struct->mem_id)++; 
           fn_memid_to_dt[this->Name][memid] = dt;
           fn_memid[this->Name][arg_name] = memid;
+          fn_cond_memid[this->Name][arg_name][0] = memid;
           fn_arg_memid[this->Name][arg_name] = memid;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
@@ -811,6 +1129,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     fn_ret_dt[this->Name] = CArgs.template_ret;
 
 
+
     int ctx_offset = (parser_struct->gpu>0) ? 0 : 1;
     if (parser_struct->gpu==0) {
         this->Types.insert(this->Types.begin(), Data_Tree("Scope_Struct"));
@@ -823,276 +1142,10 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     Function_Arg_Count[this->Name] = required_args;
     fn_argnames[this->Name] = this->Args;
 
-
-
-    if (ends_with(this->Name, "disown"))
-        fn_called.push_back(this->Name);
 }
 
 
 
-void AssignGenericTree(Parser_Struct *parser_struct,
-        Data_Tree dt, Data_Tree &templ_dt,
-        std::unordered_map<std::string,Data_Tree> &generics_map,
-        CallArgsTy &templ,
-        FnCompiledValues &cvalues) {
-
-
-    // std::cout << "\n\ntree in layout" << "\n";
-    // dt.Print();
-    // templ_dt.Print();
-    // std::cout << "generic? " << templ_dt.is_generic << "\n";
-
-    std::string templ_type = templ_dt.Type;
-    if (templ_dt.is_generic) {
-        if (generics_map.count(templ_type)>0) {
-            generics_map[templ_type].Print();
-            if (dt.Compare(generics_map[templ_type])>0) {
-                LogErrorS(-1, "Assigned 2 different values for a single generic type.");
-                return;
-            }
-        }
-        templ_dt = GenericUnmangleType(dt, templ_dt);
-        generics_map[templ_type] = templ_dt;
-        return;
-    }
-    else if (templ_type!="layout"&&\
-               !in_vec(templ_type, data_tokens) && !in_vec(templ_type, compound_tokens)&&\
-               ClassSize.count(templ_type)==0) {
-        // like a layout nested data
-
-        // is dynamic
-        if (parser_struct->cvalues.dts.count(dt.Type)==0) {
-            if(templ.dyn_args_dict.count(templ_type)>0)
-                return;
-            templ.dyn_args_dict[templ_type] = 1;
-            templ.dyn_args.push_back(
-                                    {dt.Type, templ_type,
-                                    data_typeVars[parser_struct->function_name][dt.Type]}
-                                );
-            return;
-        } else
-            std::cout << "SKIP " << dt.Type << "=" << templ_type << "\n";
-        std::string type = parser_struct->cvalues.dts[dt.Type].Type;
-        if (type=="int")
-            cvalues.AddInt(templ_type, parser_struct->cvalues.ints[dt.Type]);
-    }
-
-    for (int i=0; i<templ_dt.Nested_Data.size(); ++i) {
-        if (templ_dt.Nested_Data[i].Type=="smem")
-            continue;
-        AssignGenericTree(parser_struct,
-                          dt.Nested_Data[i], templ_dt.Nested_Data[i],
-                          generics_map, templ, cvalues);
-    }
-}
-
-void DeriveTypedGeneric(Data_Tree templ_dt, Data_Tree &ret_dt,
-        std::unordered_map<std::string,Data_Tree> &generics_map) {
-
-    if (generics_map.count(templ_dt.Type)>0) {
-        std::cout << "SKIP " << templ_dt.Type << "\n";
-        ret_dt = generics_map[templ_dt.Type].Type;
-    }
-    else
-        ret_dt.Type = templ_dt.Type;
-    
-
-    for (int i=0; i<ret_dt.Nested_Data.size(); ++i) {
-        ret_dt.Nested_Data.push_back(Data_Tree(""));
-        DeriveTypedGeneric(templ_dt.Nested_Data[i], ret_dt.Nested_Data[i],
-                            generics_map);
-    }
-}
-
-void AssignGenericTypes(Parser_Struct *parser_struct, CallArgsTy cargs, CallArgsTy &templ,
-                              FnCompiledValues &cvalues) {
-    std::unordered_map<std::string,Data_Tree> generics_map;
-
-    for (int i=0; i<templ.dts.size(); ++i)
-        AssignGenericTree(parser_struct, cargs.dts[i], templ.dts[i], generics_map, templ, cvalues);
-
-    if (templ.template_ret.HasGeneric()) {
-        Data_Tree ret_dt = Data_Tree("");
-        DeriveTypedGeneric(templ.template_ret, ret_dt, generics_map);
-        templ.template_ret = ret_dt;
-    }
-
-    for (auto &[name, dt] : generics_map) {
-        std::cout << name << "\n";
-    }
-}
-
-
-std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Parser_Struct *parser_struct, std::string fn,
-                        CallArgsTy CArgs, bool &found) {
-    FunctionAST *fn_ast=nullptr; 
-    for (auto &tpair : Template_FnAST[fn]) {
-        CallArgsTy t_templ = tpair.first;
-        CallArgsTy templ = t_templ;
-
-        if (!CompareDTs(CArgs.dts, templ.dts, true, false))
-            continue;
-
-        fn_ast = tpair.second;
-        FnCompiledValues cvalues;
-        AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
-
-        return templ.dyn_args;
-    }
-
-    int i=0;
-    std::cout << "\nFound" << "\n";
-    for (auto &tpair : Template_FnAST[fn]) {
-        if (i>3) {
-            std::cout << "...\n";
-            break;
-        }
-        print_dt_vec(tpair.first.dts);
-    } 
-    std::cout << "\nSent" << "\n";
-    print_dt_vec(CArgs.dts);
-    LogErrorS(parser_struct->line, "Could not match arguments for "+fn);
-
-}
-
-
-std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
-                        CallArgsTy CArgs, bool &found,
-                        bool is_op) {
-
-    FunctionAST *fn_ast=nullptr; 
-
-    for (auto &tpair : Template_FnAST[fn]) {
-        CallArgsTy t_templ = tpair.first;
-        CallArgsTy templ = t_templ;
-
-        if (!CompareDTs(CArgs, templ, true, true))
-            continue;
-
-
-
-
-        fn_ast = tpair.second;
-        FnCompiledValues cvalues;
-        AssignGenericTypes(parser_struct, CArgs, templ, cvalues);
-
-        if (is_op)
-            fn = templ.dts[0].Type + "_" + templ.dts[1].Type + "_" + fn;
-
-        std::string base_name = fn;
-        int idx;
-        if (FnLastVersion.count(fn)==0) {
-            idx = 0;
-            FnLastVersion[fn] = 1;
-        } else
-            idx = FnLastVersion[fn]++;
-        fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
-        CArgs.version = idx;
-        CArgs.version_str = fn;
-
-        // std::cout << "\n\nassign for " << fn << "\n";
-        // print_dt_vec(CArgs.dts);
-        // print_dt_vec(templ.dts);
-        // CArgs.template_ret.Print();
-        // templ.template_ret.Print();
-
-
-        if (fn!=base_name) {
-            if (function_escapes.count(base_name)) {
-                function_escapes[fn] = function_escapes[base_name];
-                function_own_ret_count[fn] = function_own_ret_count[base_name];
-            }
-            // if (fn_borrows.count(base_name))
-            //     fn_borrows[fn] = fn_borrows[base_name];
-            // if (fn_escape_to_memid.count(base_name))
-            //     fn_escape_to_memid[fn] = fn_escape_to_memid[base_name];
-            if (fn_memid_to_lastseen.count(base_name))
-                fn_memid_to_lastseen[fn] = fn_memid_to_lastseen[base_name];
-            if (fn_conditional_stmt.count(base_name))
-                fn_conditional_stmt[fn] = fn_conditional_stmt[base_name];
-            if (cstmt_parents.count(base_name))
-                cstmt_parents[fn] = cstmt_parents[base_name];
-
-        }
-
-
-        
-        CArgs.dyn_args = templ.dyn_args;
-        FnDynArgs[fn] = templ.dyn_args;
-        CArgs.cvalues = cvalues;
-        
-        CArgs.args = templ.args;
-        CArgs.template_ret = templ.template_ret;
-        fn_ret_dt[fn] = CArgs.template_ret;
-
-
-        int memid = *parser_struct->mem_id;
-        int ownid = *parser_struct->owned_id;
-        *parser_struct->mem_id = 0;
-        *parser_struct->owned_id = 0;
-
-
-        auto proto = std::make_unique<PrototypeAST>(parser_struct,
-                        base_name, fn,
-                        CArgs, templ);
-
-
-        fn_ast->parser_struct->function_name = fn;
-        fn_ast->parser_struct->base_name = base_name;
-
-
-        for (auto &body : fn_ast->Body) {
-              body->Traverse([parser_struct, &fn](ExprAST *node) {
-                  // node->parser_struct->function_name = fn;
-                  node->Checks();
-              });
-        }
-        generics_fn.push_back({fn_ast, std::move(proto), parser_struct, fn, base_name});
-        *parser_struct->mem_id = memid;
-        *parser_struct->owned_id = ownid;
-
-        // if (parser_struct->gpu>0) {
-        //     int gpu = parser_struct->gpu;
-        //     parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;
-        //     proto->codegen();
-        //     parser_struct->gpu = gpu;
-        // }
-
-        // if (!fn_ast)
-        //     LogErrorC(-1, "Template for " +base_name + " failed");
-        // fn_ast->Proto = std::move(proto);
-        // fn_ast->parser_struct->function_name = fn;
-        // fn_ast->parser_struct->cvalues = cvalues;
-        // BasicBlock *CurBB = Builder->GetInsertBlock();
-
-        // fn_ast->codegen();
-
-        // Builder->SetInsertPoint(CurBB);
-        
-        found = true;
-        return fn;
-    }
-
-    return fn;
-}
-
-
-std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout, bool match_owned) {
-    found = true;
-    for (auto cargs : FnVersion[fn]) {
-        // if(fn=="bar") {
-        //     std::cout << "FOUND FOR " << cargs.version_str << "\n";
-        //     print_dt_vec(CArgs.dts);
-        //     print_dt_vec(cargs.dts);
-        // }
-        if(CompareDTs(cargs, CArgs, accept_layout, match_owned) && CArgs.cvalues==cargs.cvalues) {
-            return cargs.version_str;
-        }
-    }
-    found = false;
-    return fn;
-}
 
 void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs) {
     std::cout << "\n\nFound implementations" << "\n";
@@ -1102,6 +1155,7 @@ void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs) 
             break;
         std::cout << "\n" << cargs.version_str << "\n";
         print_dt_vec(cargs.dts);
+        // std::cout << "obj_owned: " << cargs.self_obj_owned << "\n";
     }
     if (i>3)
         std::cout << "...\n";
@@ -1129,7 +1183,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
   for (i = 0, e = Args.size(); i != e; ++i) {
     if (dynamic_cast<PositionalArgExprAST*>(Args[i].get()))
         break;
-    
+    Args[i]->Checks();
     Data_Tree data_type = Args[i]->GetDataTree();
     
     int tgt_arg = i + arg_offset;
@@ -1372,7 +1426,6 @@ NewDictExprAST::NewDictExprAST(
   
 void ObjectExprAST::Checks() {
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
-
         std::string name = this->VarNames[i].first;
         data_typeVars[parser_struct->function_name][name] = Data_Tree(ClassName);
         if (this->HasInit[i]) { // callee init
@@ -1382,26 +1435,24 @@ void ObjectExprAST::Checks() {
         }  
     }
 
-
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
-        if (!this->HasInit[i]) {
-            std::string name = this->VarNames[i].first;
-            if(!this->VarNames[i].second)
-                continue;
-
+        std::string name = this->VarNames[i].first;
+        int memid=-2, owned_id=-2;
+        if(this->VarNames[i].second)  {
             this->VarNames[i].second->Checks();
-            int owned_id = this->VarNames[i].second->GetIsOwned();
-            if (owned_id!=-2) 
-                function_owns[parser_struct->function_name][name] = owned_id;
-
-
-            int memid = this->VarNames[i].second->GetMemId();
-            if (memid > -2)
-                fn_memid[parser_struct->function_name][name] = memid;
-            Memids.push_back(memid);
+            owned_id = this->VarNames[i].second->GetIsOwned();
+            memid = this->VarNames[i].second->GetMemId()[0];
         }
-    }
 
+        if (owned_id!=-2) 
+            function_owns[parser_struct->function_name][name] = owned_id;
+        if (memid != -2) {
+            fn_memid[parser_struct->function_name][name] = memid;
+            fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
+        }
+        Memids.push_back(memid);
+        Ownedids.push_back(owned_id);
+    }
 }
 
 ObjectExprAST::ObjectExprAST(
@@ -1486,9 +1537,6 @@ NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> In
 }
  
 void UnkVarExprAST::Checks() {
-  // if (checked)
-  //     return;
-  // checked=true;
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
@@ -1516,11 +1564,12 @@ void UnkVarExprAST::Checks() {
   for(auto &[name, expr] : this->VarNames) {
     expr->Checks();
     int owned_id = expr->GetIsOwned();
-    if (owned_id > -2)
+    if (owned_id != -2)
         function_owns[parser_struct->function_name][name] = owned_id;
-    int memid = expr->GetMemId();
-    if (memid > -2) {
+    int memid = expr->GetMemId()[0];
+    if (memid != -2) {
         fn_memid[parser_struct->function_name][name] = memid; 
+        fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
     }
     Memids.push_back(memid);
   }
@@ -1646,9 +1695,6 @@ void DataExprAST::Checks() {
 
 
 
-  if (!data_type.IsFromArena())
-      return;
-
   for(auto &[name, expr] : this->VarNames) {
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
         int owned_id = (*parser_struct->owned_id)++;
@@ -1663,6 +1709,7 @@ void DataExprAST::Checks() {
     }
 
   }
+
   SetMemId();
 }
   
@@ -1692,22 +1739,24 @@ DataExprAST::DataExprAST(
 }
 
 void DataExprAST::SetMemId() {
-  if (!data_type.IsFromArena())
-      return;
 
   for(auto &[name, expr] : this->VarNames) {
     int memid;
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
-    // std::cout << "---(owned)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
-        memid = (*parser_struct->mem_id)++;
+        memid = (data_type.IsFromArena())
+                    ? (*parser_struct->mem_id)++
+                    : -2;
         fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
         fn_memid[parser_struct->function_name][name] = memid;
+        fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         Memids.push_back(memid);
     } else {
         expr->Checks();
-        memid = expr->GetMemId();
-        if (memid > -2)
+        memid = expr->GetMemId()[0];
+        if (memid != -2) {
             fn_memid[parser_struct->function_name][name] = memid;
+            fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
+        }
     }
     Memids.push_back(memid);
     if (data_type.is_view)
@@ -1781,7 +1830,6 @@ void NewExprAST::Checks() {
     if (MemoryType!=newTy)
         OwnedId = (*parser_struct->owned_id)++;
     
-    // std::cout << "---(own)SET ID memid " << parser_struct->function_name << " -- " << (*parser_struct->mem_id) << "\n"; 
     MemId = (*parser_struct->mem_id)++;
     fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
 }
@@ -2026,10 +2074,11 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct,
 }
 
 void LaunchExprAST::Checks() {
+    // std::cout << "CHECK LAUNCH:  " << parser_struct->function_name << "|" << fn_name << "\n";
     Semantic_Arguments_Check(parser_struct, Args, fn_name, false, Args.size(), 0);
 }
 
-LaunchExprAST::LaunchExprAST(Parser_Struct*, std::unique_ptr<ExprAST> Grid,
+LaunchExprAST::LaunchExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> Grid,
         std::unique_ptr<ExprAST> Block,
         std::unique_ptr<ExprAST> Smem,
         std::unique_ptr<ExprAST> Stream,
@@ -2040,6 +2089,7 @@ LaunchExprAST::LaunchExprAST(Parser_Struct*, std::unique_ptr<ExprAST> Grid,
       Smem(std::move(Smem)), Stream(std::move(Stream)),
       CompiledArgsVec(CompiledArgsVec),
       fn_name(fn_name) {
+    this->parser_struct =parser_struct;
 
 
     if (auto stmt = dynamic_cast<NewVecExprAST*>(this->Grid.get())) {
@@ -2266,6 +2316,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   else if (ops_type_return.count(Operation)>0)
     return Data_Tree(ops_type_return[Operation]);
   else if (fn_ret_dt.count(Operation)&&!has_generic) {
+    IsCall=true;
     Data_Tree dt = fn_ret_dt[Operation];
     return dt;
   }
@@ -2297,7 +2348,9 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
             CallArgsTy CArgs = CallArgsTy(Types);
             CArgs.cvalues = GetSubmitedCValues();
+            std::string pre = Operation;
             Operation = GetFnVersion(parser_struct, Operation, CArgs, found, true, true);
+            std::cout << "\n\t\033[31m" << Operation << " | " << pre << "\033[0m\n\n";
 
             if (!found) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic);
@@ -2305,8 +2358,11 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
             DynamicArgs = GetDynamicArgs(parser_struct, fn, CArgs, found);
             FunctionChecks(Operation);
 
-            if (found)
+            if (found) {
+                IsCall=true;
+                std::cout << "\n\t\033[32mAS:" << Operation << "\033[0m\n\n";
                 return fn_ret_dt[Operation];
+            }
           }
           LogErrorS(parser_struct->line, "Operation function " + Operation + " not found.");
       }
@@ -2327,6 +2383,8 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 
 
 void BinaryExprAST::Checks() {
+  LHS->Checks();
+  RHS->Checks();
   GetDataTree();
 
   if (auto *nameable = dynamic_cast<Nameable*>(LHS.get()))
@@ -2334,15 +2392,29 @@ void BinaryExprAST::Checks() {
 
 
 
-  int memid = RHS->GetMemId();
-  if (Op=='='&& memid>=-1) {
+  int memid = RHS->GetMemId()[0];
+
+  if (IsCall) {
+      memid = (*parser_struct->mem_id)++;
+      Memids.push_back(memid);
+      if (fn_with_owned_ret.count(Operation)>0) {
+          OwnedId = (*parser_struct->owned_id)++;
+      }
+  }
+
+  if (Op=='='&& memid!=-2) {
     if (auto *nameable = dynamic_cast<Nameable*>(LHS.get())) {
         if (nameable->Depth==1) {
           std::string name = nameable->GetName(); 
           RHS->Checks();
           int owned_id = RHS->GetIsOwned();
           function_owns[parser_struct->function_name][name] = owned_id;
+
+          if (check_branch==0)
+              fn_cond_memid[parser_struct->function_name][name].clear();
+
           fn_memid[parser_struct->function_name][name] = memid;
+          fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
           data_typeVars[parser_struct->function_name][name].is_view = R_dt.is_view;
@@ -2429,16 +2501,6 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {
   this->parser_struct = parser_struct;
   Line = parser_struct->line;
-
-  int memid = this->RHS->GetMemId();
-  if (Op=='='&& memid>=-1) {
-    if (auto *nameable = dynamic_cast<Nameable*>(this->LHS.get())) {
-        if (nameable->Depth==1) {
-          std::string name = nameable->GetName(); 
-          fn_memid[parser_struct->function_name][name] = memid;
-        }
-    }
-  }
 
   this->LHS->Parent = this;
   this->RHS->Parent = this;
@@ -2569,10 +2631,16 @@ void ForEachExprAST::Checks() {
 }
 
 void IfExprAST::Checks() {
+
+    // int prev_check_branch = check_branch;
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
     for (auto &body : Then)
         body->Checks();
+    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
     for (auto &body : Else)
         body->Checks();
+    check_branch=0;
+    // check_branch = prev_check_branch;
 }  
 
 
@@ -2725,6 +2793,14 @@ ContinueExprAST::ContinueExprAST() {}
 IndexExprAST::IndexExprAST(std::vector<DimSlice> Idxs)
             : Idxs(std::move(Idxs)) {
   Size = this->Idxs.size();
+}
+void IndexExprAST::Checks() {
+    for(auto &dim_slice : Idxs) {
+        if (dim_slice.start)
+            dim_slice.start->Checks();
+        if (dim_slice.end)
+            dim_slice.end->Checks();
+    }
 }
 
 Data_Tree IndexExprAST::GetDataTree(bool from_assignment) { 
@@ -2935,6 +3011,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
             this->Name = this->Types[ctx_offset].Type +"_" + this->Types[ctx_offset+1].Type + "_" + this->Name;
         else
             this->Name = this->Types[ctx_offset].Type +"_" + this->Name;
+        BaseName = this->Name;
     }
 
     if (Class!=""&&begins_with(BaseName, Class))
@@ -2964,10 +3041,10 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         CArgs.args.push_back(arg_name);
 
         if (arg.IsFromArena()) {
-        // std::cout << "---(proto)SET ID memid " << this->Name << "|" << (*parser_struct->mem_id) << "\n"; 
           int MemId = (*parser_struct->mem_id)++;
           fn_memid_to_dt[this->Name][MemId] = arg;
           fn_memid[this->Name][arg_name] = MemId;
+          fn_cond_memid[this->Name][arg_name][0] = MemId;
           fn_arg_memid[this->Name][arg_name] = MemId;
           fn_memid_to_branch[this->Name][MemId] = MemId;
         }
@@ -2994,8 +3071,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     parser_struct->has_compiled_args = Fn_Compiled_Args.count(this->Name)>0;
 
 
-    if (ends_with(this->Name, "disown"))
-        fn_called.push_back(this->Name);
 }
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -3015,6 +3090,8 @@ Data_Tree ViewExprAST::GetDataTree(bool from_assignment) {
 }
     
 void ViewExprAST::Checks() {
+    LHS->Checks();
+    RHS->Checks();
     std::string R_Type = this->RHS->GetDataTree().Type;
     if(R_Type!="int") {
         if (!in_vec(R_Type, int_types))
@@ -3117,6 +3194,12 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   
   return inner_dt.Nested_Data[0];
 }
+void NameableIdx::Checks() {
+    Idx->Checks();
+    Inner->Checks();
+    GetDataTree();
+}
+
 
 
 Data_Tree NameableLLVMIRCall::GetDataTree(bool from_assignment) {
@@ -3254,8 +3337,6 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
   
   std::string scope = Inner->GetDataTree().Type;
   
-
-
   if(data_typeVars[scope].find(Name)!=data_typeVars[scope].end())
     data_type = data_typeVars[scope][Name];
   else if (Name=="tid"||Name=="tN")
@@ -3295,10 +3376,14 @@ Nameable::Nameable(Parser_Struct *parser_struct, std::string Name, int Depth, bo
   this->Line = parser_struct->line;
   if (IsUnique && !in_vec(Name, Global_Uniques)) {
     Global_Uniques.push_back(Name);
+    if (in_vec(Name, Global_Owneds))
+        LogErrorC(Line, "Cannot allocate a global as both GC arena and owned ($ and &)");
     FunctionChecks(Name+"___init__");
   }
   if (IsOwnedUnique && !in_vec(Name, Global_Owneds)) {
     Global_Owneds.push_back(Name);
+    if (in_vec(Name, Global_Uniques))
+        LogErrorC(Line, "Cannot allocate a global as both GC arena and owned ($ and &)");
     FunctionChecks(Name+"___init__");
   }
 }
@@ -3358,11 +3443,11 @@ void Nameable::Checks() {
   if (checked)
     return;
   checked=true;
-  if (IsUnique)
+  if (IsUnique||IsOwnedUnique)
     FunctionChecks(Name+"___init__");
 
-  MemId = GetMemId();
-  OwnedId = GetIsOwned();
+  Memids[0] = GetMemId()[0];
+  Ownedids[0] = GetIsOwned();
 }
 
 
@@ -3515,7 +3600,7 @@ void NameableCall::Checks() {
         !(in_vec(Callee, vararg_methods)
         ||Callee=="Unnamed"
         ||data_typeVars[parser_struct->function_name].count(Callee)>0
-        &&data_typeVars[parser_struct->function_name][Callee].Type=="Function");
+          &&data_typeVars[parser_struct->function_name][Callee].Type=="Function");
 
   if(fn_ret_dt.count(Callee)>0)
       CArgs.template_ret = fn_ret_dt[Callee];
@@ -3524,12 +3609,17 @@ void NameableCall::Checks() {
   BaseCallee = Callee;
   if (needs_version) {
       
-      Callee = SolveTemplate(parser_struct, Callee, CArgs);
+      Callee = SolveTemplate(parser_struct, Inner, Callee, CArgs);
       if (Callee!=BaseCallee && gpu_fn.count(BaseCallee)>0)
         gpu_fn[Callee] = 1;
 
       TemplateSolveCompiledArgs(Callee, BaseCallee);
+
+      fn_deps[parser_struct->function_name].push_back(Callee);
   }
+
+  for(auto &arg : Args)
+    arg->Checks();
 
   MemId = (*parser_struct->mem_id)++;
   fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
@@ -3551,17 +3641,23 @@ Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
 
 
 void FunctionChecks(std::string fn_name) {
-
     if (TheJIT->fn_map.count(fn_name)>0) {
       if (in_vec(fn_name, fn_called))
            return;
       fn_called.push_back(fn_name);
+
       FunctionAST *fn = TheJIT->fn_map[fn_name];
       for (auto &body : fn->Body) {
-        body->Traverse([](ExprAST *node) {
+        body->Traverse([&fn_name](ExprAST *node) {
+              std::string prev_name;
+              if(node->parser_struct) {
+                  prev_name = node->parser_struct->function_name;
+                  node->parser_struct->function_name = fn_name;
+              }
               node->Checks();
+              if(node->parser_struct)
+                  node->parser_struct->function_name = prev_name;
         });
       }
-
     }
 }

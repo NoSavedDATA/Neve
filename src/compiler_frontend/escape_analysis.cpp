@@ -122,20 +122,29 @@ int UnaryExprAST::GetIsOwned() {
 }
 int BinaryExprAST::GetIsOwned() {
     // return LHS->GetIsOwned() || RHS->GetIsOwned();
+    if (OwnedId!=-2)
+        return OwnedId;
     int id = RHS->GetIsOwned();
     if (id>=0) return id;
     id = LHS->GetIsOwned();
     if (id>=0) return id;
     return -2;
 }
+
+
+
+
 int Nameable::GetIsOwned() {
     // Check Depth 1 owned for borrowed
-    if (OwnedId!=-2)
-        return OwnedId;
-    if (IsOwnedUnique)
-        return -1;
     if (Depth>1)
         return Inner->GetIsOwned();
+    if (Ownedids[0]!=-2)
+        return Ownedids[0];
+    if (IsOwnedUnique)
+        return -1;
+    if (Name=="self"&&parser_struct->self_obj_owned)
+        return -1;
+
     std::string scope = parser_struct->function_name;
 
     if (function_owns[scope].count(Name)==0)
@@ -144,8 +153,8 @@ int Nameable::GetIsOwned() {
     return function_owns[scope][Name];
 }
 int NameableIdx::GetIsOwned() {
-    if (OwnedId!=-2)
-        return OwnedId;
+    if (Ownedids[0]!=-2)
+        return Ownedids[0];
     return Inner->GetIsOwned();
 }
 int NameableCall::GetIsOwned() {
@@ -186,7 +195,7 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         if (new_expr->MemoryType>0) {
             if(in_vec(owned_id,function_escapes[fn_name]))
                 fn_owned_ret_memory[owned_id] = get_scope_escape_retoffset(scope_struct);
-            else if(!fn_borrows[fn_name].count(new_expr->GetMemId())) {
+            else if(!fn_borrows[fn_name].count(new_expr->GetMemId()[0])) {
                 new_expr->OwnedPoolOffset = last_offset;
                 last_offset += ClassSize[new_expr->DataName];
             }
@@ -319,7 +328,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         bool caller_transfers = fn_borrows[base_fn].count(callexpr->MemId)>0;
 
 
-        int memid = callexpr->GetMemId();
+        int memid = callexpr->GetMemId()[0];
         std::vector<std::tuple<int,int>> partialtakes;
 
         bool fn_transfers=false, is_incomplete_transfer=false;
@@ -359,7 +368,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 // if (in_vec(var->GetMemId(), fn_borrows_incomplete[fn]))
                 //     LogBlue("INCOMPLETE " + parser_struct->function_name + "|" + std::to_string(var->GetMemId()));
 
-                fn_escape_to_memid[fn][owned_id] = var->GetMemId();
+                fn_escape_to_memid[fn][owned_id] = var->GetMemId()[0];
 
                 owned_ids.push_back(owned_id);
                 if(ownid_to_size.count(owned_id)) {

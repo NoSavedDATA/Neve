@@ -259,6 +259,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_Create", map_CreateTy);
 
+	FunctionType *map_Create_TakenTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_Create_Taken", map_Create_TakenTy);
+
 	FunctionType *map_node_reclaimTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy},
@@ -1322,6 +1329,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("array_bad_idx", array_bad_idxTy);
+
+	FunctionType *array_double_size_OwnedTy= FunctionType::get(
+		Type::getVoidTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_double_size_Owned", array_double_size_OwnedTy);
 
 	FunctionType *array_double_sizeTy= FunctionType::get(
 		Type::getVoidTy(*TheContext),

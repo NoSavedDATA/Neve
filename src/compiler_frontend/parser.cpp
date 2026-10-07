@@ -378,6 +378,8 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct *parser_struct,
     
   bool is_unique = CurTok=='$';
   bool is_owned_unique = CurTok=='&';
+  // bool is_unique = CurTok=='&'||CurTok=='$';
+  // bool is_owned_unique=false;
   if (is_owned_unique||is_unique)
         getNextToken();
     
@@ -3057,7 +3059,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
     if (proto.is_generic) {
         TheJIT->addGeneric(std::move(Func));
         continue;
-    }
+    } 
 
 
     if(!has_main) { // LSP info
@@ -3079,6 +3081,8 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
       getNextToken();
     
 
+    if (ends_with(proto_name, "disown"))
+        FunctionChecks(proto_name);
 
     handle_tok_space();
     // if(CurTok==tok_space)
