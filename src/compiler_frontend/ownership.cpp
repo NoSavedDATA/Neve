@@ -576,7 +576,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                     nameableexpr, callexpr, memid_to_branch);
 
 
-            int arg_memid = fn_arg_memid[callee][argname];
+            int arg_memid = fn_arg_memid[base_callee][argname];
             arg_to_caller_memid[arg_memid] = parent_memid;
 
             // std::cout << " " << argname << " | " << arg_memid << "\n"; 
@@ -605,7 +605,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             if (memid==-2)
                 continue;
 
-            int arg_memid = fn_arg_memid[callee][argname];
+            int arg_memid = fn_arg_memid[base_callee][argname];
 
 
 
@@ -622,7 +622,7 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
                         );
                     }
                 }
-                std::cout << "GetCallMostRestrictive" << "\n";
+                // std::cout << "GetCallMostRestrictive" << "\n";
 
                 GetCallMostRestrictive(parser_struct,
                             base_callee,

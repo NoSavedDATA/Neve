@@ -1097,7 +1097,7 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        // LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
+        LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;

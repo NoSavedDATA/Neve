@@ -287,6 +287,7 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
         FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
         Template_FnAST[base_callee][CArgs] = fn_ast;
         callee = GenTemplate(parser_struct, base_callee, CArgs, found);
+        // std::cout << "\n\t\033[33m<<<<<<<<<<<>>>>>>>>>" << callee << "\033[0m\n\n";
         
         for (auto &body : fn_ast->Body) {
           body->TraversePost([parser_struct, &callee, &partialtakes](ExprAST *node) {
