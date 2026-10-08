@@ -3,6 +3,7 @@
 #include "llvm/IR/Verifier.h"
 
 #include <execution>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <map>
@@ -49,7 +50,7 @@ std::map<std::string, std::map<std::string, Value *>> function_pointers;
 std::vector<std::string> prebuild_functions;
 std::unordered_map<std::string, llvm::Type*> str_toTy;
 std::unordered_map<std::string, Function *> async_fn;
-std::map<int,Value*> fn_owned_ret_memory;
+std::unordered_map<std::string,std::unordered_map<int,Value*>> fn_owned_ret_memory;
 std::string current_codegen_function;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&)>>function_return_overwrite;
 std::unordered_map<std::string, std::function<Data_Tree(Parser_Struct*, std::vector<std::unique_ptr<ExprAST>>&, std::unique_ptr<Nameable> &inner)>>method_return_overwrite;
@@ -313,7 +314,7 @@ void GetOwnedType(Parser_Struct *parser_struct, Data_Tree dt, int memid, int own
         else
             type = 1;
     }
-    OwnedValues.push_back({memid, dt, ptr, type});
+    OwnedValues[parser_struct->function_name].push_back({memid, dt, ptr, type});
 }
 
 
@@ -613,6 +614,7 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0) {
+      // bt(5);
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -1117,7 +1119,7 @@ inline void SetConditionalMaybeTake(std::string fn, int memid) {
         return;
     if(!ctakens_maybe[fn].count(memid))
         return;
-    p2t("<<--------->>SET.MAYBE " + fn + " - " + std::to_string(memid));
+    // p2t("<<--------->>SET MAYBE " + fn + " - " + std::to_string(memid));
     Builder->CreateStore(const_bool(1), ctakens_maybe[fn][memid]);
 }
 inline void SetConditionalTake(std::string fn, int memid) {
@@ -1126,7 +1128,7 @@ inline void SetConditionalTake(std::string fn, int memid) {
     if(!ctakens[fn].count(memid))
         return;
 
-    p2t("-----------SET.COND " + fn + " - " + std::to_string(memid));
+    // p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
     Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
     Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
     // call("print_bool", {v}); 
@@ -1147,9 +1149,9 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
         CallArgsTy &CArgs,
         std::string callee,
         std::vector<std::tuple<int,int>> &partialtakes,
-        std::vector<std::unique_ptr<ExprAST>> &Args,
         std::vector<Value*> &ArgsV) {
     std::string fn = parser_struct->function_name;
+
 
 
     // When they are partial in the current function, but not in the callee
@@ -3105,6 +3107,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             }
             parser_struct->dyn_args.clear();
         }
+
+        if (partialtakes.count(Operation)>0) {
+            std::cout << "\n\t\033[33mPARTIALLLLLL " << Operation << "\033[0m\n\n";
+            Codegen_Partialtakes(parser_struct, CArgs,
+                    BaseOperation,
+                    partialtakes[Operation],
+                    Args);
+        }
+
         ret = callret(Operation, Args); 
     }
 
@@ -3120,6 +3131,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
         return const_int(0);
     }
+
+
+    if (IsCall)
+        fn_memid_to_val[parser_struct->function_name][Memids[0]] = ret;
 
 
     ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
@@ -4178,7 +4193,7 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
             else {// escape
                 // if(parser_struct->function_name=="gpu_tensor_gpu_tensor_add")
                 //     LogBlue("as escape pool");
-                ptr = fn_owned_ret_memory[OwnedId];
+                ptr = fn_owned_ret_memory[parser_struct->function_name][OwnedId];
             }
 
         } else {
@@ -4897,16 +4912,16 @@ void DispatchOwnedFree(std::string base_fn, std::string fn, Value *memV, int mem
         // std::cout << "****Parent post  " << parent << "\n";
         if (auto *parent_stmt = dynamic_cast<NameableCall*>(parent)) {
             // std::cout << "parent call: " << parent_stmt->Callee << "\n";
-            parent_stmt->RegisterOwned(dt, memid, memV);
+            parent_stmt->RegisterOwned(fn, dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<BinaryExprAST*>(parent)) {
-            parent_stmt->RegisterOwned(dt, memid, memV);
+            parent_stmt->RegisterOwned(fn, dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<ForEachExprAST*>(parent)) {
             // std::cout << "parent call: " << parent_stmt->Callee << "\n";
-            parent_stmt->RegisterOwned(dt, memid, memV);
+            parent_stmt->RegisterOwned(fn, dt, memid, memV);
         }
 
         if (auto *parent_stmt = dynamic_cast<RetExprAST*>(parent)) {
@@ -4917,7 +4932,7 @@ void DispatchOwnedFree(std::string base_fn, std::string fn, Value *memV, int mem
 
 
     if (auto *stmt = dynamic_cast<OwnedHolder*>(expr))
-        stmt->RegisterOwned(dt, memid, memV);
+        stmt->RegisterOwned(fn, dt, memid, memV);
 }
 
 
@@ -4955,6 +4970,7 @@ Value *Nameable::codegen(Value *scope_struct) {
     // std::cout << "has fn? "  << fn_memid_to_lastseen.count(base_fn) << "\n"; 
     // std::cout << "has val? " << map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this) << "\n"; 
 
+
     if (map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this)) {
         for(auto &[memid, expr] : fn_memid_to_lastseen[base_fn]) {
             if (expr!=this)
@@ -4963,17 +4979,21 @@ Value *Nameable::codegen(Value *scope_struct) {
                 continue;
             Data_Tree cleared_dt = fn_memid_to_dt[fn][memid];
 
+            // if (begins_with(fn, "Res"))
+            // p2t("check " + fn + " -> " + std::to_string(memid));
+
             bool is_owned = cleared_dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
+
+
             if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
-                cleared_dt.Print();
                 ExprAST *outermost = this;
                 GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
-                        (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
+                        (fn_memid_to_branch[base_fn][memid]>>32)&MASK_16);
                 if (!fn_memid_to_val[fn].count(memid)) {
                     LogErrorS(Line, "Cannot track memid Value*: " + std::to_string(memid) + " in function " + fn);
                 }
 
-                // p2t("dispatch " + fn + " -> " + std::to_string(memid));
+                // p2t("-->dispatch " + fn + " -> " + std::to_string(memid));
                 DispatchOwnedFree(base_fn, fn, fn_memid_to_val[fn][memid], memid, cleared_dt, outermost);
             }
         }
@@ -5791,7 +5811,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (shall_swap)
         previous_obj = swap_scope_obj(scope_struct, obj_ptr); 
 
-  Codegen_Partialtakes(parser_struct, CArgs, BaseCallee, partialtakes, Args, ArgsV);
+  Codegen_Partialtakes(parser_struct, CArgs, BaseCallee, partialtakes, ArgsV);
 
 
 
@@ -5820,7 +5840,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
         );
     ret = Builder->CreateCall(fnTy, fn, ArgsV);
   } else {
-    auto OwnedValuesPre = OwnedValues;
     if (gpu_fn.count(Callee)>0) {
         std::vector<Value*> ArgsV_slice(ArgsV.begin()+1, ArgsV.end()); // skip ctx
         ArgsV_slice.push_back(get_smem_offset(parser_struct));
@@ -5828,7 +5847,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
         ret = callret(Callee, ArgsV_slice);
     } else
         ret = callret(Callee, ArgsV);
-    OwnedValues = OwnedValuesPre;
   }
   
 

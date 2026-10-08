@@ -687,6 +687,8 @@ void InitializeModule() {
   TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
   
 
+
+
   //
   FunctionType * ConcatScopeStrTy = FunctionType::get(
       int8PtrTy,
@@ -1076,6 +1078,8 @@ Function *FunctionAST::codegen() {
   
   
 
+  // if (begins_with(function_name, "Res"))
+  //     std::cout << "\n\t\033[32mcall: " << function_name << "\033[0m\n\n";
 
 
   float val;
@@ -1109,11 +1113,10 @@ Function *FunctionAST::codegen() {
         int memid = fn_arg_memid[base_name][arg_name];
         Data_Tree dt = data_typeVars[function_name][arg_name];
         if (memid!=-2&&fn_borrows[base_name].count(memid)>0)
-            OwnedValues.push_back({memid, dt, &Arg, 3});
+            OwnedValues[function_name].push_back({memid, dt, &Arg, 3});
         if(begins_with(function_name, "ResidualModul"))
             std::cout << "\n\t\033[32marg to val " << function_name << ": " << arg_name << " -- " << memid <<  "\033[0m\n\n";
         if (memid!=-2) {
-
             fn_memid_to_val[function_name][memid] = &Arg;
         }
     }
@@ -1168,11 +1171,7 @@ Function *FunctionAST::codegen() {
   }
 
 
-
-
   SetFnOwn(parser_struct, scope_struct, base_name, function_name, Body);
-
-
 
 
   // Codegen
@@ -1200,15 +1199,12 @@ Function *FunctionAST::codegen() {
         }
     }
 
-    OwnedValues.clear();
-    OwnedsCleared.clear();
-    fn_owned_ret_memory.clear();
 
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
     //
-    // if (TheFunction->getName().ends_with("ResidualModule_forward"))
+    // if (TheFunction->getName().starts_with("ResidualModule_forward"))
     //     TheFunction->print(llvm::errs());
     //
     // TheModule->print(llvm::errs(), nullptr);

@@ -11,6 +11,7 @@
 
 
 #include "ownership.h"
+#include "codegen.h"
 #include "expressions.h"
 #include "include.h"
 #include "logging.h"
@@ -196,8 +197,8 @@ uint64_t GetLifetime(Parser_Struct *parser_struct,
 
 
 
-void OwnedHolder::RegisterOwned(Data_Tree dt, int memid, Value *v) {
-    OwnedToClear.push_back({dt, memid, v});
+void OwnedHolder::RegisterOwned(std::string fn, Data_Tree dt, int memid, Value *v) {
+    OwnedToClear[fn].push_back({dt, memid, v});
 }
 
 
@@ -230,28 +231,16 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
     //     std::cout << "WHILE CLEAR OWNED " << "\n";
 
     Value *previous_obj = get_scope_obj(scope_struct);
-    for(auto &[dt, memid, ptr] : OwnedToClear) {
+    for(auto &[dt, memid, ptr] : OwnedToClear[fn]) {
 
-        // if (begins_with(fn, "ResidualBlock")) {
-        //     return;
-        // }
-        if (begins_with(fn, "ResidualModule")||begins_with(fn, "ResidualBlock")) {
-            // std::cout << "\n\t\033[31mEVAL " << fn << " -> " << memid << "\033[0m\n\n";
-            dt.Print();
-            std::cout << " " << ptr << "\n";
-            // return;
-        }
-
-        OwnedsCleared.push_back(ptr);
-        // p2t("------------------------->clear " + fn + " -- " + std::to_string(memid));
-
+        OwnedsCleared[fn].push_back(ptr);
 
         bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
         BasicBlock *AfterBB, *DisownBB, *created_okBB;
         if (is_conditional) {
-            p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
             Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
-            call("print_bool", {v}); 
+            // p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
+            // call("print_bool", {v}); 
             Function *TheFunction = Builder->GetInsertBlock()->getParent();
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
@@ -263,8 +252,6 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
                 created_okBB = BasicBlock::Create(*TheContext, "disown.disown",
                                     TheFunction);
                 Value *was_created = Builder->CreateLoad(boolTy, ctakens_maybe[fn][memid]);
-                p2t("Was created???????");
-                call("print_bool", {was_created}); 
                 Builder->CreateCondBr(
                             was_created, created_okBB, AfterBB);
                 Builder->SetInsertPoint(created_okBB);
@@ -275,20 +262,18 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
                         AfterBB, DisownBB);
             Builder->SetInsertPoint(DisownBB);
         }
+
         if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
             ArrayClearOwned(scope_struct, dt, ptr);
-        // p2t("disown dispatch");
-        // call("print_void_ptrC", {ptr});
         Disown(scope_struct, dt, ptr);
+
         if (is_conditional) {
             // p2t("cond free: ");
             // call("print_void_ptr", {ptr});
             call("free", {ptr});
-
             if (ctakens_maybe[fn].count(memid)>0) {
                 Builder->CreateStore(const_bool(false), ctakens_maybe[fn][memid]);
             }
-
             block_values[DisownBB] = function_values[fn];
             Builder->CreateBr(AfterBB);
             Builder->SetInsertPoint(AfterBB);
@@ -738,14 +723,9 @@ void GetBorrows(Parser_Struct *parser_struct,
         if (!nameable->IsAttr&&memid!=-2) {
             uint64_t branch = nameable->BranchId;
             branch = (branch&~MASK_16) | memid;
-
-
-            // std::cout << "Last Seen " << nameable->GetName() << ": " << memid << " | " << expr << "\n";
-
-            if (begins_with(parser_struct->function_name, "ResidualModule")) {
-                std::cout << "\n\t\033[33mLast seen " << parser_struct->base_name << "|" << nameable->GetName() << ": " << memid << " -- " << expr << "\033[0m\n\n";
-            }
-
+            // if (begins_with(parser_struct->function_name, "ResidualModule")) {
+            //     std::cout << "\n\t\033[33mLast seen " << parser_struct->base_name << "|" << nameable->GetName() << ": " << memid << " -- " << expr << "\033[0m\n\n";
+            // }
             fn_memid_to_lastseen[parser_struct->base_name][memid] = expr;
 
             if (borrow_ids.count(memid)!=0) {

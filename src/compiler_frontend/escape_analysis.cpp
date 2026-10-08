@@ -27,8 +27,8 @@
 
 
 
-std::vector<std::tuple<int, Data_Tree, Value*, int>> OwnedValues;
-std::vector<Value*> OwnedsCleared;
+std::unordered_map<std::string,std::vector<std::tuple<int, Data_Tree, Value*, int>>> OwnedValues;
+std::unordered_map<std::string,std::vector<Value*>> OwnedsCleared;
 
 
 inline void ClearOne(Value *scope_struct, std::string fn,
@@ -39,7 +39,7 @@ inline void ClearOne(Value *scope_struct, std::string fn,
 
     // bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
 
-    if (!in_vec(ptr, OwnedsCleared)) {
+    if (!in_vec(ptr, OwnedsCleared[fn])) {
         if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
             ArrayClearOwned(scope_struct, dt, ptr);
         Disown(scope_struct, dt, ptr);
@@ -53,7 +53,7 @@ inline void Clear_Fn_Owned_Values(Value *scope_struct,
         std::vector<Value *> &returned_values) {
     std::string fn = parser_struct->function_name;
     Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
+    for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
         if (in_vec(ptr, returned_values))
             continue;
         ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
@@ -63,7 +63,7 @@ inline void Clear_Fn_Owned_Values(Value *scope_struct,
 void Clear_Fn_Owned_Values(Value *scope_struct, Parser_Struct *parser_struct) {
     std::string fn = parser_struct->function_name;
     Value *previous_obj = get_scope_obj(scope_struct);
-    for (auto &[memid, dt, ptr, owned_type] : OwnedValues) {
+    for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
         ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
     }
     set_scope_obj(scope_struct, previous_obj);
@@ -194,7 +194,7 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         int owned_id = new_expr->GetIsOwned();
         if (new_expr->MemoryType>0) {
             if(in_vec(owned_id,function_escapes[fn_name]))
-                fn_owned_ret_memory[owned_id] = get_scope_escape_retoffset(scope_struct);
+                fn_owned_ret_memory[fn_name][owned_id] = get_scope_escape_retoffset(scope_struct);
             else if(!fn_borrows[base_name].count(new_expr->GetMemId()[0])) {
                 new_expr->OwnedPoolOffset = last_offset;
                 last_offset += ClassSize[new_expr->DataName];
@@ -309,6 +309,58 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
 
 
 
+void SetToBorrowedRet(Parser_Struct *parser_struct, 
+         BinaryExprAST *callexpr,
+         std::vector<std::tuple<int,int>> &partialtakes) {
+    std::string callee = callexpr->Operation;
+    std::string base_callee = callexpr->BaseOperation;
+    CallArgsTy CArgs = callexpr->CArgs;
+    CArgs.template_ret.is_borrow=true;
+    bool found = false;
+    callexpr->IsSpecialization=true;
+
+    std::string prev_callee = callee;
+    callee = GetFnVersion(parser_struct, base_callee, CArgs, found, true, true);
+    callexpr->partialtakes[callee] = partialtakes;
+    if (!found) {
+        std::vector<std::string> argnames;
+        for (auto &argname : fn_argnames[callee]) {
+            if (argname=="scope_struct")
+                continue;
+            argnames.push_back(argname);
+        }
+        CArgs.args = argnames;
+        CArgs.partialtakes = partialtakes;
+         
+        FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
+        Template_FnAST[base_callee][CArgs] = fn_ast;
+
+        if (FnLastVersion.count(callee)==0)
+            FnLastVersion[callee] = 1;
+
+        callee = GenTemplate(parser_struct, base_callee, CArgs, found);
+        callexpr->partialtakes[callee] = partialtakes;
+        // std::cout << "\n\t\033[33m<<<<<<<<<<<>>>>>>>>>" << callee << "\033[0m\n\n";
+        
+
+        for (auto &body : fn_ast->Body) {
+          body->TraversePost([parser_struct, &callee, &partialtakes](ExprAST *node) {
+            if (auto *nestedcall = dynamic_cast<NameableCall*>(node)) {
+                std::string nestedcallee = nestedcall->Callee;
+                int owned_id =  nestedcall->OwnedId;
+                if (in_vec(owned_id, function_escapes[callee])) {
+                    partialtakes.clear();
+                    SetToBorrowedRet(parser_struct, nestedcall, partialtakes);
+                }
+            }
+          });
+        }
+    }
+    callexpr->Operation = callee;
+}
+
+
+
 void GetOwnedRet(Parser_Struct *parser_struct,
                  std::string fn, std::string base_fn,
                  std::unordered_map<std::string, int> &seen,
@@ -327,7 +379,6 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         ownid_to_size[callexpr->OwnedId] = function_own_ret_count[callee];
 
         bool caller_transfers = fn_borrows[base_fn].count(callexpr->MemId)>0;
-
 
         int memid = callexpr->GetMemId()[0];
         std::vector<std::tuple<int,int>> partialtakes;
@@ -357,6 +408,52 @@ void GetOwnedRet(Parser_Struct *parser_struct,
 
         return;
     }
+
+    if (auto *binop = dynamic_cast<BinaryExprAST*>(expr)) {
+        if (!binop->IsCall)
+            return;
+
+        std::string callee = binop->Operation;
+        std::string basecallee = binop->BaseOperation;
+        EscapeAnalysis(basecallee, callee, seen);
+
+        if (!function_own_ret_count.count(callee))
+            return;
+
+        ownid_to_size[binop->OwnedId] = function_own_ret_count[callee];
+
+        int memid = binop->GetMemId()[0];
+
+        bool caller_transfers = fn_borrows[base_fn].count(memid)>0;
+
+        std::vector<std::tuple<int,int>> partialtakes;
+
+        bool fn_transfers=false, is_incomplete_transfer=false;
+        for(auto &retid : function_escapes[callee]) {
+            int ret_memid = fn_escape_to_memid[callee][retid];
+
+            if (fn_borrows[basecallee].count(ret_memid)>0) {
+                fn_transfers=true;
+                is_incomplete_transfer = in_vec(ret_memid,
+                                    fn_borrows_incomplete[basecallee]);
+                partialtakes.push_back({memid, ret_memid});
+                break;
+            }
+        }
+
+        if (is_incomplete_transfer) {
+            std::cout << "\n\t\033[31mESCAPE: " << callee << "\033[0m\n\n";
+            fn_borrows[base_fn][memid].push_back(memid);
+            fn_borrows_incomplete[base_fn].push_back(memid);
+        }
+
+        if (caller_transfers||fn_transfers)
+            SetToBorrowedRet(parser_struct, binop, partialtakes);
+
+
+        return;
+    }
+
 
 
     // Ret

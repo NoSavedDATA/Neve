@@ -131,10 +131,8 @@ inline Function *getFunctionCheck(std::string Name) {
 }
 
 inline void call(std::string fn, const std::vector<Value *> &args) {
-    // if (fn=="free")  {
-    //     p2t("free");
-    //     call("print_void_ptr", {args[0]});
-    // }
+    llvm::Value *Callee = getFunctionCheck(fn);
+
     if(!Shall_Exit)
         Builder->CreateCall(getFunctionCheck(fn), args);
 }

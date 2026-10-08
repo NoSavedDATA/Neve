@@ -546,11 +546,12 @@ class LibImportExprAST : public ExprAST {
   
 class OwnedHolder {
   public:
-    std::vector<std::tuple<Data_Tree, int, Value*>> OwnedToClear;
+    std::unordered_map<std::string,std::vector<std::tuple<Data_Tree, int, Value*>>> OwnedToClear;
+    // std::vector<std::tuple<Data_Tree, int, Value*>> OwnedToClear;
     virtual ~OwnedHolder() = default;
   public:
     virtual void ClearOwned(Value*, std::string, std::string);
-    virtual void RegisterOwned(Data_Tree, int, Value*);
+    virtual void RegisterOwned(std::string, Data_Tree, int, Value*);
 };
   
   
@@ -582,13 +583,15 @@ class BinaryExprAST : public ExprAST, public OwnedHolder {
   Data_Tree L_dt, R_dt;
 
 public:
-  std::string Elements, Operation;
-  bool is_store_sugar=false, is_fused=false, IsCall=false;
+  std::string Elements, Operation="", BaseOperation;
+  bool is_store_sugar=false, is_fused=false, IsCall=false, IsSpecialization=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::vector<int> Memids;
   int OwnedId=-2;
   std::unique_ptr<ExprAST> LHS, RHS;
+  CallArgsTy CArgs;
   char Op;
+  std::unordered_map<std::string,std::vector<std::tuple<int,int>>> partialtakes;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *);
 

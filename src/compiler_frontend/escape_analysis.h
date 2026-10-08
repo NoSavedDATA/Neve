@@ -1,9 +1,9 @@
 #pragma once
 #include "include.h"
 
-extern std::vector<std::tuple<int,Data_Tree, Value*, int>> OwnedValues;
+extern std::unordered_map<std::string,std::vector<std::tuple<int, Data_Tree, Value*, int>>> OwnedValues;
 extern std::map<int, int> ConditionalTakes;
-extern std::vector<Value*> OwnedsCleared;
+extern std::unordered_map<std::string,std::vector<Value*>> OwnedsCleared;
 
 
 

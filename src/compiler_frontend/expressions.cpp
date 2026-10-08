@@ -481,9 +481,17 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
 
+        if (begins_with(fn, "gpu_tensor")) {
+            std::cout << "compare "  << "\n";
+            print_dt_vec(CArgs.dts);
+            print_dt_vec(templ.dts);
+
+        }
+
         if (!CompareDTs(CArgs, templ, true, true))
             continue;
 
+        std::cout << "compare OKAY " << "\n";
 
 
         fn_ast = tpair.second;
@@ -506,7 +514,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CArgs.version = idx;
         CArgs.version_str = fn;
 
-        // std::cout << "\n\nassign for " << fn << "\n";
+        std::cout << "\n\nassign for " << fn << "\n";
         // print_dt_vec(CArgs.dts);
         // print_dt_vec(templ.dts);
         // CArgs.template_ret.Print();
@@ -522,6 +530,8 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             //     fn_borrows[fn] = fn_borrows[base_name];
             // if (fn_escape_to_memid.count(base_name))
             //     fn_escape_to_memid[fn] = fn_escape_to_memid[base_name];
+            if (fn_memid_to_dt.count(base_name))
+                fn_memid_to_dt[fn] = fn_memid_to_dt[base_name];
             if (fn_memid_to_lastseen.count(base_name))
                 fn_memid_to_lastseen[fn] = fn_memid_to_lastseen[base_name];
             if (fn_conditional_stmt.count(base_name))
@@ -555,6 +565,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
         fn_ast->parser_struct->function_name = fn;
         fn_ast->parser_struct->base_name = base_name;
+
+
+
+
+        std::cout << "Checks " << fn << "\n";
 
 
         // if(parser_struct->gpu==0)
@@ -1104,14 +1119,19 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         if (dt.is_own==ownTy)
           function_owns[fn][arg_name] = (*parser_struct->owned_id)++;
 
+
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
-          fn_memid_to_dt[this->Name][memid] = dt;
           fn_memid[BaseName][arg_name] = memid;
+          fn_memid_to_dt[this->Name][memid] = dt;
           fn_cond_memid[this->Name][arg_name][0] = memid;
           fn_arg_memid[BaseName][arg_name] = memid;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
+            if(begins_with(fn, "gpu")) {
+                std::cout << "set arg  " << fn << " - " << arg_name << "\n";
+                dt.Print();
+            }
         }
     }
     for (auto &[_, name, dt] : CArgs.dyn_args) {
@@ -1449,6 +1469,7 @@ void ObjectExprAST::Checks() {
             function_owns[parser_struct->function_name][name] = owned_id;
         if (memid != -2) {
             fn_memid[parser_struct->base_name][name] = memid;
+            fn_memid_to_dt[parser_struct->function_name][memid] = Data_Tree(ClassName);
             fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
 
@@ -1543,7 +1564,6 @@ void UnkVarExprAST::Checks() {
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
-
     Data_Tree dt = Init->GetDataTree();
 
     if(Init->GetIsMsg()) {
@@ -1572,6 +1592,7 @@ void UnkVarExprAST::Checks() {
     int memid = expr->GetMemId()[0];
     if (memid != -2) {
         fn_memid[parser_struct->base_name][name] = memid; 
+        fn_memid_to_dt[parser_struct->function_name][memid] = data_typeVars[parser_struct->function_name][name];
         fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
     }
     Memids.push_back(memid);
@@ -1751,8 +1772,8 @@ void DataExprAST::SetMemId() {
                     : -2;
         if (check_branch!=0)
             fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
-        fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
         fn_memid[parser_struct->base_name][name] = memid;
+        fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
         fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         Memids.push_back(memid);
     } else {
@@ -1760,6 +1781,7 @@ void DataExprAST::SetMemId() {
         memid = expr->GetMemId()[0];
         if (memid != -2) {
             fn_memid[parser_struct->base_name][name] = memid;
+            fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
             fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
     }
@@ -2198,6 +2220,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   L_dt = LHS->GetDataTree(Op=='=');
   R_dt = RHS->GetDataTree();
 
+
   if (R_dt.Type=="function") {
       FunctionChecks(RHS->GetName());
   }
@@ -2289,8 +2312,9 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
           Elements = LType+"_int";
       }
   }
-  Operation = Elements + "_" + operation;
-  // std::cout << Elements << " | " << Operation << "\n";
+
+  // if (Operation==""||!IsSpecialization)
+      Operation = Elements + "_" + operation;
 
 
   if (LType=="channel"
@@ -2302,10 +2326,13 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   //   L_dt.Print();
   //   std::cout << Operation << "\n";
 
+  BaseOperation = Operation;
   FunctionChecks(Operation);
 
-  if (RType=="channel" && !in_str(LType, primary_data_tokens)&&LType!="str")
+  if (RType=="channel" && !in_str(LType, primary_data_tokens)&&LType!="str") {
     Operation = "void_channel_message";
+    BaseOperation = Operation;
+  }
   std::string type;
   if (Operation=="int_int_div")
     type = "float";
@@ -2407,8 +2434,11 @@ void BinaryExprAST::Checks() {
       if (check_branch!=0)
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(Operation)>0) {
+          // std::cout << "\n\t\033[31mIS OWNED: " << parser_struct->function_name << " | " << Operation << "\033[0m\n\n";
           OwnedId = (*parser_struct->owned_id)++;
       }
+      CArgs = CallArgsTy({L_dt, R_dt});
+      CArgs.template_ret = fn_ret_dt[Operation];
   }
 
   if (Op=='='&& memid!=-2) {
@@ -2423,6 +2453,7 @@ void BinaryExprAST::Checks() {
               fn_cond_memid[parser_struct->function_name][name].clear();
 
           fn_memid[parser_struct->base_name][name] = memid;
+          fn_memid_to_dt[parser_struct->function_name][memid] = R_dt;
           fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
@@ -3051,11 +3082,11 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (arg.IsFromArena()) {
           int MemId = (*parser_struct->mem_id)++;
-          fn_memid_to_dt[this->Name][MemId] = arg;
           fn_memid[BaseName][arg_name] = MemId;
+          fn_memid_to_dt[this->Name][MemId] = arg;
           fn_cond_memid[this->Name][arg_name][0] = MemId;
           fn_arg_memid[BaseName][arg_name] = MemId;
-          fn_memid_to_branch[this->Name][MemId] = MemId;
+          fn_memid_to_branch[BaseName][MemId] = MemId;
         }
     }
 
@@ -3672,3 +3703,5 @@ void FunctionChecks(std::string fn_name) {
       }
     }
 }
+
+
