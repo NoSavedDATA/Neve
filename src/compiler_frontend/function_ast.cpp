@@ -960,11 +960,11 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
-        std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
-        // std::cout << "\n\tSET Ctaken " << fn << " | " << memid << "\n\n";
+        if (begins_with(fn, "ResidualModule_forward")||begins_with(fn, "gpu")||begins_with(fn, "eval"))
+            std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
         if (in_vec(memid, fn_conditional_created_memid[base_name])) {
             // conditionally created memid
-            std::cout << "\n\t\033[33mAS CONDITINOALLY" << "\033[0m\n\n";
+            // std::cout << "\n\t\033[33mAS CONDITINOALLY" << "\033[0m\n\n";
             AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_maybe", boolTy);
             ctakens_maybe[fn][memid] = alloca;
             Builder->CreateStore(const_bool(false),alloca);
@@ -1101,7 +1101,8 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        LogBlue("Arg Ctaken: " + function_name + " -> " + std::to_string(arg_memid));
+        if (begins_with(function_name, "ResidualModule_forward")||begins_with(function_name, "gpu"))
+        std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1155,8 +1156,26 @@ Function *FunctionAST::codegen() {
             if (stmt->OwnedId!=-2)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
         }
+        if (auto *stmt = dynamic_cast<BinaryExprAST*>(node)) {
+            if (stmt->OwnedId!=-2&&stmt->Op!='=') 
+                ownid_to_memid[stmt->OwnedId] = stmt->Memids[0];
+        }
     });
   }
+
+
+  // if (begins_with(function_name, "ResidualModule_f")) {
+  //     std::cout << "------------------------ " << "\n";
+  //     std::cout << "------------------------ " << "\n";
+  //     std::cout << "------------------------ " << "\n";
+
+  //   for(auto &[ownid, memid] : ownid_to_memid)
+// std::cout << function_name <<  " MAP  " << ownid << " TO " << memid << "\n";
+
+  //     std::cout << "------------------------ " << "\n";
+  //     std::cout << "------------------------ " << "\n";
+  //     std::cout << "------------------------ " << "\n";
+  // }
 
 
 
@@ -1204,8 +1223,8 @@ Function *FunctionAST::codegen() {
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
     //
-    // if (TheFunction->getName().starts_with("ResidualModule_forward"))
-    //     TheFunction->print(llvm::errs());
+    if (TheFunction->getName().starts_with("eval"))
+        TheFunction->print(llvm::errs());
     //
     // TheModule->print(llvm::errs(), nullptr);
     //

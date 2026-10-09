@@ -1130,7 +1130,8 @@ inline void SetConditionalTake(std::string fn, int memid) {
 
     // p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
     Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
-    Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
+    // p2t("stored");
+    // Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
     // call("print_bool", {v}); 
 
     SetConditionalMaybeTake(fn, memid);
@@ -3109,7 +3110,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         }
 
         if (partialtakes.count(Operation)>0) {
-            std::cout << "\n\t\033[33mPARTIALLLLLL " << Operation << "\033[0m\n\n";
+            std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->function_name << " | "<< Operation << "\033[0m\n\n";
             Codegen_Partialtakes(parser_struct, CArgs,
                     BaseOperation,
                     partialtakes[Operation],

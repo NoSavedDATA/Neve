@@ -480,7 +480,6 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
 
     bool has_incomplete = fn_borrows_c[callee][arg_memid]<cap
                     ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
-
     if (has_incomplete) {
         fn_borrows_incomplete[parser_struct->base_name].push_back(memid);
         partialtakes.push_back({memid,arg_memid});
@@ -842,11 +841,4 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
 
     }
     fn_bad_borrows[fn_name] = bad_borrows;
-
-    // for(auto &mid : fn_borrows_incomplete[base_callee]) {
-    //     std::cout << " " << base_callee << " incomplete -> " << mid << "\n";
-    // }
-
-
-
 }

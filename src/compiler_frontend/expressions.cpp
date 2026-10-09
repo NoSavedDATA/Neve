@@ -2313,7 +2313,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       }
   }
 
-  // if (Operation==""||!IsSpecialization)
+  if (Operation==""||!IsSpecialization)
       Operation = Elements + "_" + operation;
 
 
@@ -2433,8 +2433,7 @@ void BinaryExprAST::Checks() {
       Memids.push_back(memid);
       if (check_branch!=0)
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
-      if (fn_with_owned_ret.count(Operation)>0) {
-          // std::cout << "\n\t\033[31mIS OWNED: " << parser_struct->function_name << " | " << Operation << "\033[0m\n\n";
+      if (fn_with_owned_ret.count(BaseOperation)>0) {
           OwnedId = (*parser_struct->owned_id)++;
       }
       CArgs = CallArgsTy({L_dt, R_dt});

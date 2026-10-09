@@ -442,7 +442,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         }
 
         if (is_incomplete_transfer) {
-            std::cout << "\n\t\033[31mESCAPE: " << callee << "\033[0m\n\n";
+            std::cout << "\n\t\033[31mESCAPE: " << base_fn << " -- " << callee << ", owned: " << binop->OwnedId << ", memid: " << memid << "\033[0m\n\n";
             fn_borrows[base_fn][memid].push_back(memid);
             fn_borrows_incomplete[base_fn].push_back(memid);
         }
