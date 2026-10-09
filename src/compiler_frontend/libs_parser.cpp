@@ -122,13 +122,11 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     }
     else if(ReturnType=="float") {
         if (IsPointer) {
-            ReturnType = "float_ptr";
-            fn_return_type = int8PtrTy;
-            fn_return_type_str = "float_ptr";
+            fn_return_type = floatPtrTy;
         } else {
             fn_return_type = floatTy;
-            fn_return_type_str = "float";
         }
+        fn_return_type_str = "float";
     }
     else if(ReturnType=="bool"&&!IsPointer) {
         fn_return_type = boolTy;
@@ -166,27 +164,28 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     std::vector<Data_Tree> dts;
 
     for(int i=0; i<ArgTypes.size(); ++i) {
-        if (!begins_with(Name, "initialize__"))
-        {
-            std::string type = ArgTypes[i];
+        if (!begins_with(Name, "initialize__")) {
+            std::string type = ArgTypes[i], arg_name = ArgNames[i];
+            bool is_ptr = ArgIsPointer[i]; 
 
             if(begins_with(type, "DT_"))
                 type = remove_substring(type, "DT_");
-            if(type=="char"&&ArgIsPointer[i])
+            if(type=="char"&&is_ptr)
                 type = "str";
-            if(type=="std::vector<char*>"||type=="std::vector<char>")
-            {
+            if(type=="std::vector<char*>"||type=="std::vector<char>") {
                 LogBlue("It is vec char*");
                 type = "str_vec";
             }
 
-            fn_argnames[Name].push_back(ArgNames[i]);
-            Function_Arg_Types[Name][ArgNames[i]] = type;
-
             Data_Tree dt = Data_Tree(type);
-            Function_Arg_DataTypes[Name][ArgNames[i]] = dt;
-            dts.push_back(dt);
 
+            if (is_ptr&&in_vec(type, primary_data_tokens)&&type!="void")
+                dt.is_buffer=true;
+
+            fn_argnames[Name].push_back(arg_name);
+            Function_Arg_Types[Name][arg_name] = type;
+            Function_Arg_DataTypes[Name][arg_name] = dt;
+            dts.push_back(dt);
         }
         
 
@@ -215,8 +214,13 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     Data_Tree return_dt;
     if (HasRetOverwrite)
         return_dt = LibDT;
-    else
+    else {
         return_dt = Data_Tree(fn_return_type_str);
+        if (IsPointer
+                &&in_vec(fn_return_type_str, primary_data_tokens)
+                &&fn_return_type_str!="void")
+            return_dt.is_buffer = true;
+    }
     fn_ret_dt[Name] = return_dt;
 
     FunctionType *llvm_function = FunctionType::get(
@@ -272,11 +276,19 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
             fn_ret_dt[Name] = LibDT;
         else if(ends_with(nsk_data_type, "_vec")) {
             Data_Tree vec_type = Data_Tree("vec");
+
             vec_type.Nested_Data.push_back(Data_Tree(remove_substring(nsk_data_type, "_vec")));
             fn_ret_dt[Name] = vec_type;
         }
-        else
+        else {
             fn_ret_dt[Name] = Data_Tree(nsk_data_type);
+            if (IsPointer
+                    &&in_vec(nsk_data_type, primary_data_tokens)
+                    &&nsk_data_type!="void") {
+                fn_ret_dt[Name].is_buffer=true;
+                // std::cout << "\n\t\033[31mAHA " << Name << "\033[0m\n\n";
+            }
+        }
         functions_return_type[Name] = nsk_data_type;
     }
 
@@ -300,10 +312,8 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
 
 
     // Check for data-type operations return type
-    for (std::string operation : op_map_names)
-    {
-        if (ends_with(Name, operation))
-        {
+    for (std::string operation : op_map_names) {
+        if (ends_with(Name, operation)) {
             // std::cout << "OPERATION FUNCTION FOUND " << Name << ".\n\n\n\n\n";
 
             std::string operands = Name;
@@ -326,8 +336,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     
 
     // Check if it is a _Clean_Up or _backward function    
-    if(ends_with(Name, "_Clean_Up")&&has_main)
-    {
+    if(ends_with(Name, "_Clean_Up")&&has_main) {
         // std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
 
         std::string nsk_type = Name;

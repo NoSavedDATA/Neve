@@ -265,11 +265,15 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
 
         if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
             ArrayClearOwned(scope_struct, dt, ptr);
+
+        // if (dt.Type=="BackNode") {
+        //     p2t("cond free in : " + fn);
+        //     // call("print_void_ptr", {ptr});
+        // }
+
         Disown(scope_struct, dt, ptr);
 
         if (is_conditional) {
-            // p2t("cond free: ");
-            // call("print_void_ptr", {ptr});
             call("free", {ptr});
             if (ctakens_maybe[fn].count(memid)>0) {
                 Builder->CreateStore(const_bool(false), ctakens_maybe[fn][memid]);
@@ -793,6 +797,7 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     std::vector<int> retids;
     int retcount=0;
     parser_struct->function_name = fn_name;
+
 
 
     *parser_struct->mem_id = parser_struct->memid_arg_offset;

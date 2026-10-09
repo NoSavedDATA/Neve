@@ -35,6 +35,15 @@ void set_functions_args_type() {
 		
 		fn_argnames["print_void_ptrC"].push_back("0");
 		fn_argnames["print_void_ptrC"].push_back("1");
+		
+		Function_Arg_Types["print_float_ptrC"]["0"] = "Scope_Struct";
+		Function_Arg_Types["print_float_ptrC"]["1"] = "float";
+		
+		Function_Arg_DataTypes["print_float_ptrC"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["print_float_ptrC"]["1"] = Data_Tree("float");
+		
+		fn_argnames["print_float_ptrC"].push_back("0");
+		fn_argnames["print_float_ptrC"].push_back("1");
 	
 		
 		Function_Arg_Types["float_to_bf16"]["0"] = "Scope_Struct";

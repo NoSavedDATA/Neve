@@ -95,6 +95,9 @@ llvm::Type *get_type_from_data(Parser_Struct *parser_struct, Data_Tree dt) {
     llvm_type = get_type_from_data(parser_struct, Data_Tree(dt.Nested_Data[0].Type));
     int space = (dt.is_smem) ? 3 : 0;
     llvm_type = PointerType::get(llvm_type, space);
+  } else if (dt.is_buffer) {
+    llvm_type = get_type_from_data(parser_struct, Data_Tree(dt.Type));
+    llvm_type = llvm_type->getPointerTo();
   }
   else if (str_toTy.count(type)>0) {
       llvm_type = str_toTy[type];
@@ -420,7 +423,25 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 
   return alloca;
 }
+AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
+                                          Type *alloca_type) {
+  IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
+                   TheFunction->getEntryBlock().begin());
 
+  AllocaInst *alloca = TmpB.CreateAlloca(alloca_type, nullptr);
+
+  return alloca;
+}
+
+AllocaInst *CreateEntryBlockAlloca(Type *alloca_type) {
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
+                   TheFunction->getEntryBlock().begin());
+
+  AllocaInst *alloca = TmpB.CreateAlloca(alloca_type, nullptr);
+
+  return alloca;
+}
 
 void StoreAlloca(Function *TheFunction, Parser_Struct *parser_struct, std::string fn_name, std::string name, Value *val, Data_Tree dt) {
     AllocaInst *alloca;
@@ -447,9 +468,36 @@ Value *LoadVal(std::string fn_name, std::string name, Data_Tree dt) {
 }
 
 
-
-
-
+void SetPHIs(std::string fn, std::vector<std::string> &changed_vars,
+        std::map<std::string, PHINode*> &function_phi_values,
+        BasicBlock *CurBB) {
+    for (auto &name : changed_vars) {
+        PHINode *phi = function_phi_values[name];
+        Value *val = function_values[fn][name]; 
+        phi->addIncoming(val, CurBB);
+        function_values[fn][name] = phi;
+        if (fn_memid[fn].count(name)>0) {
+            int memid = fn_memid[fn][name];
+            fn_memid_to_val[fn][memid] = phi;
+        }
+    }
+}
+void SetPHIs(std::string fn, std::vector<std::string> &changed_vars,
+        std::map<std::string, PHINode*> &function_phi_values,
+        BasicBlock *CurBB, std::vector<BasicBlock *> &ContinueBB) {
+    for (auto &name : changed_vars) {
+        PHINode *phi = function_phi_values[name];
+        Value *val = function_values[fn][name]; 
+        phi->addIncoming(val, CurBB);
+        for (auto &bb : ContinueBB)
+            phi->addIncoming(block_values[bb][name], bb);
+        function_values[fn][name] = phi;
+        if (fn_memid[fn].count(name)>0) {
+            int memid = fn_memid[fn][name];
+            fn_memid_to_val[fn][memid] = phi;
+        }
+    }
+}
 
 Value *NumberExprAST::codegen(Value *scope_struct) {
   if (!ShallCodegen)
@@ -614,7 +662,8 @@ StructType *tupleTy_of(const std::vector<llvm::Type*> &types) {
 bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct) {
   int differences = LType.Compare(RType);
   if (differences>0) {
-      // bt(5);
+      bt(5);
+      std::cout << " " << parser_struct->function_name << "\n";
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -1373,6 +1422,7 @@ void BlockConditionals(std::string fn) {
 Value *IfExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0.0f);
+    std::string fn = parser_struct->function_name;
 
 
     Value *CondV = Cond->codegen(scope_struct);
@@ -1401,15 +1451,15 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
-    auto old_allocas = function_allocas[parser_struct->function_name];
-    auto old_values = function_values[parser_struct->function_name];
+    auto old_allocas = function_allocas[fn];
+    auto old_values = function_values[fn];
 
 
     Value *ThenV;
     for (auto &then_body : Then)
         ThenV = then_body->codegen(scope_struct);
     ThenPostBB = Builder->GetInsertBlock();
-    block_values[ThenPostBB] = function_values[parser_struct->function_name];
+    block_values[ThenPostBB] = function_values[fn];
 
 
 
@@ -1418,7 +1468,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
         return nullptr;
     if (!ThenTerminated) {
         ThenPostBB = Builder->GetInsertBlock();
-        block_values[ThenPostBB] = function_values[parser_struct->function_name];
+        block_values[ThenPostBB] = function_values[fn];
         Builder->CreateBr(MergeBB);
     }
 
@@ -1426,8 +1476,8 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), ElseBB);
     Builder->SetInsertPoint(ElseBB);
 
-    function_values[parser_struct->function_name] = old_values;
-    function_allocas[parser_struct->function_name] = old_allocas;
+    function_values[fn] = old_values;
+    function_allocas[fn] = old_allocas;
 
     Value *ElseV;
     for (auto &else_body : Else)
@@ -1435,7 +1485,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
     ElsePostBB = Builder->GetInsertBlock();
 
     if(Else.size()>0)
-        block_values[ElsePostBB] = function_values[parser_struct->function_name];
+        block_values[ElsePostBB] = function_values[fn];
     else {
         ElseV = const_int(0);
         block_values[ElsePostBB] = old_values;
@@ -1466,17 +1516,21 @@ Value *IfExprAST::codegen(Value *scope_struct) {
                 PHINode *phi = Builder->CreatePHI(value->getType(), 2);
                 phi->addIncoming(then_values[name], ThenPostBB);
                 phi->addIncoming(else_values[name], ElsePostBB);
-                function_values[parser_struct->function_name][name] = phi;
+                function_values[fn][name] = phi;
+                if (fn_memid[fn].count(name)>0) {
+                    int memid = fn_memid[fn][name];
+                    fn_memid_to_val[fn][memid] = phi;
+                }
             }
         } else if (!ThenTerminated)
-            function_values[parser_struct->function_name][name] = then_values[name];
+            function_values[fn][name] = then_values[name];
         else if (!ElseTerminated)
-            function_values[parser_struct->function_name][name] = else_values[name];
+            function_values[fn][name] = else_values[name];
         else {}
     }
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
-    BlockConditionals(parser_struct->function_name);
+    ClearOwned(scope_struct, fn, parser_struct->base_name);
+    BlockConditionals(fn);
     return const_float(0.0f);
 }
 
@@ -1487,6 +1541,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {
     if (not ShallCodegen)
         return const_float(0.0f);
+    std::string fn = parser_struct->function_name;
 
 
     Value *CondV = Cond->codegen(scope_struct);
@@ -1509,8 +1564,8 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
-    auto old_values = function_values[parser_struct->function_name];
-    auto old_allocas = function_allocas[parser_struct->function_name];
+    auto old_values = function_values[fn];
+    auto old_allocas = function_allocas[fn];
 
 
     Value *ThenV;
@@ -1519,15 +1574,15 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
             ThenV = if_stmt->codegen_from_loop(scope_struct,
                     ThenBB, IncBB, LoopAfter, break_values_snapshot, BreakBB, ContinueBB);
         else if (auto *break_stmt = dynamic_cast<BreakExprAST*>(then_body.get())) {
-            break_values_snapshot = function_values[parser_struct->function_name];
+            break_values_snapshot = function_values[fn];
             auto bb = Builder->GetInsertBlock();
-            block_values[bb] = function_values[parser_struct->function_name];
+            block_values[bb] = function_values[fn];
             BreakBB.push_back(bb);
             Builder->CreateBr(LoopAfter);
         }
         else if (auto *stmt = dynamic_cast<ContinueExprAST*>(then_body.get())) {
             auto bb = Builder->GetInsertBlock();
-            block_values[bb] = function_values[parser_struct->function_name];
+            block_values[bb] = function_values[fn];
             ContinueBB.push_back(bb);
             Builder->CreateBr(IncBB);
         }
@@ -1535,7 +1590,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
             ThenV = then_body->codegen(scope_struct);
     }
     ThenPostBB = Builder->GetInsertBlock();
-    block_values[ThenPostBB] = function_values[parser_struct->function_name];
+    block_values[ThenPostBB] = function_values[fn];
 
 
     bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
@@ -1550,8 +1605,8 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->SetInsertPoint(ElseBB);
 
 
-    function_values[parser_struct->function_name] = old_values;
-    function_allocas[parser_struct->function_name] = old_allocas;
+    function_values[fn] = old_values;
+    function_allocas[fn] = old_allocas;
 
     Value *ElseV;
     for (auto &else_body : Else)
@@ -1559,7 +1614,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     ElsePostBB = Builder->GetInsertBlock();
 
     if(Else.size()>0)
-        block_values[ElsePostBB] = function_values[parser_struct->function_name];
+        block_values[ElsePostBB] = function_values[fn];
     else {
         ElseV = const_int(0);
         block_values[ElsePostBB] = old_values;
@@ -1588,17 +1643,21 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
                 PHINode *phi = Builder->CreatePHI(value->getType(), 2);
                 phi->addIncoming(then_values[name], ThenPostBB);
                 phi->addIncoming(else_values[name], ElsePostBB);
-                function_values[parser_struct->function_name][name] = phi;
+                function_values[fn][name] = phi;
+                if (fn_memid[fn].count(name)>0) {
+                    int memid = fn_memid[fn][name];
+                    fn_memid_to_val[fn][memid] = phi;
+                }
             }
         } else if (!ThenTerminated)
-            function_values[parser_struct->function_name][name] = then_values[name];
+            function_values[fn][name] = then_values[name];
         else if (!ElseTerminated)
-            function_values[parser_struct->function_name][name] = else_values[name];
+            function_values[fn][name] = else_values[name];
         else {}
     }
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
-    BlockConditionals(parser_struct->function_name);
+    ClearOwned(scope_struct, fn, parser_struct->base_name);
+    BlockConditionals(fn);
     return const_float(0.0f);
 }
 
@@ -1722,6 +1781,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0);
 
+    std::string fn = parser_struct->function_name;
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
@@ -1744,8 +1804,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for.after");
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
-    auto old_allocas = function_allocas[parser_struct->function_name];
-    block_values[PreheaderBB] = function_values[parser_struct->function_name];
+    auto old_allocas = function_allocas[fn];
+    block_values[PreheaderBB] = function_values[fn];
 
     Builder->CreateBr(CondBB);
     Builder->SetInsertPoint(CondBB);
@@ -1757,7 +1817,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct->function_name];
+    auto old_function_values = function_values[fn];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (name!=VarName && old_function_values.count(name)>0) {
@@ -1766,14 +1826,14 @@ Value *ForExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 2, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct->function_name][name] = phi_val;
+            function_values[fn][name] = phi_val;
         }
     }
 
     // Control var phi
     PHINode *LoopVar = Builder->CreatePHI(StartVal->getType(), 2, VarName.c_str());
     LoopVar->addIncoming(StartVal, PreheaderBB);
-    function_values[parser_struct->function_name][VarName] = LoopVar;
+    function_values[fn][VarName] = LoopVar;
 
 
 
@@ -1807,7 +1867,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     std::vector<BasicBlock *> BreakBB, ContinueBB;
 
     Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
-    block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
+    block_values[Builder->GetInsertBlock()] = function_values[fn];
 
     Builder->CreateBr(IncBB);
     TheFunction->insert(TheFunction->end(), IncBB);
@@ -1825,11 +1885,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     LoopVar->addIncoming(NextVal, CurBB);
 
 
-    for (auto &name : changed_vars) {
-        Value *val = function_values[parser_struct->function_name][name];
-        function_phi_values[name]->addIncoming(val, CurBB);
-        function_values[parser_struct->function_name][name] = function_phi_values[name];
-    }
+    SetPHIs(fn, changed_vars, function_phi_values, CurBB);
+
     Builder->CreateBr(CondBB);
 
 
@@ -1839,14 +1896,15 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     TheFunction->insert(TheFunction->end(), AfterBB);
     Builder->SetInsertPoint(AfterBB);
 
-    SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values,
+    SetBreakPHIS(parser_struct, assigned_vars, 
+                 old_function_values, function_phi_values,
                  BreakBB, CondBB);
 
-    function_allocas[parser_struct->function_name] = old_allocas;
+    function_allocas[fn] = old_allocas;
     // verifyFunction(*TheFunction);
     // CurModule->print(llvm::errs(), nullptr);
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, fn, parser_struct->base_name);
 
     return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
@@ -1858,6 +1916,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 Value *ForEachExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
+    std::string fn = parser_struct->function_name;
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
@@ -1867,7 +1926,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     Value *CurIdx = const_int(0);
 
 
-    function_values[parser_struct->function_name][VarName] = CurIdx;
+    function_values[fn][VarName] = CurIdx;
 
 
     Value *vec = Vec->codegen(scope_struct);
@@ -1887,7 +1946,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
 
-    block_values[PreheaderBB] = function_values[parser_struct->function_name];
+    block_values[PreheaderBB] = function_values[fn];
 
     // Insert an explicit fall through from the current block to the LoopBB.
     Builder->CreateBr(CondBB); 
@@ -1898,7 +1957,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     std::vector<std::string> assigned_vars, changed_vars;
     Get_Recursive_Assign_Statements(Body, assigned_vars);
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct->function_name];
+    auto old_function_values = function_values[fn];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (name!=VarName && old_function_values.count(name)>0) {
@@ -1907,13 +1966,13 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 2, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct->function_name][name] = phi_val;
+            function_values[fn][name] = phi_val;
         }
     }
     // Control var phi
     PHINode *LoopVar = Builder->CreatePHI(CurIdx->getType(), 2, VarName.c_str());
     LoopVar->addIncoming(CurIdx, PreheaderBB);
-    function_values[parser_struct->function_name][VarName] = LoopVar;
+    function_values[fn][VarName] = LoopVar;
 
 
 
@@ -1961,12 +2020,12 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     }
     if((vec_type=="list"||vec_type=="tuple")&&(Type=="float"||Type=="int"))
         vec_value = callret("to_"+Type, {scope_struct, vec_value});
-    function_values[parser_struct->function_name][VarName] = vec_value;
+    function_values[fn][VarName] = vec_value;
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
     Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
-    block_values[Builder->GetInsertBlock()] = function_values[parser_struct->function_name];
+    block_values[Builder->GetInsertBlock()] = function_values[fn];
 
 
     Builder->CreateBr(IncBB);
@@ -1977,11 +2036,8 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     Value *NextVal = Builder->CreateAdd(LoopVar, StepVal, "nextvar"); // Increment  
 
     LoopVar->addIncoming(NextVal, CurBB);
-    for (auto &name : changed_vars) {
-        function_phi_values[name]->addIncoming(function_values[parser_struct->function_name][name], CurBB);
-        function_values[parser_struct->function_name][name] = function_phi_values[name];
-    }
 
+    SetPHIs(fn, changed_vars, function_phi_values, CurBB);
 
     Builder->CreateBr(CondBB);
 
@@ -1993,7 +2049,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     SetBreakPHIS(parser_struct, assigned_vars, old_function_values, function_phi_values, BreakBB, CondBB);
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, fn, parser_struct->base_name);
     return const_float(0.0f);
 }
 
@@ -2001,6 +2057,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 Value *WhileExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0.0f);
+    std::string fn = parser_struct->function_name;
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
@@ -2012,7 +2069,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
-    block_values[PreheaderBB] = function_values[parser_struct->function_name];
+    block_values[PreheaderBB] = function_values[fn];
 
     // Jump to the condition block
     Builder->CreateBr(CondBB);
@@ -2023,7 +2080,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
     Get_Recursive_Assign_Statements(Body, assigned_vars);
 
     // Possible phi for each value
-    auto old_function_values = function_values[parser_struct->function_name];
+    auto old_function_values = function_values[fn];
     std::map<std::string, PHINode*> function_phi_values;
     for (const auto &name : assigned_vars) {
         if (old_function_values.count(name)>0) {
@@ -2032,7 +2089,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
             PHINode *phi_val = Builder->CreatePHI(val->getType(), 0, name.c_str());
             phi_val->addIncoming(val, PreheaderBB);
             function_phi_values[name] = phi_val;
-            function_values[parser_struct->function_name][name] = phi_val;
+            function_values[fn][name] = phi_val;
         }
     }
 
@@ -2054,28 +2111,19 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
             break_values_snapshot,
             BreakBB, ContinueBB);
     BasicBlock *CurBB = Builder->GetInsertBlock(); // handles branching
-    block_values[CurBB] = function_values[parser_struct->function_name];
+    block_values[CurBB] = function_values[fn];
 
-    for (auto &name : changed_vars) {
-        PHINode *phi = function_phi_values[name];
-        Value *val = function_values[parser_struct->function_name][name]; 
-        phi->addIncoming(val, CurBB);
-        for (auto &bb : ContinueBB)
-            phi->addIncoming(block_values[bb][name], bb);
-        function_values[parser_struct->function_name][name] = phi;
-    }
+
+    SetPHIs(fn, changed_vars, function_phi_values, CurBB, ContinueBB);
 
     Builder->CreateBr(CondBB);
 
-
     Builder->SetInsertPoint(AfterBB);
-    // if (ContinueBB.size()>0)
-// TheFunction->print(llvm::errs());
 
     SetBreakPHIS(parser_struct, assigned_vars,
             old_function_values, function_phi_values, BreakBB, CondBB);
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, fn, parser_struct->base_name);
     return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
 
@@ -2581,7 +2629,8 @@ void BinaryStore(Parser_Struct *parser_struct, Value *scope_struct, int Op, std:
             Builder->CreateStore(R, gep);
         } else if (L_dt.is_buffer) {// float[]
             L_dt = LHS->GetDataTree(true);
-            llvm::Type *Ty = get_type_from_data(parser_struct, L_dt);
+            llvm::Type *Ty = get_type_from_data(parser_struct,
+                                    Data_Tree(L_dt.Type));
             
             Value *gep = Builder->CreateGEP(Ty, vec_ptr, idx);
             Builder->CreateStore(R, gep);
@@ -2795,7 +2844,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if(Op==tok_offby) {
             if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
                 if (L_dt.is_buffer) {
-                    llvm::Type *lTy = get_type_from_data(parser_struct, L_dt);
+                    llvm::Type *lTy = get_type_from_data(parser_struct,
+                                                Data_Tree(L_dt.Type));
                     Value *ptr = Builder->CreateGEP(lTy, L, R);
                     ret = ptr;
                 } else {
@@ -2811,7 +2861,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if(Op==tok_offby) {
             if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
                 if (L_dt.is_buffer) {
-                    llvm::Type *lTy = get_type_from_data(parser_struct, L_dt);
+                    llvm::Type *lTy = get_type_from_data(parser_struct,
+                                            Data_Tree(L_dt.Type));
                     Value *ptr = Builder->CreateGEP(lTy, L, R);
                     ret = ptr;
                 } else {
@@ -3213,7 +3264,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
     if (Opcode==tok_not||Opcode=='!') {
         if(operand_type!="bool") {
-            if (!in_vec(operand_type, primary_data_tokens)) {
+            if (!in_vec(operand_type, primary_data_tokens)||op_dt.is_buffer) {
                 Value *nullPtr = ConstantPointerNull::get(
                         cast<PointerType>(int8PtrTy)
                         );
@@ -4337,8 +4388,6 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
     std::vector<llvm::Type *> types;
     for (auto &type : Types) {
         llvm::Type *Ty = get_type_from_data(parser_struct, type);
-        if (type.is_buffer)
-            Ty = Ty->getPointerTo();
         types.push_back(Ty);
     }
 
@@ -4353,8 +4402,6 @@ Function *PrototypeAST::codegen(std::vector<std::unique_ptr<Arg_Pair>> *dynamic_
 
             Data_Tree type = arg->dt;
             llvm::Type *Ty = get_type_from_data(parser_struct, type);
-            if (type.is_buffer)
-                Ty = Ty->getPointerTo();
             types.push_back(Ty);
         }
     }
@@ -4447,8 +4494,6 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
     std::vector<llvm::Type *> types;
     for (auto &type : ArgsType) {
         llvm::Type *Ty = get_type_from_data(parser_struct, type);
-        if (type.is_buffer)
-            Ty = Ty->getPointerTo();
         types.push_back(Ty);
     }
 
@@ -4849,6 +4894,7 @@ Value *ViewExprAST::codegen(Value *scope_struct) {
 
 Value *NameableLLVMIRCall::codegen(Value *scope_struct) {  
     int arg_type_check_offset=1, target_args_size=Args.size();
+
 
     // std::vector<Value*> ArgsV = {scope_struct};
 
@@ -5376,10 +5422,8 @@ inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_
 
 
 Value *getValAddress(Function *TheFunction, Parser_Struct *parser_struct, Value *val, Data_Tree dt, int i) {
-    if (dt.is_buffer||dt.is_array)
-        return val;
-
-    // Needs stack address encapsulation for a register value
+    // if (dt.is_buffer||dt.is_array)
+    //     return val;
 
     Value *alloca = CreateEntryBlockAlloca(TheFunction,
                         "args_"+std::to_string(i),
@@ -5466,6 +5510,7 @@ Value *LaunchExprAST::codegen(Value *scope_struct) {
     ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
             scope_struct,\
             fn_name, false, 0);
+
 
     if(kernel_fn.count(fn_name)==0)
         LogErrorC(parser_struct->line, "Kernel " + fn_name + " not found.");
@@ -5727,7 +5772,6 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 Value *NameableCall::codegen(Value *scope_struct) {  
     Checks();
 
-
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
     int target_args_size=Args.size()+1;
@@ -5742,6 +5786,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     bool may_allocate = ((!is_nsk_fn||Callee=="scope_struct_Sweep")&&\
                           gpu_fn.count(Callee)==0&&llvm_callee.count(Callee)==0);
+
 
     if (may_allocate) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
@@ -5763,6 +5808,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     std::vector<Value*> ArgsV = {scope_struct};
     std::vector<Data_Tree> ArgTypes;
 
+
     Value *obj_ptr;
     bool shall_swap = false;
     if(Depth>1&&!FromLib) {
@@ -5776,7 +5822,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
             target_args_size++;
             
             std::string type = Inner->GetDataTree().Type;
-            if(!in_vec(type, {"vec", "str"})&&!in_vec(type, int_types)) {
+            // if(!in_vec(type, {"vec", "str"})&&!in_vec(type, int_types)) {
+            if(Classes.count(type)>0||in_vec(type,compound_tokens)) {
                 BasicBlock *GotNullBB = BasicBlock::Create(*TheContext, "nested_call.bad.bb", TheFunction);
                 BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "nested_call.ok.bb", TheFunction);
 
@@ -5800,6 +5847,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (ReturnType=="")
         GetDataTree();
 
+
     if (!is_first_citizen) {
         ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), Args, ArgTypes,\
                 scope_struct,\
@@ -5819,6 +5867,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if (Callee=="array_clear")
       ArrayClear(scope_struct, Inner.get());
   
+
 
 
   Value *ret;

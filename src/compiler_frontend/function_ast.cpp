@@ -1223,8 +1223,8 @@ Function *FunctionAST::codegen() {
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
     //
-    if (TheFunction->getName().starts_with("eval"))
-        TheFunction->print(llvm::errs());
+    // if (TheFunction->getName().starts_with("eval"))
+    //     TheFunction->print(llvm::errs());
     //
     // TheModule->print(llvm::errs(), nullptr);
     //

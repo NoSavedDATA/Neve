@@ -142,8 +142,10 @@ int Nameable::GetIsOwned() {
         return Ownedids[0];
     if (IsOwnedUnique)
         return -1;
-    if (Name=="self"&&parser_struct->self_obj_owned)
+    if (Name=="self"&&parser_struct->self_obj_owned) {
+        std::cout << "\n\t\033[33mSELF OWNED: " << parser_struct->function_name << "\033[0m\n\n";
         return -1;
+    }
 
     std::string scope = parser_struct->function_name;
 

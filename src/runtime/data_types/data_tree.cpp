@@ -204,7 +204,7 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
     if(Type=="nullptr" && (!in_vec(other_type, primary_data_tokens)||other_tree.is_array))
         return 0;
 
-    if((!in_vec(Type, primary_data_tokens)||is_array) && other_type=="nullptr")
+    if((!in_vec(Type, primary_data_tokens)||is_array||is_buffer) && other_type=="nullptr")
         return 0;
 
 
@@ -352,5 +352,17 @@ Data_Tree GenericUnmangleType(Data_Tree dt, Data_Tree generic_dt) {
 std::string UnmangleVec(Data_Tree dt) {
     if (dt.Type=="channel")
         return  dt.Nested_Data[0].Type + "_channel";
-    return dt.Type;
+    std::string ret = dt.Type;
+    // if (dt.is_buffer||dt.is_array)
+    //     ret += "_buffer";
+    return ret;
+}
+
+std::string UnmangleDT_Call(Data_Tree dt) {
+    if (dt.Type=="channel")
+        return  dt.Nested_Data[0].Type + "_channel";
+    std::string ret = dt.Type;
+    if (dt.is_buffer||dt.is_array)
+        ret += "_buffer";
+    return ret;
 }

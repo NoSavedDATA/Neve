@@ -57,6 +57,9 @@ Function *getFunction(std::string Name);
 AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                                           StringRef VarName, llvm::Type *);
 
+AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
+                                          llvm::Type *);
+AllocaInst *CreateEntryBlockAlloca(llvm::Type *);
 
 
 

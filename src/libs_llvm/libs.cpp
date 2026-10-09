@@ -59,6 +59,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("print_void_ptrC", print_void_ptrCTy);
 
+	FunctionType *print_float_ptrTy= FunctionType::get(
+		Type::getVoidTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_float_ptr", print_float_ptrTy);
+
+	FunctionType *print_float_ptrCTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_float_ptrC", print_float_ptrCTy);
+
 	FunctionType *print_boolTy= FunctionType::get(
 		Type::getVoidTy(*TheContext),
 		{Type::getInt1Ty(*TheContext)},

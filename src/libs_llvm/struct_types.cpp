@@ -157,6 +157,8 @@ void Generate_Class_Types() {
                 Data_Tree dt = data_typeVars[class_name][attr];
                 // uint64_t offset = layout->getElementOffset(idx);
                 // LogBlue("offset of " + std::to_string(idx) + " is " + std::to_string(offset));
+                
+                // todo consider buffers,e.g,float[]
                 if (!in_vec(dt.Type, {primary_data_tokens}) && dt.Type!="charv") {
                     uint64_t offset = layout->getElementOffset(idx);
                     offsets.push_back(offset);

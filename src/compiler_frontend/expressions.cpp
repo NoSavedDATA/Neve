@@ -481,17 +481,16 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
 
-        if (begins_with(fn, "gpu_tensor")) {
-            std::cout << "compare "  << "\n";
-            print_dt_vec(CArgs.dts);
-            print_dt_vec(templ.dts);
-
-        }
+        // if (begins_with(fn, "gpu_tensor")) {
+        //     std::cout << "compare "  << "\n";
+        //     print_dt_vec(CArgs.dts);
+        //     print_dt_vec(templ.dts);
+        // }
 
         if (!CompareDTs(CArgs, templ, true, true))
             continue;
 
-        std::cout << "compare OKAY " << "\n";
+        // std::cout << "compare OKAY " << "\n";
 
 
         fn_ast = tpair.second;
@@ -514,7 +513,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CArgs.version = idx;
         CArgs.version_str = fn;
 
-        std::cout << "\n\nassign for " << fn << "\n";
+        // std::cout << "\n\nassign for " << fn << "\n";
         // print_dt_vec(CArgs.dts);
         // print_dt_vec(templ.dts);
         // CArgs.template_ret.Print();
@@ -569,9 +568,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
 
 
-        std::cout << "Checks " << fn << "\n";
-
-
+        // std::cout << "Checks " << fn << "\n";
         // if(parser_struct->gpu==0)
             for (auto &body : fn_ast->Body) {
                   body->Traverse([parser_struct, &fn](ExprAST *node) {
@@ -3512,7 +3509,7 @@ void NameableCall::Checks() {
       else { // x.view()
         Inner = std::move(Inner->Inner);
         Inner->Parent = this;
-        std::string inner_ty = UnmangleVec(inner_dt); 
+        std::string inner_ty = UnmangleDT_Call(inner_dt); 
         Callee = inner_ty + "_" + Callee;
       }
     } 

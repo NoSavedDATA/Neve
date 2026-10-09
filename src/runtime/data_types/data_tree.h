@@ -44,4 +44,5 @@ extern std::map<std::string, Data_Tree> fn_ret_dt;
 
 Data_Tree GenericUnmangleType(Data_Tree dt, Data_Tree generic_dt);
 std::string UnmangleVec(Data_Tree dt);
+std::string UnmangleDT_Call(Data_Tree dt);
 void print_dt_vec(std::vector<Data_Tree> dt);

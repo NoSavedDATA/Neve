@@ -5,6 +5,8 @@ proto int sys strcmp(any, any)
 proto i64 sys strlen(any)
 proto any sys memchr(any, int, i64)
 proto any sys aligned_alloc(i64, i64)
+proto void sys print_float_ptr(float[])
+proto void print_float_ptrC(float[])
 proto any sys malloc(int)
 proto int print_bb()
 proto int print_Value(any)
@@ -35,6 +37,7 @@ proto bool map_has_str(map<str,any>, str)
 proto bool map_has_void_ptr(map<any,any>, any)
 
 proto int map_clear(any)
+
 
 operation float[] buffer_float_int_offby
 operation float[] buffer_float_i64_offby
