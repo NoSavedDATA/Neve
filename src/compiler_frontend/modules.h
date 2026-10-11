@@ -39,7 +39,7 @@ extern std::unordered_map<std::string,std::unordered_map<CallArgsTy,FunctionAST*
 extern std::vector<std::tuple<FunctionAST *,
        std::unique_ptr<PrototypeAST>,
        Parser_Struct*,
-       std::string, std::string>> generics_fn;
+       std::string, std::string,bool>> generics_fn;
 
 extern std::map<std::string, StructType*> struct_types;
 extern std::unordered_map<std::string, int> struct_type_size;

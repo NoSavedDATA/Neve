@@ -337,7 +337,7 @@ std::unique_ptr<ExprAST> ParseBoolExpr(Parser_Struct *parser_struct) {
 
 
 std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct *parser_struct) {
-  auto Result = std::make_unique<StringExprAST>(IdentifierStr);
+  auto Result = std::make_unique<StringExprAST>(parser_struct,IdentifierStr);
   getNextToken(); // consume the "
   return std::move(Result);
 }
@@ -1386,7 +1386,7 @@ std::unique_ptr<ExprAST> ParseNewList(Parser_Struct *parser_struct, std::string 
       return std::make_unique<IntervalLoopExprAST>(parser_struct, std::move(Elements), std::move(Finishes), std::move(Body), std::move(var_names),
               scope_depth, cstmtid);
   }
-  return std::make_unique<NewVecExprAST>(std::move(Elements), "array");
+  return std::make_unique<NewVecExprAST>(parser_struct,std::move(Elements), "array");
 }
 
 std::unique_ptr<ExprAST> ParseView(std::unique_ptr<ExprAST> elem_offset_stmt,
@@ -1459,7 +1459,7 @@ std::unique_ptr<ExprAST> ParseNewDict(std::unique_ptr<ExprAST> elem_offset_stmt,
   getNextToken(); // }
 
   
-  Elements.push_back(std::make_unique<StringExprAST>("TERMINATE_VARARG"));
+  Elements.push_back(std::make_unique<StringExprAST>(parser_struct,"TERMINATE_VARARG"));
 
   return std::make_unique<NewDictExprAST>(std::move(Keys), std::move(Elements), "dict", parser_struct);
 }
@@ -3049,7 +3049,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
     if (!Func)
       return nullptr;
     
-    //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
+    // std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 
 
     PrototypeAST proto = Func->getProto();

@@ -236,9 +236,12 @@ class BoolExprAST : public ExprAST {
 class StringExprAST : public ExprAST {
   public:
     std::string Val;
-    StringExprAST(std::string Val); 
+    int MemId=OM_non_obj;
+    StringExprAST(Parser_Struct*,std::string Val); 
 
   Value *codegen(Value *scope_struct) override;
+  std::vector<int> GetMemId() override;
+  void Checks();
 };
 
 class CharExprAST : public ExprAST {
@@ -373,8 +376,9 @@ class NewTupleExprAST : public ExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Values;
     Data_Tree data_type;
+    int Line;
     
-    NewTupleExprAST(
+    NewTupleExprAST(Parser_Struct*,
         std::vector<std::unique_ptr<ExprAST>> Values);
 
   Value *codegen(Value *scope_struct) override;
@@ -408,14 +412,18 @@ class NewVecExprAST : public ExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Values;
     std::string Type;
+    int Line;
     
-    NewVecExprAST(
+    NewVecExprAST(Parser_Struct*,
         std::vector<std::unique_ptr<ExprAST>> Values,
         std::string Type);
 
+  std::vector<int> Memids;
+  int OwnedId=OM_non_obj;
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Checks() override;
+  std::vector<int> GetMemId() override;
 };
 
 class NewDictExprAST : public ExprAST {
@@ -501,15 +509,24 @@ class MeminferExpr : public ExprAST {
   void Checks();
 };
 
-class NewExprAST : public ExprAST {
+class ArgsBasedExpr {
   public:
-    std::string DataName, Callee;
-    std::vector<std::unique_ptr<ExprAST>> Args;
+      virtual ~ArgsBasedExpr() = default;
+  public:
+      std::vector<std::unique_ptr<ExprAST>> Args;
+      CallArgsTy CompiledArgsVec, CArgs;
+      std::string BaseCallee, Callee;
+      std::vector<std::tuple<int,int>> partialtakes;
+};
+
+class NewExprAST : public ExprAST, public ArgsBasedExpr {
+  public:
+    std::string DataName;
     std::unique_ptr<ExprAST> meminfer_expr=nullptr;
     bool is_high_level_obj=false, checked=false;
     Data_Tree data_type=Data_Tree("");
-    int MemId=0, OwnedPoolOffset=-1, MemoryType=newTy,
-        OwnedId=-2, OwnedRetPoolOffset=-1;
+    int MemId=OM_start_offset, OwnedPoolOffset=-1, MemoryType=newTy,
+        OwnedId=OM_non_obj, OwnedRetPoolOffset=-1;
     Value *ptr=nullptr;
 
 
@@ -525,6 +542,8 @@ class NewExprAST : public ExprAST {
   std::vector<int> GetMemId() override;
   void AllocPtr(Value *ptr);
   void Checks();
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 
@@ -587,7 +606,7 @@ public:
   bool is_store_sugar=false, is_fused=false, IsCall=false, IsSpecialization=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::vector<int> Memids;
-  int OwnedId=-2;
+  int OwnedId=OM_non_obj;
   std::unique_ptr<ExprAST> LHS, RHS;
   CallArgsTy CArgs;
   char Op;
@@ -626,12 +645,14 @@ class ViewExprAST : public ExprAST {
 public:
   std::unique_ptr<ExprAST> LHS;
   std::unique_ptr<ExprAST> RHS;
+  int MemId=OM_non_obj;
   bool has_R_cast=false;
   ViewExprAST(std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *);
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Checks() override;
+  std::vector<int> GetMemId() override;
 };
 
 
@@ -645,7 +666,7 @@ class Nameable : public ExprAST {
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1;
-  std::vector<int> Memids={-2}, Ownedids={-2};
+  std::vector<int> Memids={OM_non_obj}, Ownedids={OM_non_obj};
   bool IsUnique=false,IsOwnedUnique=false,CanBeString=false,IsLeaf=true,Load_Last=true;
   bool checked=false, IsAttr=false;
 
@@ -696,19 +717,18 @@ class NameableLLVMIRCall : public Nameable {
 };
 
 
-class NameableCall : public Nameable, public OwnedHolder {
+
+class NameableCall : public Nameable, public OwnedHolder, public ArgsBasedExpr {
   bool checked=false;
   public:
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
   bool is_tile = false;
   int arg_type_check_offset=1, owned_ret_size=0; 
-  int MemId=0, OwnedId=-2, OwnedPoolOffset=-1, OwnedPoolCap=0;
+  int MemId=OM_start_offset, OwnedId=OM_non_obj, OwnedPoolOffset=-1, OwnedPoolCap=0;
   size_t hash=0;
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  std::string Callee, BaseCallee, ReturnType="";
+  std::string ReturnType="";
   std::vector<Data_Tree> Types;
-  std::vector<std::tuple<int,int>> partialtakes;
-  CallArgsTy CompiledArgsVec, CArgs;
+  CallArgsTy CompiledArgsVec;
 
   NameableCall(Parser_Struct *, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args, CallArgsTy);
 
@@ -811,16 +831,6 @@ class SelfExprAST : public NameableExprAST {
 
 
   
-
-class NestedVectorIdxExprAST : public NameableExprAST {
-  
-  public:
-    std::unique_ptr<IndexExprAST> Idx;
-    NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct *, std::unique_ptr<IndexExprAST> Idx, std::string);
-    Value *codegen(Value *scope_struct) override;
-
-};
-
 
 
 
@@ -1304,7 +1314,6 @@ struct Arg_Pair {
 // void MakeTemplate();
 
 
-void bt(int cut=8);
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
 std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout=true, bool match_own=true);
@@ -1363,6 +1372,7 @@ extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 extern std::vector<std::string> ConditionalsQueue;
 
 extern std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_dt;
+extern std::unordered_map<std::string,int> fn_with_owned_self;
 
 
 extern int check_branch;
@@ -1373,9 +1383,6 @@ extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
+extern std::unordered_map<std::string,std::unordered_map<int, int>> memid_to_ownedid;
 
-
-
-
-// .push_back({fn_ast, std::move(proto), fn, base_name});
-
+extern std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;

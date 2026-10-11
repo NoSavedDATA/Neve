@@ -78,11 +78,14 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
     return false;
 }
 
-bool Data_Tree::IsComposite() const {
+bool Data_Tree::IsAnyComposite() const {
     return (Nested_Data.size()>0||Type=="layout"||is_buffer||is_array);
 }
 bool Data_Tree::IsBuffered() const {
     return (Type=="layout"||is_buffer||is_array);
+}
+bool Data_Tree::IsComposite() const {
+    return (in_vec(Type, {"array", "map", "channel"}));
 }
 
 int CompareArrays(const Data_Tree *L, Data_Tree R) {
@@ -250,7 +253,7 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
     if(Type=="map"&&other_type!="map"&&Nested_Data[1].Type==other_type)
         return 0;
 
-    if(Type=="map"&&!other_tree.IsComposite())
+    if(Type=="map"&&!other_tree.IsAnyComposite())
         return Nested_Data[1].Compare(other_tree);
 
     if(in_vec(Type, compound_tokens)&&!in_vec(other_type, compound_tokens))

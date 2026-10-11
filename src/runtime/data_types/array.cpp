@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cstddef>
+#include <cstdlib>
 #include <random>
 #include <vector>
 #include <unistd.h>
@@ -72,7 +74,9 @@ void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
 
 extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
         uint16_t elem_type) { 
-    // std::cout << "(GC) array" << "\n";
+
+  // std::cout << "(GC) array" << "\n";
+
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]
       : 8;
@@ -125,6 +129,7 @@ extern "C" DT_array *array_Create_Taken(Scope_Struct *scope_struct,
 
 extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) { 
     
+    std::cout << "array_clone " << "\n";
     DT_array *ret = newT<DT_array>(scope_struct, "array");
 
     __atomic_store_n(&ret->virtual_size, v->virtual_size, __ATOMIC_RELEASE);
@@ -154,6 +159,7 @@ extern "C" DT_array *array_slice(Scope_Struct *scope_struct, DT_array *vec,\
   else
       elem_size = 8;
 
+  std::cout << "array slice" << "\n";
   DT_array *new_vec = newT<DT_array>(scope_struct, "array");
   new_vec->New(scope_struct, size, elem_size, scope_struct->thread_id, elem_type);
 
@@ -298,9 +304,46 @@ extern "C" DT_array *array_int_NewVec(Scope_Struct *scope_struct, int first, ...
   return vec;
 }
 
+extern "C" DT_array *array_int_NewVec_Taken(Scope_Struct *scope_struct, int first, ...) { 
+  int elem_size = 4;
+
+  // DT_array *vec = newT<DT_array>(scope_struct, "array");
+  // vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+
+  DT_array *vec = (DT_array*)malloc(sizeof(DT_array));
+  vec->NewOwned(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+
+  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
+  int *data = (int*)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+
+  int x = first;
+  va_list args;
+  va_start(args, x);
+
+  int idx = 0;
+  do {
+    __atomic_store_n(&data[idx], x, __ATOMIC_RELEASE);
+    idx++;
+    int size = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&vec->virtual_size, size+1, __ATOMIC_RELEASE);
+    if (vec->virtual_size >= vec->size) {
+        array_double_size(scope_struct, vec);
+        int *data = (int*)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+    }
+    x = va_arg(args, int);
+  } while(x!=TERMINATE_VARARG);
+  va_end(args);
+  // std::cout << "new vec: " << vec << "\n";
+  // std::cout << "virtual size:  " << vec->virtual_size << "\n";
+  return vec;
+}
+
+
 extern "C" DT_array *array_float_NewVec(Scope_Struct *scope_struct, float first, ...) { 
   int elem_size = 4;
 
+  std::cout << "array_float_NewVec " << "\n";
   DT_array *vec = newT<DT_array>(scope_struct, "array");
   vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
   __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
@@ -331,8 +374,47 @@ extern "C" DT_array *array_float_NewVec(Scope_Struct *scope_struct, float first,
 extern "C" DT_array *array_void_NewVec(Scope_Struct *scope_struct, void *first, ...) { 
   int elem_size = 8;
 
+  std::cout << "array_void_NewVec " << "\n";
   DT_array *vec = newT<DT_array>(scope_struct, "array");
   vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+
+  void **data = (void**)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+
+  void *x = first;
+  va_list args;
+  va_start(args, x);
+
+  int idx = 0;
+  do {
+    __atomic_store_n(&data[idx], x, __ATOMIC_RELEASE);
+    idx++;
+    int size = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&vec->virtual_size, size+1, __ATOMIC_RELEASE);
+    if (vec->virtual_size >= vec->size) {
+        array_double_size(scope_struct, vec);
+        void **data = (void**)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+    }
+    x = va_arg(args, void*);
+  } while(x!=nullptr);
+  va_end(args);
+  // std::cout << "new vec: " << vec << "\n";
+  // std::cout << "virtual size:  " << vec->virtual_size << "\n";
+  return vec;
+}
+
+
+
+extern "C" DT_array *array_void_NewVec_Taken(Scope_Struct *scope_struct, void *first, ...) { 
+  int elem_size = 8;
+
+  // DT_array *vec = newT<DT_array>(scope_struct, "array");
+  // vec->New(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+  
+  DT_array *vec = (DT_array*)malloc(sizeof(DT_array));
+  vec->NewOwned(scope_struct, 8, elem_size, scope_struct->thread_id, 2);
+// void DT_array::NewOwned(Scope_Struct *ctx, int size, int elem_size, int tid, uint16_t type) {
+  
   __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
 
   void **data = (void**)__atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
@@ -389,6 +471,7 @@ extern "C" float array_print_char(Scope_Struct *scope_struct, DT_array *vec) {
 }
 
 extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) {
+  std::cout << "arange int " << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, end-begin, 4, scope_struct->thread_id, 2);
     __atomic_store_n(&vec->virtual_size, end-begin, __ATOMIC_RELEASE);
@@ -406,6 +489,7 @@ extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) 
 
 
 extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
+  std::cout << "zeros int " << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 2);
     __atomic_store_n(&vec->virtual_size, N, __ATOMIC_RELEASE);
@@ -424,6 +508,7 @@ extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
 
 
 extern "C" DT_array *randint_array(Scope_Struct *scope_struct, int size, int min_val, int max_val) {
+    std::cout << "randint_array" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, size, 4, scope_struct->thread_id, 2);
 
@@ -439,6 +524,7 @@ extern "C" DT_array *randint_array(Scope_Struct *scope_struct, int size, int min
 
 
 extern "C" DT_array *ones_int(Scope_Struct *scope_struct, int N) {
+    std::cout << "ones int" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 2);
 
@@ -455,6 +541,7 @@ extern "C" DT_array *ones_int(Scope_Struct *scope_struct, int N) {
 }
 
 extern "C" DT_array *array_int_add(Scope_Struct *scope_struct, DT_array *array, int x) {
+    std::cout << "array int add" << "\n";
     DT_array *new_array = newT<DT_array>(scope_struct, "array");
     new_array->New(scope_struct, array->virtual_size, 4, scope_struct->thread_id, 2);
     
@@ -470,6 +557,7 @@ extern "C" DT_array *array_int_add(Scope_Struct *scope_struct, DT_array *array, 
 
 
 extern "C" DT_array *randfloat_array(Scope_Struct *scope_struct, int size, float min_val, float max_val) {
+    std::cout << "randfloat array" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, size,4, scope_struct->thread_id, 3);
 
@@ -496,6 +584,7 @@ extern "C" int array_print_float(Scope_Struct *scope_struct, DT_array *vec) {
 
 
 extern "C" DT_array *arange_float(Scope_Struct *scope_struct, float begin, float end) {
+    std::cout << "arange float" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, end-begin, 4, scope_struct->thread_id, 3);
 
@@ -512,6 +601,7 @@ extern "C" DT_array *arange_float(Scope_Struct *scope_struct, float begin, float
 } 
 
 extern "C" DT_array *zeros_float(Scope_Struct *scope_struct, int N) {
+    std::cout << "zeros float" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 3);
 
@@ -529,6 +619,7 @@ extern "C" DT_array *zeros_float(Scope_Struct *scope_struct, int N) {
 
 
 extern "C" DT_array *ones_float(Scope_Struct *scope_struct, int N) {
+    std::cout << "ones float" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 3);
 

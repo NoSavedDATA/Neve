@@ -94,10 +94,10 @@ struct Parser_Struct {
   bool can_be_string=false;
   bool can_be_list=false, has_compiled_args=false, has_owned_pool=false;
   bool borrow_ret=false, self_obj_owned=false;
-  std::shared_ptr<int> owned_id = std::make_shared<int>(0);
-  std::shared_ptr<int> mem_id = std::make_shared<int>(0);
+  std::shared_ptr<int> owned_id = std::make_shared<int>(OM_start_offset);
+  std::shared_ptr<int> mem_id = std::make_shared<int>(OM_start_offset);
   std::shared_ptr<uint64_t> control_stmt_id = std::make_shared<uint64_t>(2);
-  int owned_id_arg_offset = 0, memid_arg_offset=0;
+  int memid_arg_offset=OM_start_offset;
   int gpu=0;
   int line=0;
   int scope_depth=0;

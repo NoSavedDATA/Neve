@@ -1372,6 +1372,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("array_int_NewVec", array_int_NewVecTy);
 
+	FunctionType *array_int_NewVec_TakenTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("array_int_NewVec_Taken", array_int_NewVec_TakenTy);
+
 	FunctionType *array_float_NewVecTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -1385,6 +1392,13 @@ void Generate_LLVM_Functions() {
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("array_void_NewVec", array_void_NewVecTy);
+
+	FunctionType *array_void_NewVec_TakenTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("array_void_NewVec_Taken", array_void_NewVec_TakenTy);
 
 	FunctionType *array_print_intTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

@@ -94,6 +94,7 @@ std::string KaleidoscopeJIT::MangleName(const std::string &Name) {
 }
 
 llvm::Error KaleidoscopeJIT::addAST(std::unique_ptr<FunctionAST> F) {
+    // std::cout << "add: " << F->getName() << "\n";
     fn_map[F->getName()] = F.get();
     fn_vec.push_back(std::move(F));
     return llvm::Error::success(); 
@@ -110,15 +111,17 @@ llvm::Error KaleidoscopeJIT::addGeneric(std::unique_ptr<FunctionAST> F) {
 
 
 void gen_generics() {
-    for(auto &[fn_ast, _, parser_struct, fn, base_name] : generics_fn) {
+    for(auto &[fn_ast, _, parser_struct, fn, base_name, is_obj_own] : generics_fn) {
         if (in_vec(base_name, fn_called)) {
             erase(fn_called, base_name);
             fn_ast->parser_struct->function_name = base_name;
             TheJIT->fn_map[base_name]->codegen();   
         }
 
+
         fn_ast->parser_struct->function_name = fn;
         fn_ast->parser_struct->base_name = base_name;
+        fn_ast->parser_struct->self_obj_owned = is_obj_own;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
         fn_ast->function_name = fn;
         fn_ast->Proto = nullptr;
@@ -127,7 +130,7 @@ void gen_generics() {
 }
 
 void warmup_generics() {
-    for(auto &[fn_ast, proto, parser_struct, fn, base_name] : generics_fn) {
+    for(auto &[fn_ast, proto, parser_struct, fn, base_name, _] : generics_fn) {
         
         if (parser_struct->gpu>0) {
             int gpu = parser_struct->gpu;

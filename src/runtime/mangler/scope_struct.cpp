@@ -1,5 +1,6 @@
 #include <atomic>
 #include <cstring>
+#include <execinfo.h>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -15,6 +16,22 @@
 #include "../threads/include.h"
 
 #include "scope_struct.h"
+
+
+void bt(int cut) {
+    void* callstack[128];
+    int frames = backtrace(callstack, 128);
+    char** strs = backtrace_symbols(callstack, frames);
+
+    int cut_at = std::min(frames, cut);
+    
+    if (strs != nullptr) {
+        for (int i = 0; i < cut_at; ++i) {
+            std::cout << strs[i] << "\n\n";
+        }
+        free(strs);
+    }
+}
 
 
 extern "C" void print_stack1(Scope_Struct *scope_struct) {

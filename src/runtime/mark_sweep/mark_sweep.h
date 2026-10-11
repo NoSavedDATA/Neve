@@ -20,6 +20,8 @@
 #include "../threads/cas.h"
 #include "include.h"
 
+
+
 const int word_bits=64;
 
 const int GC_page_size=8192;
@@ -269,11 +271,11 @@ struct GC {
     }
     inline void *Allocate(Scope_Struct *scope_struct, Thread_State *spans, int size, uint16_t type_id, int tid) {
         int obj_class = GC_size_to_c[(size+7)/8];
-        int round_size = (((size+7)/8)*8);
-        // if (round_size==64) {
+
+        // int round_size = (((size+7)/8)*8);
+        // if (round_size==48||(size<49&&size>24)) {
         //     std::string data_name = data_type_to_name()[type_id];
-        //     if (data_name!="BackNode")
-        //         std::cout << "alloc " << type_id << " - " << data_name << "\n";
+        //     std::cout << "alloc " << type_id << " - " << data_name << ", size: " << size << "\n";
         // }
 
         if(size>GC_max_object_size) {

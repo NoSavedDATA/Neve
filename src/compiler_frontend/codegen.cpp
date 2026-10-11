@@ -1312,6 +1312,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
                     if (create_fn=="array_Create" || create_fn=="map_Create" || create_fn=="channel_Create") {
                         if (create_fn=="array_Create") {
+                            // if (postfix=="")
+                            //     p2t("data array_Create " + parser_struct->function_name + " | " + VarName);
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
                         }
                         else if (create_fn=="channel_Create") {
@@ -1382,7 +1384,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         }
 
 
-        if (Memids[i]!=-2) {
+        if (Memids[i]!=OM_non_obj) {
             // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << Memids[i] <<  "\033[0m\n\n";
             fn_memid_to_val[parser_struct->function_name][Memids[i]] = initial_value;
         }
@@ -3161,7 +3163,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         }
 
         if (partialtakes.count(Operation)>0) {
-            std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->function_name << " | "<< Operation << "\033[0m\n\n";
+            // std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->function_name << " | "<< Operation << "\033[0m\n\n";
             Codegen_Partialtakes(parser_struct, CArgs,
                     BaseOperation,
                     partialtakes[Operation],
@@ -4053,7 +4055,33 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
     if(!in_vec(type, primary_data_tokens)&&type!="str")
         type = "void";
-    std::string Callee = "array_" + type + "_NewVec";
+
+    int memid = Memids[0];
+    bool is_parent_owned=false;
+
+    if (begins_with(parser_struct->base_name, "__anon"))
+        std::cout << "\n\nNewVec " << memid << "\n";
+
+    if (fn_borrows[parser_struct->base_name].count(memid)>0) {
+        int parent = fn_borrows[parser_struct->base_name][memid][0]&MASK_16;
+        is_parent_owned = memid_to_ownedid[parser_struct->function_name].count(parent)>0;
+        std::cout << "parent memid: " << parent << "\n";
+
+        if(is_parent_owned)
+            std::cout << "\n\t\033[33mBORROW NEWVEC" << "\033[0m\n\n";
+    }
+    bool is_launch_parent=false;
+    if (Parent!=nullptr)
+        if (dynamic_cast<LaunchExprAST*>(Parent))
+            is_launch_parent=true;
+
+    std::string postfix = (is_parent_owned||is_launch_parent)
+        ? "_Taken"
+        : "";
+
+    std::string Callee = "array_" + type + "_NewVec"+postfix;
+    // if (Callee=="array_int_NewVec")
+    //     p2t(parser_struct->function_name+"|"+Callee);
     return callret(Callee, values);
 }
 
@@ -4081,7 +4109,7 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
         Value *key = Keys[i]->codegen(scope_struct);
         values.push_back(key);
 
-        auto element_type = std::make_unique<StringExprAST>(type);
+        auto element_type = std::make_unique<StringExprAST>(parser_struct,type);
         values.push_back(element_type->codegen(scope_struct));
 
         Value *value = Values[i]->codegen(scope_struct);
@@ -4170,7 +4198,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                     std::vector<Value *> ArgsDT_Create = {scope_struct};
 
                     std::string postfix = "";
-                    if (Ownedids[i]!=-2) {
+                    if (Ownedids[i]!=OM_non_obj) {
                         if (fn_borrows[parser_struct->base_name].count(Memids[i])>0)
                             postfix="_Taken";
                         else
@@ -4857,9 +4885,6 @@ Value *SelfExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {  
-    return const_int(0);
-}
 
 
 
@@ -5314,7 +5339,10 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         key_type = (ClassSize.count(key_type)>0) ? "void_ptr" : key_type;
         Value *append_node, *new_array;
         if (IsAppend) {
-            new_array = callret("array_Create",
+            std::string postfix = (Inner->GetIsOwned()!=OM_non_obj)
+                ? "_Taken"
+                : "";
+        new_array = callret("array_Create"+postfix,
                 {scope_struct,
                  const_int16(
                    data_name_to_type()[val_dt.Nested_Data[0].Type])});
@@ -5659,7 +5687,7 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
 }
 
 inline void ArrayClear(Value *scope_struct, Nameable *expr) {  
-    if (expr->GetIsOwned()==-2||expr->GetIsView()) {
+    if (expr->GetIsOwned()==OM_non_obj||expr->GetIsView()) {
         return;
     }
 
@@ -5676,7 +5704,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Data_Tree inner_dt = Inner->GetDataTree();
     Value *loaded_var = Inner->codegen(scope_struct);
-    std::string postfix = (Inner->GetIsOwned()!=-2)
+    std::string postfix = (Inner->GetIsOwned()!=OM_non_obj)
                 ? "" : "_Owned";
 
     Value *appended_val = Args[0]->codegen(scope_struct);
@@ -5817,13 +5845,14 @@ Value *NameableCall::codegen(Value *scope_struct) {
         if(!is_nsk_fn)
             shall_swap=true;
         else {
-            ArgTypes.push_back(Inner->GetDataTree());
+            Data_Tree inner_dt = Inner->GetDataTree();
+            ArgTypes.push_back(inner_dt);
             ArgsV.push_back(obj_ptr);
             target_args_size++;
             
             std::string type = Inner->GetDataTree().Type;
             // if(!in_vec(type, {"vec", "str"})&&!in_vec(type, int_types)) {
-            if(Classes.count(type)>0||in_vec(type,compound_tokens)) {
+            if(Classes.count(type)>0||inner_dt.IsComposite()) {
                 BasicBlock *GotNullBB = BasicBlock::Create(*TheContext, "nested_call.bad.bb", TheFunction);
                 BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "nested_call.ok.bb", TheFunction);
 
@@ -5945,7 +5974,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     ret = struct_ret;
   }
 
-  if (MemId!=-2) {
+  if (MemId!=OM_non_obj) {
       // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << MemId <<  "\033[0m\n\n";
     fn_memid_to_val[parser_struct->function_name][MemId] = ret;
   }

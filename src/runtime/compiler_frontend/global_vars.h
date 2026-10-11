@@ -9,6 +9,11 @@
 
 #include "../data_types/data_tree.h"
 
+enum OwnershipMemids{
+    OM_non_obj=0,
+    OM_self_obj=1,
+    OM_start_offset=3,
+};
 
 extern std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,

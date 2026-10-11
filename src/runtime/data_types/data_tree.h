@@ -25,6 +25,7 @@ struct Data_Tree {
     size_t Hash() const;
     void Print(bool break_line=true) const;
     std::string toString() const;
+    bool IsAnyComposite() const;
     bool IsComposite() const;
     bool IsPrimary() const;
     bool IsFromArena() const;

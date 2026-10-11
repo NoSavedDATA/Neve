@@ -960,8 +960,8 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
-        if (begins_with(fn, "ResidualModule_forward")||begins_with(fn, "gpu")||begins_with(fn, "eval"))
-            std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
+        // if (begins_with(fn, "ResidualModule_forward")||begins_with(fn, "gpu")||begins_with(fn, "eval"))
+        //     std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
         if (in_vec(memid, fn_conditional_created_memid[base_name])) {
             // conditionally created memid
             // std::cout << "\n\t\033[33mAS CONDITINOALLY" << "\033[0m\n\n";
@@ -1101,8 +1101,8 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        if (begins_with(function_name, "ResidualModule_forward")||begins_with(function_name, "gpu"))
-        std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
+        // if (begins_with(function_name, "ResidualModule_forward")||begins_with(function_name, "gpu"))
+        //     std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1113,11 +1113,11 @@ Function *FunctionAST::codegen() {
             continue;
         int memid = fn_arg_memid[base_name][arg_name];
         Data_Tree dt = data_typeVars[function_name][arg_name];
-        if (memid!=-2&&fn_borrows[base_name].count(memid)>0)
+        if (memid!=OM_non_obj&&fn_borrows[base_name].count(memid)>0)
             OwnedValues[function_name].push_back({memid, dt, &Arg, 3});
-        if(begins_with(function_name, "ResidualModul"))
-            std::cout << "\n\t\033[32marg to val " << function_name << ": " << arg_name << " -- " << memid <<  "\033[0m\n\n";
-        if (memid!=-2) {
+        // if(begins_with(function_name, "ResidualModul"))
+        //     std::cout << "\n\t\033[32marg to val " << function_name << ": " << arg_name << " -- " << memid <<  "\033[0m\n\n";
+        if (memid!=OM_non_obj) {
             fn_memid_to_val[function_name][memid] = &Arg;
         }
     }
@@ -1148,16 +1148,20 @@ Function *FunctionAST::codegen() {
             node->parser_struct->function_name = parser_struct->function_name;
             node->parser_struct->cvalues = parser_struct->cvalues;
         }
+        if (auto *stmt = dynamic_cast<Nameable*>(node)) {
+            if (stmt->IsOwnedUnique)
+                ownid_to_memid[stmt->Ownedids[0]] = stmt->Memids[0];
+        }
         if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
-            if (stmt->OwnedId!=-2) 
+            if (stmt->OwnedId!=OM_non_obj)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
         }
         if (auto *stmt = dynamic_cast<NameableCall*>(node)) {
-            if (stmt->OwnedId!=-2)
+            if (stmt->OwnedId!=OM_non_obj)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
         }
         if (auto *stmt = dynamic_cast<BinaryExprAST*>(node)) {
-            if (stmt->OwnedId!=-2&&stmt->Op!='=') 
+            if (stmt->OwnedId!=OM_non_obj&&stmt->Op!='=')
                 ownid_to_memid[stmt->OwnedId] = stmt->Memids[0];
         }
     });
@@ -1181,8 +1185,11 @@ Function *FunctionAST::codegen() {
 
 
 
-  for (auto &[owned, memid] : ownid_to_memid)
+  for (auto &[owned, memid] : ownid_to_memid) {
+      // std::cout << "\n\t\033[32mtie " << function_name << ": " << memid << " to " << owned << "\033[0m\n\n";
+      memid_to_ownedid[function_name][memid] = owned;
       EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
+  }
   
   for (auto &[dt, name, memid, _] : P->CArgs.borrows) {
     // std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
@@ -1217,7 +1224,6 @@ Function *FunctionAST::codegen() {
             Builder->CreateRet(nullValue);
         }
     }
-
 
     // print_allBB();
     // Validate the generated code, checking for consistency.

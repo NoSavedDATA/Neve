@@ -6,10 +6,13 @@
 #include <thread>
 #include <vector>
 
+void bt(int cut=8);
+
 #include "../mark_sweep/include.h" 
 
 struct GC;
 struct GC_span;
+
 
 constexpr int ContextStackSize = 4096;
 constexpr int PrintBufferSize = 16384;

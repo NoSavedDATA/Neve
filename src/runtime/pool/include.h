@@ -68,6 +68,8 @@ T *newT(Scope_Struct *scope_struct, std::string type) {
         //     std::exit(0);
         // }
 
+        // if (type_id==102)
+        //     std::cout << "NEWT " << "\n";
         void *v_ptr = scope_struct->Allocate(sizeof(T), type_id);
         ptr = new (v_ptr) T();
 

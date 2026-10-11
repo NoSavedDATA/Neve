@@ -1064,6 +1064,45 @@ void set_functions_args_type() {
 		fn_argnames["array_int_NewVec"].push_back("10");
 		fn_argnames["array_int_NewVec"].push_back("11");
 		
+		Function_Arg_Types["array_int_NewVec_Taken"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_int_NewVec_Taken"]["1"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["2"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["3"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["4"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["5"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["6"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["7"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["8"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["9"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["10"] = "int";
+		Function_Arg_Types["array_int_NewVec_Taken"]["11"] = "int";
+		
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["1"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["2"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["3"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["4"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["5"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["6"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["7"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["8"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["9"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["10"] = Data_Tree("int");
+		Function_Arg_DataTypes["array_int_NewVec_Taken"]["11"] = Data_Tree("int");
+		
+		fn_argnames["array_int_NewVec_Taken"].push_back("0");
+		fn_argnames["array_int_NewVec_Taken"].push_back("1");
+		fn_argnames["array_int_NewVec_Taken"].push_back("2");
+		fn_argnames["array_int_NewVec_Taken"].push_back("3");
+		fn_argnames["array_int_NewVec_Taken"].push_back("4");
+		fn_argnames["array_int_NewVec_Taken"].push_back("5");
+		fn_argnames["array_int_NewVec_Taken"].push_back("6");
+		fn_argnames["array_int_NewVec_Taken"].push_back("7");
+		fn_argnames["array_int_NewVec_Taken"].push_back("8");
+		fn_argnames["array_int_NewVec_Taken"].push_back("9");
+		fn_argnames["array_int_NewVec_Taken"].push_back("10");
+		fn_argnames["array_int_NewVec_Taken"].push_back("11");
+		
 		Function_Arg_Types["array_float_NewVec"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_float_NewVec"]["1"] = "float";
 		Function_Arg_Types["array_float_NewVec"]["2"] = "float";
@@ -1141,6 +1180,45 @@ void set_functions_args_type() {
 		fn_argnames["array_void_NewVec"].push_back("9");
 		fn_argnames["array_void_NewVec"].push_back("10");
 		fn_argnames["array_void_NewVec"].push_back("11");
+		
+		Function_Arg_Types["array_void_NewVec_Taken"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_void_NewVec_Taken"]["1"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["2"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["3"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["4"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["5"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["6"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["7"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["8"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["9"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["10"] = "void";
+		Function_Arg_Types["array_void_NewVec_Taken"]["11"] = "void";
+		
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["1"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["2"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["3"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["4"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["5"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["6"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["7"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["8"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["9"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["10"] = Data_Tree("void");
+		Function_Arg_DataTypes["array_void_NewVec_Taken"]["11"] = Data_Tree("void");
+		
+		fn_argnames["array_void_NewVec_Taken"].push_back("0");
+		fn_argnames["array_void_NewVec_Taken"].push_back("1");
+		fn_argnames["array_void_NewVec_Taken"].push_back("2");
+		fn_argnames["array_void_NewVec_Taken"].push_back("3");
+		fn_argnames["array_void_NewVec_Taken"].push_back("4");
+		fn_argnames["array_void_NewVec_Taken"].push_back("5");
+		fn_argnames["array_void_NewVec_Taken"].push_back("6");
+		fn_argnames["array_void_NewVec_Taken"].push_back("7");
+		fn_argnames["array_void_NewVec_Taken"].push_back("8");
+		fn_argnames["array_void_NewVec_Taken"].push_back("9");
+		fn_argnames["array_void_NewVec_Taken"].push_back("10");
+		fn_argnames["array_void_NewVec_Taken"].push_back("11");
 		
 		Function_Arg_Types["array_print_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_print_int"]["1"] = "array";
