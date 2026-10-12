@@ -489,7 +489,7 @@ extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) 
 
 
 extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
-  std::cout << "zeros int " << "\n";
+  // std::cout << "zeros int " << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 2);
     __atomic_store_n(&vec->virtual_size, N, __ATOMIC_RELEASE);
@@ -601,7 +601,7 @@ extern "C" DT_array *arange_float(Scope_Struct *scope_struct, float begin, float
 } 
 
 extern "C" DT_array *zeros_float(Scope_Struct *scope_struct, int N) {
-    std::cout << "zeros float" << "\n";
+    // std::cout << "zeros float" << "\n";
     DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(scope_struct, N, 4, scope_struct->thread_id, 3);
 

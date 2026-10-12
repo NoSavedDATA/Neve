@@ -1101,8 +1101,8 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        // if (begins_with(function_name, "ResidualModule_forward")||begins_with(function_name, "gpu"))
-        //     std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
+        if (begins_with(function_name, "Linear")||begins_with(function_name, "gpu"))
+            std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1224,13 +1224,13 @@ Function *FunctionAST::codegen() {
             Builder->CreateRet(nullValue);
         }
     }
+    // if (TheFunction->getName().starts_with("gpu_tensor_gpu_tensor_mma"))
+    //     TheFunction->print(llvm::errs());
+
 
     // print_allBB();
     // Validate the generated code, checking for consistency.
     // verifyFunction(*TheFunction);
-    //
-    // if (TheFunction->getName().starts_with("eval"))
-    //     TheFunction->print(llvm::errs());
     //
     // TheModule->print(llvm::errs(), nullptr);
     //

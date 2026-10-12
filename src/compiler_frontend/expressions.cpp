@@ -479,7 +479,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         if (!CompareDTs(CArgs, templ, true, true))
             continue;
 
-        std::cout << "compare OKAY " << "\n";
 
 
         fn_ast = tpair.second;
@@ -502,11 +501,11 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CArgs.version = idx;
         CArgs.version_str = fn;
 
-        std::cout << "\n\nassign for " << fn << "\n";
-        print_dt_vec(CArgs.dts);
-        print_dt_vec(templ.dts);
-        CArgs.template_ret.Print();
-        templ.template_ret.Print();
+        // std::cout << "\n\nassign for " << fn << "\n";
+        // print_dt_vec(CArgs.dts);
+        // print_dt_vec(templ.dts);
+        // CArgs.template_ret.Print();
+        // templ.template_ret.Print();
 
 
         if (fn!=base_name) {
@@ -531,8 +530,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                 fn_with_owned_self[fn]=1;
         }
 
-        std::cout << "CARgs " << "\n";
-
         
         CArgs.dyn_args = templ.dyn_args;
         FnDynArgs[fn] = templ.dyn_args;
@@ -542,7 +539,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CArgs.template_ret = templ.template_ret;
         fn_ret_dt[fn] = CArgs.template_ret;
 
-        std::cout << "parser_struct " << "\n";
 
         int memid = *parser_struct->mem_id;
         int ownid = *parser_struct->owned_id;
@@ -550,22 +546,18 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         *parser_struct->owned_id = OM_start_offset;
 
 
-        std::cout << "proto " << "\n";
         auto proto = std::make_unique<PrototypeAST>(parser_struct,
                         base_name, fn,
                         CArgs, templ);
 
 
-        std::cout << "parser_struct set fn " << fn << "\n";
-        std::cout << "fnast " << fn_ast << "\n";
-        std::cout << "parser_struct " <<  fn_ast->parser_struct << "\n";
         fn_ast->parser_struct->function_name = fn;
         fn_ast->parser_struct->base_name = base_name;
 
 
 
 
-        std::cout << "Checks " << fn << "\n";
+        // std::cout << "Checks " << fn << "\n";
         // if(parser_struct->gpu==0)
             for (auto &body : fn_ast->Body) {
                   body->Traverse([parser_struct, &fn](ExprAST *node) {
@@ -641,8 +633,6 @@ bool MatchOwned(Parser_Struct *parser_struct,
  
     CArgs.args = argnames;
     CArgs.self_obj_owned = obj_owned;
-    if (obj_owned)
-        std::cout << "SET  " << Callee << " Owned\n";
     CArgs.template_ret = fn_ret_dt[Callee];
     return true;
 }
@@ -654,7 +644,6 @@ std::string SolveTemplate(Parser_Struct *parser_struct,
   // std::string base_callee = Callee;
   bool has_owned = MatchOwned(parser_struct, is_inner_owned, Callee, CArgs);
 
-  std::cout << "SolveTemplate " << Callee << ", hasowned? " << has_owned << "\n";
 
   bool found = true;
   Callee = GetFnVersion(parser_struct, Callee, CArgs, found,
@@ -1134,10 +1123,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           fn_arg_memid[BaseName][arg_name] = memid;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
-            if(begins_with(fn, "gpu")) {
-                std::cout << "set arg  " << fn << " - " << arg_name << "\n";
-                dt.Print();
-            }
         }
     }
     for (auto &[_, name, dt] : CArgs.dyn_args) {
@@ -1584,14 +1569,6 @@ void UnkVarExprAST::Checks() {
         LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
       dt = dt.Nested_Data[0];
     }
-        
-    // if (Object_toClass[parser_struct->function_name].count(VarName)>0\
-    //   ||data_typeVars[parser_struct->function_name].count(VarName)>0) {
-    //     LogErrorS(parser_struct->line, "Redefinition of " + VarName);
-    //     continue;
-    // }
-
-
     data_typeVars[parser_struct->function_name][VarName] = dt;
   }
 
@@ -1883,10 +1860,6 @@ void NewExprAST::Checks() {
     CArgs = CallArgsTy(dts);
 
     Callee = SolveTemplate(parser_struct, OwnedId!=OM_non_obj, Callee, CArgs);
-    if (Callee!=BaseCallee) {
-        std::cout << "SPECIALIZE: " << Callee << "\n";
-        std::cout << "OwnedId " << OwnedId << "\n";
-    }
 }
 
 
@@ -2449,7 +2422,7 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 void BinaryExprAST::Checks() {
   LHS->Checks();
   RHS->Checks();
-  GetDataTree();
+  Data_Tree dt = GetDataTree();
 
   if (auto *nameable = dynamic_cast<Nameable*>(LHS.get()))
     nameable->IsAttr=Op=='='||is_store_sugar;
@@ -2458,13 +2431,15 @@ void BinaryExprAST::Checks() {
 
   int memid = RHS->GetMemId()[0];
 
-  if (IsCall) {
+  if (IsCall&&Memids.size()==0) {
       memid = (*parser_struct->mem_id)++;
       Memids.push_back(memid);
+      fn_memid_to_dt[parser_struct->function_name][memid] = dt;
       if (check_branch!=0)
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(BaseOperation)>0) {
           OwnedId = (*parser_struct->owned_id)++;
+          LogBlue("Bin is call with ownedid " + BaseOperation + ", id: " + std::to_string(OwnedId));
       }
       CArgs = CallArgsTy({L_dt, R_dt});
       CArgs.template_ret = fn_ret_dt[Operation];
@@ -2474,7 +2449,6 @@ void BinaryExprAST::Checks() {
     if (auto *nameable = dynamic_cast<Nameable*>(LHS.get())) {
         if (nameable->Depth==1) {
           std::string name = nameable->GetName(); 
-          RHS->Checks();
           int owned_id = RHS->GetIsOwned();
           function_owns[parser_struct->function_name][name] = owned_id;
 
@@ -3521,7 +3495,6 @@ void Nameable::Checks() {
   if (IsUnique||IsOwnedUnique) {
     int memid;
     if (fn_global_to_memid[parser_struct->base_name].count(Name)==0) {
-        std::cout << "\n\t\033[33mNEW GLOBAL MEMID " << Name << "\033[0m\n\n";
         memid = (*parser_struct->mem_id)++;
         fn_global_to_memid[parser_struct->base_name][Name] = memid;
     } else
@@ -3531,7 +3504,6 @@ void Nameable::Checks() {
     if (IsOwnedUnique) {
         int ownedid;
         if (fn_global_to_ownedid[parser_struct->base_name].count(Name)==0) {
-            std::cout << "\n\t\033[33mNEW GLOBAL OWNEDID " << Name << "\033[0m\n\n";
             ownedid = (*parser_struct->owned_id)++;
             fn_global_to_ownedid[parser_struct->base_name][Name] = ownedid;
         } else
@@ -3703,7 +3675,6 @@ void NameableCall::Checks() {
 
   // Check for Generics
   BaseCallee = Callee;
-  std::cout << "bleCalla " << parser_struct->function_name << " | " << BaseCallee << "\n";
   if (needs_version) {
       
       Callee = SolveTemplate(parser_struct, Inner->GetIsOwned()!=OM_non_obj, Callee, CArgs);
@@ -3720,8 +3691,7 @@ void NameableCall::Checks() {
 
   MemId = (*parser_struct->mem_id)++;
   fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
-  if (begins_with(parser_struct->function_name, "__anon"))
-std::cout << "\n\t\033[32mCall " << Callee<<" has memid" << MemId << "\033[0m\n\n";
+
   if (check_branch!=0)
     fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
   if (fn_with_owned_ret.count(Callee)>0)
@@ -3748,7 +3718,7 @@ void FunctionChecks(std::string fn_name) {
       fn_called.push_back(fn_name);
 
       FunctionAST *fn = TheJIT->fn_map[fn_name];
-      std::cout << "Checks " << fn_name << "\n";
+      // std::cout << "Checks " << fn_name << "\n";
       for (auto &body : fn->Body) {
         body->Traverse([&fn_name](ExprAST *node) {
               std::string prev_name;

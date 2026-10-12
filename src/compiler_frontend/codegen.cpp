@@ -1177,11 +1177,16 @@ inline void SetConditionalTake(std::string fn, int memid) {
     if(!ctakens[fn].count(memid))
         return;
 
-    // p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
+    // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
+    //     p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
+
     Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
-    // p2t("stored");
-    // Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
-    // call("print_bool", {v}); 
+
+
+    Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
+
+    // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
+    //     call("print_bool", {v}); 
 
     SetConditionalMaybeTake(fn, memid);
 }
@@ -1213,11 +1218,20 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
 
     // Partials in the callee only
     for(auto &[memid, argmemid] : partialtakes) {
+        if (begins_with(parser_struct->function_name, "ResNet18")||
+                begins_with(parser_struct->function_name, "Linear"))
+        // p2t("partial take pre: " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
         if (!ctakens.count(fn))
             return; // fix for when partial registered for the wrong generic
         if (!ctakens[fn].count(memid))
             return; // fix for when partial registered for the wrong generic
+                    //
+        if (begins_with(parser_struct->function_name, "ResNet18")||
+                begins_with(parser_struct->function_name, "Linear"))
         // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
+        // Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
+        // call("print_bool",{v});
+
         ArgsV.push_back(ctakens[fn][memid]);
         SetConditionalMaybeTake(parser_struct->function_name, memid);
     }
@@ -3895,10 +3909,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
 
         returned_values.push_back(ret);
 
-
         FreeOwnedPoolRet(scope_struct, parser_struct, returned_values);
         Builder->CreateRet(ret);
-
         return ret;
     }
 
@@ -4059,16 +4071,14 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     int memid = Memids[0];
     bool is_parent_owned=false;
 
-    if (begins_with(parser_struct->base_name, "__anon"))
-        std::cout << "\n\nNewVec " << memid << "\n";
 
     if (fn_borrows[parser_struct->base_name].count(memid)>0) {
         int parent = fn_borrows[parser_struct->base_name][memid][0]&MASK_16;
         is_parent_owned = memid_to_ownedid[parser_struct->function_name].count(parent)>0;
-        std::cout << "parent memid: " << parent << "\n";
+        // std::cout << "parent memid: " << parent << "\n";
 
-        if(is_parent_owned)
-            std::cout << "\n\t\033[33mBORROW NEWVEC" << "\033[0m\n\n";
+        // if(is_parent_owned)
+        //     std::cout << "\n\t\033[33mBORROW NEWVEC" << "\033[0m\n\n";
     }
     bool is_launch_parent=false;
     if (Parent!=nullptr)
@@ -5690,12 +5700,10 @@ inline void ArrayClear(Value *scope_struct, Nameable *expr) {
     if (expr->GetIsOwned()==OM_non_obj||expr->GetIsView()) {
         return;
     }
-
     Data_Tree dt = expr->GetDataTree();
     Data_Tree inner_dt = dt.Nested_Data[0];
     if (!inner_dt.IsFromArena())
         return; // Better double check than redundant value load
-
     ArrayClearOwned(scope_struct, dt, expr->codegen(scope_struct));
 }
 
@@ -5704,12 +5712,14 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Data_Tree inner_dt = Inner->GetDataTree();
     Value *loaded_var = Inner->codegen(scope_struct);
-    std::string postfix = (Inner->GetIsOwned()!=OM_non_obj)
+    bool is_owned = Inner->GetIsOwned();
+    std::string postfix = (is_owned!=OM_non_obj)
                 ? "" : "_Owned";
 
     Value *appended_val = Args[0]->codegen(scope_struct);
 
     SetConditionalTake(parser_struct->function_name, Args[0]);
+
 
     std::string elem_type = inner_dt.Nested_Data[0].Type;
 
@@ -5722,11 +5732,11 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
         appended_val = Builder->CreateSIToFP(appended_val, floatTy, "lfp");
 
 
-    StructType *st = struct_types["scope_struct"];
+    StructType *st = struct_types["array"];
     llvm::Type *elemTy;
     Value *vec = Load_Array(parser_struct->function_name, loaded_var);
 
-    if (!in_vec(elem_type, primary_data_tokens)) {
+    if (!in_vec(elem_type, primary_data_tokens)&&!is_owned) {
         Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
         Value *gc = Builder->CreateLoad(int8PtrTy, gc_gep);
         Value *marking = Builder->CreateLoad(boolTy,
@@ -5747,7 +5757,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
         } else
             call("GC_array_append_barrier",
                  {const_int16(data_name_to_type()[elem_type]), scope_struct, loaded_var, appended_val});
-        Builder->CreateBr(postBB);
+        Builder->CreateBr(postBB); // je post
 
         Builder->SetInsertPoint(StandardBB);
     }

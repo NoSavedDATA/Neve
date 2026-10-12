@@ -34,10 +34,12 @@ std::unordered_map<std::string,std::vector<Value*>> OwnedsCleared;
 inline void ClearOne(Value *scope_struct, std::string fn,
                 int memid, Data_Tree dt, Value *ptr,
                 int owned_type) {
+    // p2t("clear one" + fn + ": " + std::to_string(memid) + ", type: " + std::to_string(owned_type));
     if (owned_type==3) // borrow
         return;
 
     // bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
+
 
     if (!in_vec(ptr, OwnedsCleared[fn])) {
         if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
@@ -205,10 +207,10 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         return;
     }
 
+    //todo: do for binop
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
         int owned_id = callexpr->OwnedId;
-        
         
         if(owned_id==OM_non_obj||in_vec(owned_id,function_escapes[fn_name]))
             return;
@@ -221,7 +223,6 @@ void GetOwnedValues(ExprAST *expr, Value *scope_struct,
         callexpr->OwnedPoolOffset = last_offset;
         callexpr->OwnedPoolCap = size;
         last_offset += size * ClassSize[callexpr->GetDataTree().Type];
-        // std::cout << "$ set last_offset: " << fn_name << "|" << callee << "|" <<  last_offset << " -- " << size << "\n";
         return;
     }
 }
@@ -368,10 +369,15 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                  std::vector<int> &owned_ids,
                  int &own_ret_count, int &new_ret,
                  std::unordered_map<int, int> &ownid_to_size) {
+
     if (auto *callexpr = dynamic_cast<NameableCall*>(expr)) {
         std::string callee = callexpr->Callee;
         std::string basecallee = callexpr->BaseCallee;
         EscapeAnalysis(basecallee, callee, seen);
+        if(begins_with(callee, "ResNet")) {
+            std::cout << "EscapeAnalysis " << fn << ": " << callee << "\n";
+            std::cout << "function_own_ret_count " << (!function_own_ret_count.count(callee)) << "\n";
+        }
 
         if (!function_own_ret_count.count(callee))
             return;
@@ -398,6 +404,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         }
 
         if (is_incomplete_transfer) {
+            std::cout << "\n\t\033[33mhas partial: " << fn << "|" << callee << "\033[0m\n\n";
             fn_borrows[base_fn][memid].push_back(memid);
             fn_borrows_incomplete[base_fn].push_back(memid);
         }
@@ -472,6 +479,12 @@ void GetOwnedRet(Parser_Struct *parser_struct,
             }
             else if (auto *callexpr = dynamic_cast<NameableCall*>(var.get()))
                 continue;
+            else if (auto *callexpr = dynamic_cast<BinaryExprAST*>(var.get())) {
+                if (callexpr->IsCall)
+                    continue;
+                else
+                    new_ret++;
+            }
             else
                 new_ret++;
             if (owned_ids.size()>0&&ret_expr->Vars.size()>1)
