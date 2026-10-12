@@ -1375,8 +1375,6 @@ void NewVecExprAST::Checks() {
   fn_memid_to_dt[parser_struct->function_name][memid] = dt;
   if (check_branch!=0)
     fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
-  // if (fn_with_owned_ret.count(Callee)>0)
-  //     OwnedId = (*parser_struct->owned_id)++;
 }
 
 IntervalLoopExprAST::IntervalLoopExprAST(
@@ -2439,7 +2437,6 @@ void BinaryExprAST::Checks() {
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(BaseOperation)>0) {
           OwnedId = (*parser_struct->owned_id)++;
-          LogBlue("Bin is call with ownedid " + BaseOperation + ", id: " + std::to_string(OwnedId));
       }
       CArgs = CallArgsTy({L_dt, R_dt});
       CArgs.template_ret = fn_ret_dt[Operation];
@@ -2579,6 +2576,7 @@ void RetExprAST::Checks() {
     }
 
     for(auto &var : this->Vars) {
+        var->Checks();
         int ownid = var->GetIsOwned();
         if (ownid!=OM_non_obj) {
             fn_with_owned_ret[fn]=1;
@@ -3338,10 +3336,6 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
   data_type = ret;
   ReturnType = ret.Type;
   ret.is_own = fn_with_owned_ret.count(Callee)>0;
-
-  // if (ret.is_own)
-  //     std::cout << "RET OWN " << Callee<< "\n";
-
   return ret;
 }
 
@@ -3694,8 +3688,11 @@ void NameableCall::Checks() {
 
   if (check_branch!=0)
     fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
-  if (fn_with_owned_ret.count(Callee)>0)
+
+
+  if (fn_with_owned_ret.count(Callee)>0) {
       OwnedId = (*parser_struct->owned_id)++;
+  }
 }
 
 

@@ -1218,19 +1218,12 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
 
     // Partials in the callee only
     for(auto &[memid, argmemid] : partialtakes) {
-        if (begins_with(parser_struct->function_name, "ResNet18")||
-                begins_with(parser_struct->function_name, "Linear"))
-        // p2t("partial take pre: " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
         if (!ctakens.count(fn))
             return; // fix for when partial registered for the wrong generic
         if (!ctakens[fn].count(memid))
             return; // fix for when partial registered for the wrong generic
                     //
-        if (begins_with(parser_struct->function_name, "ResNet18")||
-                begins_with(parser_struct->function_name, "Linear"))
         // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
-        // Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
-        // call("print_bool",{v});
 
         ArgsV.push_back(ctakens[fn][memid]);
         SetConditionalMaybeTake(parser_struct->function_name, memid);

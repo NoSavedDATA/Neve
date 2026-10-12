@@ -920,8 +920,6 @@ void GetBorrows(Parser_Struct *parser_struct,
         for (auto &var : ret_expr->Vars) {
             retcount++;
             int memid = var->GetMemId()[0];
-            if (begins_with(parser_struct->function_name, "Linear"))
-std::cout << "\n\t\033[33mRET " << memid << "\033[0m\n\n";
             if (memid!=OM_non_obj) {
                 retids.push_back(memid);
             }

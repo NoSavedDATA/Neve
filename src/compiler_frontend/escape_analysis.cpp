@@ -374,14 +374,22 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         std::string callee = callexpr->Callee;
         std::string basecallee = callexpr->BaseCallee;
         EscapeAnalysis(basecallee, callee, seen);
-        if(begins_with(callee, "ResNet")) {
-            std::cout << "EscapeAnalysis " << fn << ": " << callee << "\n";
-            std::cout << "function_own_ret_count " << (!function_own_ret_count.count(callee)) << "\n";
-        }
+        // if(begins_with(callee, "ResNet")) {
+        //     std::cout << "\nEscapeAnalysis " << fn << ": " << callee << "\n";
+        //     std::cout << "function_own_ret_count " << (function_own_ret_count.count(callee)) << "\n";
+        // }
 
+        // if(begins_with(fn, "train")) {
+        //     std::cout << "start " << fn << " | " << callee << " \n";
+        // }
         if (!function_own_ret_count.count(callee))
             return;
+        // if(begins_with(fn, "train")) {
+        //     std::cout << "proceed " << fn << " | " << callee << " \n";
+        // }
 
+        if (!function_own_ret_count.count(callee))
+            LogError(-1, "Can't set return count for " + callee);
         ownid_to_size[callexpr->OwnedId] = function_own_ret_count[callee];
 
         bool caller_transfers = fn_borrows[base_fn].count(callexpr->MemId)>0;
@@ -404,7 +412,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         }
 
         if (is_incomplete_transfer) {
-            std::cout << "\n\t\033[33mhas partial: " << fn << "|" << callee << "\033[0m\n\n";
+            // std::cout << "\n\t\033[33mhas partial: " << fn << "|" << callee << "\033[0m\n\n";
             fn_borrows[base_fn][memid].push_back(memid);
             fn_borrows_incomplete[base_fn].push_back(memid);
         }
@@ -427,6 +435,10 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         if (!function_own_ret_count.count(callee))
             return;
 
+
+
+        if (!function_own_ret_count.count(callee))
+            LogError(-1, "Can't set return count for " + callee);
         ownid_to_size[binop->OwnedId] = function_own_ret_count[callee];
 
         int memid = binop->GetMemId()[0];
@@ -449,7 +461,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         }
 
         if (is_incomplete_transfer) {
-            std::cout << "\n\t\033[31mESCAPE: " << base_fn << " -- " << callee << ", owned: " << binop->OwnedId << ", memid: " << memid << "\033[0m\n\n";
+            // std::cout << "\n\t\033[31mESCAPE: " << base_fn << " -- " << callee << ", owned: " << binop->OwnedId << ", memid: " << memid << "\033[0m\n\n";
             fn_borrows[base_fn][memid].push_back(memid);
             fn_borrows_incomplete[base_fn].push_back(memid);
         }
