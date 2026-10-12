@@ -963,6 +963,14 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
 
     *parser_struct->mem_id = parser_struct->memid_arg_offset;
 
+    // for (auto &body : Body) {
+    //   body->Traverse([parser_struct,&fn_name](ExprAST *node) {
+    //           if (node->parser_struct)
+    //               node->parser_struct->function_name=fn_name;
+    //   });
+    // }
+
+
     for (auto &body : Body) {
       body->Traverse([parser_struct, &seen,
               &borrow_ids, &borrow_branches, &borrow_c, &bad_borrows, &memid_to_branch,
@@ -977,6 +985,8 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
                 );
       });
     }
+
+
 
 
 

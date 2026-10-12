@@ -944,6 +944,9 @@ Value *Malloc_LLVM_Struct(Value *scope_struct, std::string &struct_name, std::st
 }
 
 Value *Load_Stack_Top(std::string fn) {
+    std::cout << "Load stack top:  " << fn << "\n";
+    if (begins_with(fn, "BackNode"))
+        bt();
     Value *stack_top_value = function_values[fn]["QQ_stack_top"];
     Value *st = Builder->CreateAdd(stack_top_value, const_int(fn_stack_offset[fn]));
     return st;
@@ -4083,8 +4086,8 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         : "";
 
     std::string Callee = "array_" + type + "_NewVec"+postfix;
-    // if (Callee=="array_int_NewVec")
-    //     p2t(parser_struct->function_name+"|"+Callee);
+    if (Callee=="array_int_NewVec")
+        p2t(parser_struct->function_name+"|"+Callee);
     return callret(Callee, values);
 }
 

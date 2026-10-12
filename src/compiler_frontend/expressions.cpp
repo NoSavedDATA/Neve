@@ -466,6 +466,9 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
     FunctionAST *fn_ast=nullptr; 
 
+
+    std::cout << "\n\n\n-------\nGenTemplate " << parser_struct->function_name << " - " << fn << "\n";
+
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
@@ -557,8 +560,19 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
 
 
-        // std::cout << "Checks " << fn << "\n";
-        // if(parser_struct->gpu==0)
+
+
+            //------------------------------------
+
+
+
+
+
+
+
+
+
+
             for (auto &body : fn_ast->Body) {
                   body->Traverse([parser_struct, &fn](ExprAST *node) {
                       std::string prev_name;
@@ -571,6 +585,70 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                           node->parser_struct->function_name = prev_name;
                   });
             }
+
+
+
+
+
+
+
+
+
+
+            //------------------------------------
+
+        
+
+
+
+
+
+            // std::string prev_name="";
+            // for (auto &body : fn_ast->Body) {
+            //       body->Traverse([parser_struct, &fn, &prev_name](ExprAST *node) {
+            //           if(node->parser_struct&&prev_name=="")  {
+            //               prev_name = node->parser_struct->function_name;
+            //           }
+            //           if(node->parser_struct) {
+            //               node->parser_struct->function_name = fn;
+            //           }
+            //       });
+            // }
+            // for (auto &body : fn_ast->Body) {
+            //       body->Traverse([parser_struct, &fn, &prev_name, &base_name](ExprAST *node) {
+            //           node->Checks();
+            //       });
+            // }
+            // for (auto &body : fn_ast->Body) {
+            //       body->Traverse([parser_struct, &fn, &prev_name, &base_name](ExprAST *node) {
+            //           if(node->parser_struct) {
+            //               node->parser_struct->function_name = base_name;
+            //           }
+            //       });
+            // }
+
+
+
+
+
+
+
+
+
+
+            //------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
         generics_fn.push_back({fn_ast, std::move(proto), parser_struct,
                             fn, base_name, CArgs.self_obj_owned});
         *parser_struct->mem_id = memid;
@@ -583,16 +661,8 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         //     parser_struct->gpu = gpu;
         // }
 
-        // if (!fn_ast)
-        //     LogErrorC(-1, "Template for " +base_name + " failed");
-        // fn_ast->Proto = std::move(proto);
-        // fn_ast->parser_struct->function_name = fn;
-        // fn_ast->parser_struct->cvalues = cvalues;
-        // BasicBlock *CurBB = Builder->GetInsertBlock();
 
-        // fn_ast->codegen();
 
-        // Builder->SetInsertPoint(CurBB);
         
         found = true;
         return fn;
@@ -743,7 +813,7 @@ void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 void ForEachExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     Vec->Traverse(fn);
-    for (auto &expr : Body)
+    for (auto &expr : Body) 
         expr->Traverse(fn);
 }
 
@@ -891,8 +961,9 @@ void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
 
 void ForEachExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
     Vec->TraversePost(fn);
-    for (auto &expr : Body)
+    for (auto &expr : Body) {
         expr->TraversePost(fn);
+    }
     fn(this);
 }
 
@@ -1567,6 +1638,7 @@ void UnkVarExprAST::Checks() {
         LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
       dt = dt.Nested_Data[0];
     }
+    std::cout << "UNK SET " << parser_struct->function_name << " | " << VarName << "\n";
     data_typeVars[parser_struct->function_name][VarName] = dt;
   }
 
@@ -1686,6 +1758,8 @@ void DataExprAST::Checks() {
 
     Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct);
 
+    if(begins_with(parser_struct->function_name, "gpu_tensor_resh"))
+    std::cout << "DATAEXPR SET " << parser_struct->function_name << " | "  <<VarName<< "\n";
 
     data_typeVars[parser_struct->function_name][VarName] = data_type;
     typeVars[parser_struct->function_name][IdentifierStr] = data_type.Type;
@@ -2418,6 +2492,7 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 
 
 void BinaryExprAST::Checks() {
+    std::cout << "binary fn " << parser_struct->function_name << "\n";
   LHS->Checks();
   RHS->Checks();
   Data_Tree dt = GetDataTree();
@@ -2660,6 +2735,9 @@ void ForExprAST::Checks() {
 }
 
 void ForEachExprAST::Checks() {
+
+    std::cout << "foreach fn " << parser_struct->function_name << "\n";
+
   data_type = Vec->GetDataTree();
   if(data_type.Nested_Data.size()==0) {
     LogError(parser_struct->line, "Using a non-compound data type at a \"for in\" expression.");
@@ -2667,11 +2745,16 @@ void ForEachExprAST::Checks() {
   }
   data_typeVars[parser_struct->function_name][VarName] = data_type.Nested_Data[0];
   Type = data_type.Nested_Data[0].Type;
-  for (auto &body : Body)
+  for (auto &body : Body) {
+        if (body->parser_struct)
+            body->parser_struct->function_name = parser_struct->function_name;
+
       body->Checks();
+  }
 }
 
 void IfExprAST::Checks() {
+    std::cout << "if fn " << parser_struct->function_name << "\n";
 
     // int prev_check_branch = check_branch;
     check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;

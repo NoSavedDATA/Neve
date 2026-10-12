@@ -1097,6 +1097,7 @@ Function *FunctionAST::codegen() {
         StructType *st = struct_types["scope_struct"];
         scope_struct = &Arg;
         Value *stack_top_value_gep = Builder->CreateStructGEP(st, scope_struct, 3); 
+        std::cout << "SET STACK TOP______________ " << function_name << "\n";
         function_values[function_name]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
@@ -1140,14 +1141,16 @@ Function *FunctionAST::codegen() {
   // Solve templates
   std::unordered_map<int, int> ownid_to_memid;
   for (auto &body : Body) {
-    if (idx>=0) {// is comp specialization
-        body->SetCValues(parser_struct);
-    }
+
+    body->SetCValues(parser_struct);
+
     body->Traverse([&ownid_to_memid, &idx, this](ExprAST *node) {
         if (idx>=0&&node->parser_struct!=nullptr&&parser_struct!=nullptr) {
             node->parser_struct->function_name = parser_struct->function_name;
             node->parser_struct->cvalues = parser_struct->cvalues;
         }
+        // if (node->parser_struct)
+        //     node->parser_struct->function_name=function_name;
         if (auto *stmt = dynamic_cast<Nameable*>(node)) {
             if (stmt->IsOwnedUnique)
                 ownid_to_memid[stmt->Ownedids[0]] = stmt->Memids[0];
