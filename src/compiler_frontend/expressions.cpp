@@ -3640,6 +3640,8 @@ void NameableCall::Checks() {
   }
 
 
+
+
   if(Callee=="map_keys") {
     std::string map_ty = this->Inner->GetDataTree().Nested_Data[0].Type;
     map_ty = (ClassSize.count(map_ty)>0) ? "void_ptr" : map_ty;

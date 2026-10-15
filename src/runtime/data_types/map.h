@@ -68,6 +68,7 @@ struct DT_map {
 
     DT_map();
     void New(Scope_Struct *, int, int, int, std::string, std::string);
+    void New(Scope_Struct *, int, int, int);
     void Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes);
 
     void print();

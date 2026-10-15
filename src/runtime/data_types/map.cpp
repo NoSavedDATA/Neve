@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdlib>
 #include <stdio.h>
 #include <string>
 
@@ -22,6 +23,22 @@ DT_map_node::DT_map_node(int key_size, int value_size) {
 
 DT_map::DT_map() {}
 
+void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size) {
+
+    this->size = size;
+    this->key_size = key_size;
+    this->val_size = value_size;
+
+
+    capacity = ((size + 7) / 8) * 8;
+    if (capacity<8)
+        capacity=8;
+    expand_at = capacity*4;
+
+    nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
+    for (int i=0; i<capacity; ++i)
+        nodes[i] = nullptr;
+}
 void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std::string key_type, std::string value_type) {
     this->size = size;
     this->key_size = key_size;
@@ -29,10 +46,11 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
     this->key_type = key_type;
     this->val_type = value_type;
 
+
     capacity = ((size + 7) / 8) * 8;
     if (capacity<8)
         capacity=8;
-
+    std::cout << "cap: " << capacity << "\n";
     expand_at = capacity*4;
 
     nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
@@ -84,9 +102,8 @@ extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, Data_Tree dt) {
     else
         value_size = 8;
 
-    DT_map *map = newT<DT_map>(scope_struct, "map");
-    map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
-
+    DT_map *map = (DT_map*)malloc(sizeof(DT_map));
+    map->New(scope_struct, 0, key_size, value_size); 
     
     return map;
 }
@@ -600,6 +617,22 @@ extern "C" int map_clear(Scope_Struct *ctx, DT_map *map) {
         }
     }
     __atomic_store_n(&map->size, 0, __ATOMIC_RELEASE);
+    return 0;
+}
+
+
+extern "C" int map_clear_owned(Scope_Struct *ctx, DT_map *map) {
+    int capacity = map->capacity;
+    for (int i=0; i<capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        map->nodes[i] = nullptr;
+        while (node!=nullptr) {
+            DT_map_node *next = node->next;
+            free(node);
+            node = next;
+        }
+    }
+    map->size=0;
     return 0;
 }
 

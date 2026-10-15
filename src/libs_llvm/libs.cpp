@@ -511,6 +511,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_clear", map_clearTy);
 
+	FunctionType *map_clear_ownedTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_clear_owned", map_clear_ownedTy);
+
 	FunctionType *channel_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt16Ty(*TheContext), Type::getInt32Ty(*TheContext)},

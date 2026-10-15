@@ -944,9 +944,6 @@ Value *Malloc_LLVM_Struct(Value *scope_struct, std::string &struct_name, std::st
 }
 
 Value *Load_Stack_Top(std::string fn) {
-    std::cout << "Load stack top:  " << fn << "\n";
-    if (begins_with(fn, "BackNode"))
-        bt();
     Value *stack_top_value = function_values[fn]["QQ_stack_top"];
     Value *st = Builder->CreateAdd(stack_top_value, const_int(fn_stack_offset[fn]));
     return st;
@@ -1349,6 +1346,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                     }
 
                     create_fn += postfix;
+                    // p2t("create " + create_fn);
 
                     if(struct_create_fn.count(dt_type)>0) {
                         initial_value = (struct_type_size.count(Type)>0) ? callret("allocate_pool", {scope_struct,
@@ -4086,8 +4084,8 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         : "";
 
     std::string Callee = "array_" + type + "_NewVec"+postfix;
-    if (Callee=="array_int_NewVec")
-        p2t(parser_struct->function_name+"|"+Callee);
+    // if (Callee=="array_int_NewVec")
+    //     p2t(parser_struct->function_name+"|"+Callee);
     return callret(Callee, values);
 }
 
@@ -5638,6 +5636,7 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
 
+
     Value *array_ptr = Builder->CreateLoad(
                 int8PtrTy,
                 Builder->CreateStructGEP(struct_types["array"], ptr, 3)
@@ -5701,6 +5700,105 @@ inline void ArrayClear(Value *scope_struct, Nameable *expr) {
     if (!inner_dt.IsFromArena())
         return; // Better double check than redundant value load
     ArrayClearOwned(scope_struct, dt, expr->codegen(scope_struct));
+}
+inline Value *MapClear(Value *scope_struct, Value *loaded_var,
+        Data_Tree inner_dt, bool is_view) {  
+
+    StructType *st = struct_types["map"];
+    StructType *st_node = struct_types["map_node"];
+
+
+    Value *nullPtr = ConstantPointerNull::get(
+                cast<PointerType>(int8PtrTy)
+            );
+
+
+    Data_Tree key_dt = inner_dt.Nested_Data[0], val_dt = inner_dt.Nested_Data[1];
+    std::string key_type = key_dt.Type;
+    std::string value_type = val_dt.Type;
+
+
+
+    Value *capacity_gep = Builder->CreateStructGEP(st, loaded_var, 1);
+    Value *map_capacity = Builder->CreateLoad(intTy, capacity_gep);
+
+    Value *nodes_gep = Builder->CreateStructGEP(st, loaded_var, 5);
+    Value *nodes = Builder->CreateLoad(int8PtrTy->getPointerTo(), nodes_gep);
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    BasicBlock *BucketLoopBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+    BasicBlock *BucketLoopCondBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+    BasicBlock *NodeLoopBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+    BasicBlock *NodeFreeBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+    BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "map.after.bb", TheFunction);
+    BasicBlock *curBB = Builder->GetInsertBlock();
+
+     
+
+    Builder->CreateBr(BucketLoopBB);
+    Builder->SetInsertPoint(BucketLoopBB);
+
+    PHINode *bucket_pos = Builder->CreatePHI(intTy, 2);
+    bucket_pos->addIncoming(const_int(0), curBB);
+
+    Value *bucket_gep = Builder->CreateInBoundsGEP(int8PtrTy, nodes, bucket_pos); 
+
+
+
+    Builder->CreateBr(NodeLoopBB);
+    Builder->SetInsertPoint(NodeLoopBB);
+    
+    PHINode *cur_node = Builder->CreatePHI(int8PtrTy, 2);
+    cur_node->addIncoming(
+            Builder->CreateLoad(int8PtrTy, bucket_gep),
+            BucketLoopBB);
+
+    Builder->CreateCondBr(
+            Builder->CreateICmpEQ(cur_node, nullPtr),
+            BucketLoopCondBB, NodeFreeBB);
+
+    Builder->SetInsertPoint(NodeFreeBB);
+
+    Value *key = Builder->CreateLoad(int8PtrTy,
+                Builder->CreateStructGEP(st_node, cur_node, 0));
+    Value *val = Builder->CreateLoad(int8PtrTy,
+                Builder->CreateStructGEP(st_node, cur_node, 1));
+
+    if (!is_view&&val_dt.Type=="array") {
+        ArrayClearOwned(scope_struct, val_dt, val);
+    }
+    BasicBlock *lastBB = Builder->GetInsertBlock();
+
+    // call("print_void_ptr", {cur_node});
+    call("free", {cur_node});
+
+    Value *next_node = Builder->CreateLoad(int8PtrTy,
+                Builder->CreateStructGEP(st_node, cur_node, 2));
+
+    cur_node->addIncoming(next_node, lastBB);
+
+    Builder->CreateBr(NodeLoopBB);
+
+
+    Builder->SetInsertPoint(BucketLoopCondBB);
+    Builder->CreateStore(nullPtr, bucket_gep);
+
+    Value *next_val = Builder->CreateAdd(bucket_pos, const_int(1));
+    bucket_pos->addIncoming(
+            next_val, BucketLoopCondBB);
+
+    Builder->CreateCondBr(
+            Builder->CreateICmpEQ(next_val, map_capacity),
+            AfterBB, BucketLoopBB
+        );
+
+
+    Builder->SetInsertPoint(AfterBB);
+    // call("_quit_", {scope_struct});
+
+    // return callret("map_clear_owned", {scope_struct, loaded_var});
+    return const_int(0);
 }
 
 
@@ -5901,6 +5999,12 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   if (Callee=="array_clear")
       ArrayClear(scope_struct, Inner.get());
+  if (Callee=="map_clear") {
+    if (Inner->GetIsOwned()!=OM_non_obj) {
+        return MapClear(scope_struct, ArgsV[1], Inner->GetDataTree(),
+                Inner->GetIsView());
+    }
+  }
   
 
 

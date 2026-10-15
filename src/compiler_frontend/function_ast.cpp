@@ -1097,7 +1097,6 @@ Function *FunctionAST::codegen() {
         StructType *st = struct_types["scope_struct"];
         scope_struct = &Arg;
         Value *stack_top_value_gep = Builder->CreateStructGEP(st, scope_struct, 3); 
-        std::cout << "SET STACK TOP______________ " << function_name << "\n";
         function_values[function_name]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {

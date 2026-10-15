@@ -864,6 +864,15 @@ void set_functions_args_type() {
 		
 		fn_argnames["map_clear"].push_back("0");
 		fn_argnames["map_clear"].push_back("1");
+		
+		Function_Arg_Types["map_clear_owned"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_clear_owned"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_clear_owned"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_clear_owned"]["1"] = Data_Tree("map");
+		
+		fn_argnames["map_clear_owned"].push_back("0");
+		fn_argnames["map_clear_owned"].push_back("1");
 	
 		
 		Function_Arg_Types["memp_start"]["0"] = "Scope_Struct";
