@@ -29,9 +29,9 @@ inline void set_scope_obj(Value *scope_struct, Value *obj) {
 }
 
 inline Value *get_scope_obj(Value *scope_struct) {
-        StructType *st = struct_types["scope_struct"]; 
-        Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
-        return Builder->CreateLoad(int8PtrTy, obj_gep);
+    StructType *st = struct_types["scope_struct"]; 
+    Value *obj_gep = Builder->CreateStructGEP(st, scope_struct, 4);
+    return Builder->CreateLoad(int8PtrTy, obj_gep);
 }
 
 

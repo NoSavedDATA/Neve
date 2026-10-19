@@ -26,7 +26,8 @@ inline bool has_body(ExprAST *expr) {
 }
 
 
-void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr);
+void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr,
+        bool is_view=false);
 
 
 

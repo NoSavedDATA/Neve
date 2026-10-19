@@ -42,13 +42,14 @@ inline void ClearOne(Value *scope_struct, std::string fn,
 
 
     if (!in_vec(ptr, OwnedsCleared[fn])) {
-        if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
-            ArrayClearOwned(scope_struct, dt, ptr);
         Disown(scope_struct, dt, ptr);
     }
 
     if (owned_type==2) // possible borrow mem for returned 
         call("free", {ptr});
+
+    // p2t("Return clear: "+ dt.Type);
+    // call("_quit_",{scope_struct});
 }
 inline void Clear_Fn_Owned_Values(Value *scope_struct,
         Parser_Struct *parser_struct,

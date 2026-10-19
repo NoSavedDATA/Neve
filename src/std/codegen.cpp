@@ -43,7 +43,7 @@ Data_Tree min_ret_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<
 Data_Tree max_ret_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args) {
   return Args[0]->GetDataTree();
 }
-Data_Tree array_clone_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
+Data_Tree array_copy_dt(Parser_Struct * parser_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::unique_ptr<Nameable> &inner) {
   Data_Tree dt = Data_Tree("array");
   dt.Nested_Data.push_back(inner->GetDataTree().Nested_Data[0]);
   return dt;

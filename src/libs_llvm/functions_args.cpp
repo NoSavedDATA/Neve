@@ -928,16 +928,27 @@ void set_functions_args_type() {
 		fn_argnames["array_Create_Taken"].push_back("0");
 		fn_argnames["array_Create_Taken"].push_back("1");
 		
-		Function_Arg_Types["array_clone"]["0"] = "Scope_Struct";
-		Function_Arg_Types["array_clone"]["1"] = "array";
+		Function_Arg_Types["array_copy"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_copy"]["1"] = "array";
 		
-		Function_Arg_DataTypes["array_clone"]["0"] = Data_Tree("Scope_Struct");
-		Data_Tree array_clone_1 = Data_Tree("array");
-		array_clone_1.Nested_Data.push_back(Data_Tree("any"));
-		Function_Arg_DataTypes["array_clone"]["1"] = array_clone_1;
+		Function_Arg_DataTypes["array_copy"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_copy_1 = Data_Tree("array");
+		array_copy_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_copy"]["1"] = array_copy_1;
 		
-		fn_argnames["array_clone"].push_back("0");
-		fn_argnames["array_clone"].push_back("1");
+		fn_argnames["array_copy"].push_back("0");
+		fn_argnames["array_copy"].push_back("1");
+		
+		Function_Arg_Types["array_copy_own"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_copy_own"]["1"] = "array";
+		
+		Function_Arg_DataTypes["array_copy_own"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_copy_own_1 = Data_Tree("array");
+		array_copy_own_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_copy_own"]["1"] = array_copy_own_1;
+		
+		fn_argnames["array_copy_own"].push_back("0");
+		fn_argnames["array_copy_own"].push_back("1");
 		
 		Function_Arg_Types["array_slice"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_slice"]["1"] = "array";

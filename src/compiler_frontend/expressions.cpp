@@ -118,6 +118,11 @@ void ExprAST::SetIsVarLoad(bool isVarLoad) {
 bool ExprAST::GetIsVarLoad() {
   return isVarLoad;
 }
+bool ExprAST::IsOwnableExpr() {
+    return dynamic_cast<Nameable*>(this)!=nullptr
+        ||dynamic_cast<NewVecExprAST*>(this)!=nullptr
+        ||dynamic_cast<StringExprAST*>(this)!=nullptr;
+}
 
 bool ExprAST::GetNameSolveToLast() {
   return NameSolveToLast;
@@ -467,16 +472,16 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
     FunctionAST *fn_ast=nullptr; 
 
 
-    std::cout << "\n\n\n-------\nGenTemplate " << parser_struct->function_name << " - " << fn << "\n";
+    // std::cout << "\n\n\n-------\nGenTemplate " << parser_struct->function_name << " - " << fn << "\n";
 
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
 
         // if (begins_with(fn, "gpu_tensor")) {
-        //     std::cout << "compare "  << "\n";
-        //     print_dt_vec(CArgs.dts);
-        //     print_dt_vec(templ.dts);
+            // std::cout << "compare "  << "\n";
+            // print_dt_vec(CArgs.dts);
+            // print_dt_vec(templ.dts);
         // }
 
         if (!CompareDTs(CArgs, templ, true, true))
@@ -1638,7 +1643,7 @@ void UnkVarExprAST::Checks() {
         LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
       dt = dt.Nested_Data[0];
     }
-    std::cout << "UNK SET " << parser_struct->function_name << " | " << VarName << "\n";
+    // std::cout << "UNK SET " << parser_struct->function_name << " | " << VarName << "\n";
     data_typeVars[parser_struct->function_name][VarName] = dt;
   }
 
@@ -1758,8 +1763,6 @@ void DataExprAST::Checks() {
 
     Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct);
 
-    if(begins_with(parser_struct->function_name, "gpu_tensor_resh"))
-    std::cout << "DATAEXPR SET " << parser_struct->function_name << " | "  <<VarName<< "\n";
 
     data_typeVars[parser_struct->function_name][VarName] = data_type;
     typeVars[parser_struct->function_name][IdentifierStr] = data_type.Type;
@@ -2492,7 +2495,6 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 
 
 void BinaryExprAST::Checks() {
-    std::cout << "binary fn " << parser_struct->function_name << "\n";
   LHS->Checks();
   RHS->Checks();
   Data_Tree dt = GetDataTree();
@@ -2736,8 +2738,6 @@ void ForExprAST::Checks() {
 
 void ForEachExprAST::Checks() {
 
-    std::cout << "foreach fn " << parser_struct->function_name << "\n";
-
   data_type = Vec->GetDataTree();
   if(data_type.Nested_Data.size()==0) {
     LogError(parser_struct->line, "Using a non-compound data type at a \"for in\" expression.");
@@ -2754,7 +2754,6 @@ void ForEachExprAST::Checks() {
 }
 
 void IfExprAST::Checks() {
-    std::cout << "if fn " << parser_struct->function_name << "\n";
 
     // int prev_check_branch = check_branch;
     check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
@@ -3741,6 +3740,8 @@ void NameableCall::Checks() {
   CArgs = CallArgsTy(Types);
 
 
+  if (Callee=="array_copy"&&Inner->GetIsOwned()!=OM_non_obj)
+      Callee = "array_copy_own";
 
 
   bool needs_version =\

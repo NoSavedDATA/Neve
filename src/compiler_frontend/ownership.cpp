@@ -256,7 +256,68 @@ void OwnedHolder::RegisterOwned(std::string fn, Data_Tree dt, int memid, Value *
 }
 
 
-void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr) {
+
+void OwnedClearComposite(Value *scope_struct, Data_Tree &dt, Value *ptr,
+            bool from_obj) {
+    std::cout << "OwnedComposite: " << dt.Type << "\n";
+    if (dt.Type=="array") {
+        ArrayClearOwned(scope_struct,dt,ptr,from_obj);
+        return;
+    }
+    if (dt.Type=="map") {
+        MapClear(scope_struct,ptr,dt,false,from_obj);
+        return;
+    }
+    if (dt.Type=="channel") {
+        //
+        return;
+    }
+    
+
+    // p2t("composite: " + dt.Type);
+    // call("print_void_ptr",{ptr});
+
+    std::string class_name = dt.Type;
+    int attr_idx=-1;
+    for (auto &attr : ClassAttrsName[class_name]) {
+        attr_idx++;
+        Data_Tree attr_dt = data_typeVars[class_name][attr];
+
+        if (!attr_dt.IsTraversable())
+            continue;
+
+        // p2t("  traverse: " + attr_dt.Type + ", " + std::to_string(attr_idx));
+        // if (attr_dt.Nested_Data.size()>0)
+            // p2t("    inner: " + attr_dt.Nested_Data[0].Type);
+
+
+        Value *attr_ptr = Builder->CreateLoad(int8PtrTy,
+                    Builder->CreateStructGEP(
+                        struct_types["class_"+class_name],
+                        ptr, attr_idx)
+                    );
+        call("print_void_ptr",{attr_ptr});
+
+        if (dt.Type=="BackNode") {
+
+            std::cout << "-------------->traverse " << attr_dt.Type << " - " << attr_idx << "\n";
+            p2t("   traverse " + attr_dt.Type + " | " + std::to_string(attr_idx));
+            p2t("   traverse " + attr_dt.Type + " | " + std::to_string(attr_dt.is_view));
+            if (!attr_dt.is_view)
+                Disown(scope_struct,attr_dt,
+                        attr_ptr);
+            std::cout << "\n\n\n\n\n\n";
+        }
+    }
+
+}
+
+
+
+void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr, bool is_view) {
+    if (!is_view&&dt.IsTraversable())
+        OwnedClearComposite(scope_struct, dt, ptr, false);
+
     std::string disown_method = dt.Type+"_disown";
     if (fn_ret_dt.count(disown_method)>0) {
         set_scope_obj(scope_struct, ptr);
@@ -292,9 +353,8 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
         bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
         BasicBlock *AfterBB, *DisownBB, *created_okBB;
         if (is_conditional) {
-            Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
             // p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
-            // call("print_bool", {v}); 
+            // call("print_bool", {Builder->CreateLoad(boolTy, ctakens[fn][memid])}); 
             Function *TheFunction = Builder->GetInsertBlock()->getParent();
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
@@ -317,15 +377,14 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
             Builder->SetInsertPoint(DisownBB);
         }
 
-        if (!in_vec(memid, fn_views[fn])&&dt.Type=="array")
-            ArrayClearOwned(scope_struct, dt, ptr);
+
 
         // if (dt.Type=="BackNode") {
         //     p2t("cond free in : " + fn);
         //     // call("print_void_ptr", {ptr});
         // }
 
-        Disown(scope_struct, dt, ptr);
+        Disown(scope_struct, dt, ptr, in_vec(memid, fn_views[fn]));
 
         if (is_conditional) {
             call("free", {ptr});
@@ -392,6 +451,20 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
                  std::unordered_map<int,uint64_t> &memid_to_branch,
                  Nameable *parent, ExprAST *nameable
             ) {
+
+    if (auto *stmt = dynamic_cast<Nameable*>(nameable)) {
+        if (stmt->Depth>1)  {
+            std::cout << "\n\t\033[33mTransfer attribute " << stmt->GetName() << "\033[0m\n\n";
+
+        }
+        if (stmt->Depth>1&&stmt->Inner->GetIsOwned())  {
+            std::cout << "\n\t\033[33mAttr owned " << stmt->GetName() << "\033[0m\n\n";
+
+        }
+    }
+
+
+
     int memid = nameable->GetMemId()[0];
     if (memid==OM_non_obj)
         return;
@@ -399,6 +472,8 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
 
     if (!dynamic_cast<Nameable*>(nameable))
         return;
+
+    
 
     uint64_t taken_lifetime = GetLifetime(parser_struct,
         (Nameable*)nameable, memid_to_branch);
@@ -415,14 +490,16 @@ void CheckBadBorrow(Parser_Struct *parser_struct,
 
             Data_Tree r_dt = nameable->GetDataTree();
             bool bad_rhs = nameable->GetIsOwned()==OM_non_obj
-                        && r_dt.IsComposite();
-            // if (parent->GetIsOwned()!=OM_non_obj&&bad_rhs) {
-            //     std::cout << "attribute" << "\n";
-            //     nameable->GetDataTree().Print();
-            //     std::cout << "to" << "\n";
-            //     parent->GetDataTree().Print();
-            //     LogErrorS(nameable->Line, "Cannot assign a GC arena object to an owned. "+ parser_struct->function_name + "|" + nameable->Name);
-            // }
+                        && r_dt.IsTraversable();
+            if (parent->GetIsOwned()!=OM_non_obj&&bad_rhs) {
+                // std::cout << "attribute" << "\n";
+                // nameable->GetDataTree().Print();
+                // std::cout << "to" << "\n";
+                // parent->GetDataTree().Print();
+                // LogErrorS(nameable->Line, "Cannot assign a GC arena object to an owned. "+ parser_struct->function_name + "|" + nameable->Name);
+
+                bad_borrows.push_back({memid,3,nameable->Line});
+            }
         }
 
 
@@ -576,7 +653,7 @@ void GetCallMostRestrictive(Parser_Struct *parser_struct,
     borrow_ids[memid].push_back(first_branch);
 
 
-    // std::cout << "PUSH BORROW  " << parser_struct->function_name << ": " << memid << " to parent " << (first_branch&MASK_16) << ", to call " << (callexpr_branch&MASK_16)<< "\n";
+    // std::cout << "PUSH BORROW  " << parser_struct->function_name << ", memid: " << memid << " to parent " << (first_branch&MASK_16) << ", to call " << (callexpr_branch&MASK_16)<< "\n";
 
     if ((first_branch&MASK_16)==0)
         LogError(-1, "Parent is impossible to be 0");
@@ -659,15 +736,11 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             argname = fn_argnames[callee][i++];
         argnames.push_back(argname);
 
-
         // std::cout << "arg for: " << argname << " -- " << argexpr->GetMemId()[0] << "\n";
 
-
-        if (!dynamic_cast<Nameable*>(argexpr.get())
-            &&!dynamic_cast<NewVecExprAST*>(argexpr.get())
-            &&!dynamic_cast<StringExprAST*>(argexpr.get())
-           )
+        if (!argexpr->IsOwnableExpr())
             continue;
+
         if (auto *nameableexpr = dynamic_cast<Nameable*>(argexpr.get()))
             if (nameableexpr->Depth!=1) 
                 continue;
@@ -697,34 +770,49 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
         i++;
         j++;
 
+        // std::cout << "check arg: " << i << "-" <<j <<", name: " <<argexpr->GetName() << "\n";
+
         if (fn_argnames.count(callee)==0)
             return;
         std::string argname = fn_argnames[callee][i-1];
         if (argname=="scope_struct")
             argname = fn_argnames[callee][i++];
 
-        if (!dynamic_cast<Nameable*>(argexpr.get())
-            &&!dynamic_cast<NewVecExprAST*>(argexpr.get())
-            &&!dynamic_cast<StringExprAST*>(argexpr.get())
-           )
+        if (!argexpr->IsOwnableExpr())
             continue;
 
-        if (auto *nameableexpr = dynamic_cast<Nameable*>(argexpr.get()))
-            if (nameableexpr->Depth!=1) 
+        int arg_memid = fn_arg_memid[base_callee][argname];
+
+        bool is_transfer = fn_borrows[base_callee].count(arg_memid)>0; 
+
+        if (auto *arg_stmt = dynamic_cast<Nameable*>(argexpr.get())) {
+            bool isCall = (dynamic_cast<NameableCall*>(arg_stmt) != nullptr);
+            bool isIdx = (dynamic_cast<NameableIdx*>(arg_stmt) != nullptr);
+
+            bool is_attr = (arg_stmt->Depth>1&&!isCall&&!isIdx)||isIdx;
+            if (is_attr&&is_transfer&&argexpr->GetIsOwned()!=OM_non_obj) {
+                LogError(callexpr->Line, "Trying to transfer ownership of a transfered object");
+            }
+
+            if (arg_stmt->Depth!=1)
                 continue;
+        }
+
+
 
         int memid = argexpr->GetMemId()[0];
         if (memid==OM_non_obj)
             continue;
 
-        int arg_memid = fn_arg_memid[base_callee][argname];
-
 
 
         // std::cout << " " << callee << "|" << arg_memid << " >>> " <<fn_borrows[base_callee].count(arg_memid) << "\n"; 
 
-        if (fn_borrows[base_callee].count(arg_memid)>0) {
+        if (is_transfer) {
 
+
+
+            // Route param parent to arg parent
             std::vector<uint64_t> caller_parents;
             for (auto &borrow : fn_borrows[base_callee][arg_memid]) {
                 int owner_memid = borrow&MASK_16;
@@ -762,13 +850,6 @@ void RegisterCallBorrow(Parser_Struct *parser_struct,
             }
         }
     }
-
-
-    // if (auto *callstmt = dynamic_cast<NameableCall*>(callexpr)) {
-    //    if (Depth>1) {
-
-    //    }
-    // }
 
 
 
@@ -830,14 +911,14 @@ void GetBorrows(Parser_Struct *parser_struct,
     }
 
 
-    if (auto *callexpr = dynamic_cast<NewExprAST*>(expr)) {
-        std::string callee = callexpr->Callee;
-        std::string base_callee = callexpr->BaseCallee;
+    if (auto *newexpr = dynamic_cast<NewExprAST*>(expr)) {
+        std::string callee = newexpr->Callee;
+        std::string base_callee = newexpr->BaseCallee;
         BorrowChecker(base_callee, callee, seen);
 
         // std::cout << "------------**Check new:  " << parser_struct->function_name<< " | " << callee << "\n";
         RegisterCallBorrow(parser_struct,
-                callexpr, callee, borrow_ids, borrow_branches, borrow_c,
+                newexpr, callee, borrow_ids, borrow_branches, borrow_c,
                 bad_borrows, memid_to_branch, seen);
         return;
     }

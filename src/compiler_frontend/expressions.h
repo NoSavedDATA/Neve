@@ -92,6 +92,8 @@ class ExprAST {
     virtual int GetIsOwned(); 
 
     virtual void Checks(); 
+
+    virtual bool IsOwnableExpr(); 
     
     virtual void SetIsVec(bool); 
     virtual bool GetIsVec(); 

@@ -639,7 +639,9 @@ void build_dicts() {
 
 
   // array_copy
-  method_return_overwrite["array_clone"] = array_clone_dt;
+  method_return_overwrite["array_copy"] = array_copy_dt;
+  method_return_overwrite["array_copy_own"] = array_copy_dt;
+  fn_with_owned_ret["array_copy_own"] = 1;
   // array_pop
   method_return_overwrite["array_pop"] = array_pop_dt;
 

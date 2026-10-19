@@ -127,9 +127,8 @@ extern "C" DT_array *array_Create_Taken(Scope_Struct *scope_struct,
 
 
 
-extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) { 
+extern "C" DT_array *array_copy(Scope_Struct *scope_struct, DT_array *v) { 
     
-    std::cout << "array_clone " << "\n";
     DT_array *ret = newT<DT_array>(scope_struct, "array");
 
     __atomic_store_n(&ret->virtual_size, v->virtual_size, __ATOMIC_RELEASE);
@@ -144,6 +143,23 @@ extern "C" DT_array *array_clone(Scope_Struct *scope_struct, DT_array *v) {
 
     return ret;
 }
+
+extern "C" DT_array *array_copy_own(Scope_Struct *scope_struct, DT_array *v) { 
+    DT_array *ret = (DT_array*)malloc(sizeof(DT_array));
+
+    ret->virtual_size = v->virtual_size;
+    ret->size = v->size;
+    ret->elem_size = v->elem_size;
+    ret->type = v->type;
+    
+    int data_size = v->size*v->elem_size;
+    ret->data = malloc(data_size);
+
+    memcpy(ret->data, v->data, data_size);
+
+    return ret;
+}
+
 
 extern "C" DT_array *array_slice(Scope_Struct *scope_struct, DT_array *vec,\
                 uint16_t elem_type, int start, int end) { 

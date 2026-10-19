@@ -22,7 +22,7 @@ using namespace llvm;
 
 Data_Tree min_ret_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&);
 Data_Tree max_ret_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&);
-Data_Tree array_clone_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&,\
+Data_Tree array_copy_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&,\
                     std::unique_ptr<Nameable> &);
 Data_Tree array_pop_dt(Parser_Struct *, std::vector<std::unique_ptr<ExprAST>>&,\
                     std::unique_ptr<Nameable> &);

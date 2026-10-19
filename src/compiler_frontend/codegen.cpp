@@ -4069,8 +4069,8 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     if (fn_borrows[parser_struct->base_name].count(memid)>0) {
         int parent = fn_borrows[parser_struct->base_name][memid][0]&MASK_16;
         is_parent_owned = memid_to_ownedid[parser_struct->function_name].count(parent)>0;
-        // std::cout << "parent memid: " << parent << "\n";
 
+        // std::cout << "parent memid: " << parent << "\n";
         // if(is_parent_owned)
         //     std::cout << "\n\t\033[33mBORROW NEWVEC" << "\033[0m\n\n";
     }
@@ -5628,13 +5628,17 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
 
 
 
-void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {  
+void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr,
+            bool from_obj) {  
     Data_Tree inner_dt = dt.Nested_Data[0];
     if (!inner_dt.IsFromArena())
         return;
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
+    Value *nullPtr = ConstantPointerNull::get(
+                cast<PointerType>(int8PtrTy)
+            );
 
 
     Value *array_ptr = Builder->CreateLoad(
@@ -5647,6 +5651,7 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     Value *array_size = Builder->CreateLoad(
                 intTy, array_size_gep
             );
+    Value *previous_obj = get_scope_obj(scope_struct);
 
 
     BasicBlock *CondBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
@@ -5654,9 +5659,10 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "foreach.cond", TheFunction);
     BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
     
-    Value *previous_obj = get_scope_obj(scope_struct);
 
-    Builder->CreateBr(CondBB);
+    Builder->CreateCondBr(Builder->CreateICmpEQ(array_ptr, nullPtr), AfterBB, CondBB);
+    // Builder->CreateBr(CondBB);
+
     Builder->SetInsertPoint(CondBB);
 
     PHINode *loop_var = Builder->CreatePHI(intTy, 2);
@@ -5673,17 +5679,18 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
 
     Value *elem = Builder->CreateLoad(int8PtrTy,
                 Builder->CreateInBoundsGEP(
-                        int8Ty, array_ptr, 
-                        Builder->CreateMul(loop_var, const_int(8))
+                        int8PtrTy, array_ptr, 
+                        loop_var
                     )
             );
     Disown(scope_struct, inner_dt, elem);
-    // p2t("array clear:");
+    // p2t("array clear: " + inner_dt.Type);
     // call("print_void_ptr", {elem});
+    
     call("free", {elem});
 
     Value *next_val = Builder->CreateAdd(loop_var, const_int(1));
-    loop_var->addIncoming(next_val, LoopBB);
+    loop_var->addIncoming(next_val, Builder->GetInsertBlock());
     Builder->CreateBr(CondBB);
 
     Builder->SetInsertPoint(AfterBB);
@@ -5691,18 +5698,19 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr) {
     Builder->CreateStore(const_int(0), array_size_gep);
 }
 
-inline void ArrayClear(Value *scope_struct, Nameable *expr) {  
-    if (expr->GetIsOwned()==OM_non_obj||expr->GetIsView()) {
+inline void ArrayClear(Value *scope_struct, Nameable *expr, bool is_view) {  
+    if (expr->GetIsOwned()==OM_non_obj||is_view)
         return;
-    }
     Data_Tree dt = expr->GetDataTree();
     Data_Tree inner_dt = dt.Nested_Data[0];
     if (!inner_dt.IsFromArena())
         return; // Better double check than redundant value load
-    ArrayClearOwned(scope_struct, dt, expr->codegen(scope_struct));
+    ArrayClearOwned(scope_struct, dt, expr->codegen(scope_struct),false);
 }
-inline Value *MapClear(Value *scope_struct, Value *loaded_var,
-        Data_Tree inner_dt, bool is_view) {  
+
+
+Value *MapClear(Value *scope_struct, Value *loaded_var,
+        Data_Tree inner_dt, bool is_view, bool from_obj) {  
 
     StructType *st = struct_types["map"];
     StructType *st_node = struct_types["map_node"];
@@ -5765,18 +5773,15 @@ inline Value *MapClear(Value *scope_struct, Value *loaded_var,
     Value *val = Builder->CreateLoad(int8PtrTy,
                 Builder->CreateStructGEP(st_node, cur_node, 1));
 
-    if (!is_view&&val_dt.Type=="array") {
-        ArrayClearOwned(scope_struct, val_dt, val);
-    }
-    BasicBlock *lastBB = Builder->GetInsertBlock();
-
+    
+    Disown(scope_struct, val_dt, val, is_view);
     // call("print_void_ptr", {cur_node});
     call("free", {cur_node});
 
     Value *next_node = Builder->CreateLoad(int8PtrTy,
                 Builder->CreateStructGEP(st_node, cur_node, 2));
 
-    cur_node->addIncoming(next_node, lastBB);
+    cur_node->addIncoming(next_node,Builder->GetInsertBlock());
 
     Builder->CreateBr(NodeLoopBB);
 
@@ -5998,11 +6003,11 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
   if (Callee=="array_clear")
-      ArrayClear(scope_struct, Inner.get());
+      ArrayClear(scope_struct, Inner.get(), Inner->GetIsView());
   if (Callee=="map_clear") {
     if (Inner->GetIsOwned()!=OM_non_obj) {
         return MapClear(scope_struct, ArgsV[1], Inner->GetDataTree(),
-                Inner->GetIsView());
+                Inner->GetIsView(),false);
     }
   }
   

@@ -29,6 +29,7 @@ struct Data_Tree {
     bool IsComposite() const;
     bool IsPrimary() const;
     bool IsFromArena() const;
+    bool IsTraversable() const;
     bool IsInteger() const;
     bool IsBuffered() const;
     bool HasGeneric() const;

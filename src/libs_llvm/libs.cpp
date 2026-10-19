@@ -1316,12 +1316,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("array_Create_Taken", array_Create_TakenTy);
 
-	FunctionType *array_cloneTy= FunctionType::get(
+	FunctionType *array_copyTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("array_clone", array_cloneTy);
+	TheModule->getOrInsertFunction("array_copy", array_copyTy);
+
+	FunctionType *array_copy_ownTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_copy_own", array_copy_ownTy);
 
 	FunctionType *array_sliceTy= FunctionType::get(
 		int8PtrTy,

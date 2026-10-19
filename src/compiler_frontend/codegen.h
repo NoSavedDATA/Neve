@@ -66,8 +66,9 @@ AllocaInst *CreateEntryBlockAlloca(llvm::Type *);
 std::vector<Value *> GetStrides(Parser_Struct *parser_struct, Data_Tree layout, Value *ctx);
 
 
-void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr);
-
+void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr,bool);
+Value *MapClear(Value *scope_struct, Value *loaded_var,
+        Data_Tree inner_dt, bool is_view, bool);
 
 std::string mangle_cargs_proto(std::string fn_name, bool inc=false);
 

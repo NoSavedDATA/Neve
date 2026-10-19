@@ -947,7 +947,7 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
     int branch_id = (branch[0] >> 32)&MASK_16;
     int size = fn_borrows_c[base_name][memid];
 
-    // std::cout << "<>"<< base_name << " -- " << memid << " | " << size << " | " << cap << "\n";
+    // std::cout << "<>"<< base_name << " -- " << memid << " | size: " << size << " | cap: " << cap << "\n";
 
 
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
@@ -970,6 +970,7 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
             Builder->CreateStore(const_bool(false),alloca);
         }
     }
+
 
 
     if (size>cap&&cap!=0 || (cap==0&&size>1)) {
@@ -1002,6 +1003,9 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
                 break;
             case 2:
                 LogErrorS(line, "Can only take ownership inside a loop when the variable is defined in the loop itself.");
+                break;
+            case 3:
+                LogErrorS(line, "Cannot assign a GC allocated object to an owned.");
                 break;
             default:
                 break;
@@ -1154,6 +1158,15 @@ Function *FunctionAST::codegen() {
             if (stmt->IsOwnedUnique)
                 ownid_to_memid[stmt->Ownedids[0]] = stmt->Memids[0];
         }
+        if (auto *stmt = dynamic_cast<DataExprAST*>(node)) {
+            int i=0;
+            for(auto &[name, expr] : stmt->VarNames) {
+                if (stmt->Ownedids[i]!=OM_non_obj) {
+                    ownid_to_memid[stmt->Ownedids[i]] = stmt->Memids[i];
+                }
+                i++;
+            }
+        }
         if (auto *stmt = dynamic_cast<NewExprAST*>(node)) {
             if (stmt->OwnedId!=OM_non_obj)
                 ownid_to_memid[stmt->OwnedId] = stmt->MemId;
@@ -1188,7 +1201,7 @@ Function *FunctionAST::codegen() {
 
 
   for (auto &[owned, memid] : ownid_to_memid) {
-      // std::cout << "\n\t\033[32mtie " << function_name << ": " << memid << " to " << owned << "\033[0m\n\n";
+      // std::cout << "\n\t\033[32mtie " << function_name << " memid " << memid << " to ownedid " << owned << "\033[0m\n\n";
       memid_to_ownedid[function_name][memid] = owned;
       EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   }
