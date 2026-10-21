@@ -27,7 +27,7 @@
 #include "include.h"
 #include "logging.h"
 #include "modules.h"
-#include "ownership.h"
+#include "ownership/include.h"
 #include "parser.h"
 #include "scope.h"
 

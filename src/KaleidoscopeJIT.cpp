@@ -37,7 +37,7 @@
 #include <vector>
 #include "KaleidoscopeJIT.h"
 #include "compiler_frontend/expressions.h"
-#include "compiler_frontend/ownership.h"
+#include "compiler_frontend/ownership/include.h"
 #include "compiler_frontend/function_ast.h"
 #include "compiler_frontend/modules.h"
 #include "runtime/common/extension_functions.h"

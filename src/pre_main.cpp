@@ -55,7 +55,7 @@
 
 #include "compiler_frontend/escape_analysis.h"
 #include "compiler_frontend/modules.h"
-#include "compiler_frontend/ownership.h"
+#include "compiler_frontend/ownership/include.h"
 #include "include.h"
 #include "runtime/compiler_frontend/global_vars.h"
 

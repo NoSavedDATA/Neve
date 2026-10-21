@@ -13,7 +13,7 @@
 #include "escape_analysis.h"
 #include "include.h"
 #include "modules.h"
-#include "ownership.h"
+#include "ownership/include.h"
 #include "expressions.h"
 #include "logging.h"
 #include "scope.h"

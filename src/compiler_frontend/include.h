@@ -23,7 +23,7 @@ extern llvm::Type *floatTy, *halfTy, *bf16Ty, *intTy, *int8Ty, *int16Ty, *int64T
 extern Value *stack, *stack_top_value, *cur_self;
 
 #include "scope.h"
-#include "ownership.h"
+#include "ownership/include.h"
 #include "escape_analysis.h"
 #include "codegen.h"
 #include "function_ast.h"

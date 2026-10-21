@@ -12,7 +12,6 @@
 
 
 
-
 struct FnCompiledValues {
     bool has=true;
     std::unordered_map<std::string, int8_t> i8s;
@@ -102,7 +101,7 @@ struct Parser_Struct {
   int line=0;
   int scope_depth=0;
   int control_flow_depth=0, prev_branch_id=-1;
-  uint64_t branch_id=2;
+  int branch_id=2;
   FnCompiledValues cvalues;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
   std::unordered_map<std::string, int> dyn_args_dict;

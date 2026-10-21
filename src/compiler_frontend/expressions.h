@@ -1340,7 +1340,7 @@ extern std::unordered_map<std::string, std::vector<int>> function_escapes, funct
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,
-            std::vector<uint64_t>>> fn_borrows, fn_takens_branch;
+            std::vector<uint64_t>>> fn_borrows;
 
 extern std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
 
@@ -1374,9 +1374,8 @@ extern std::unordered_map<std::string,std::vector<int>> fn_views;
 extern std::unordered_map<std::string,std::vector<std::string>> fn_class_views;
 
 
-extern std::unordered_map<std::string, int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
+extern std::unordered_map<std::string, int> function_own_ret_count, fn_with_owned_ret, fn_with_pool;
 
-extern std::unordered_map<std::string, std::vector<int>> fn_rets;
 extern std::vector<std::string> ConditionalsQueue;
 
 extern std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_dt;
