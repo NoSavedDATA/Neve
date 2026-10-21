@@ -4010,17 +4010,6 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
 
 
 
-Data_Tree NewVecExprAST::GetDataTree(bool from_assignment) {
-    // data_type.Type = "tuple";
-    // for (int i=1; i<Values.size(); i=i+2) {
-    //     Data_Tree type = Values[i]->GetDataTree();
-    //     data_type.Nested_Data.push_back(type);
-    // }
-    data_type = Data_Tree("array");
-    data_type.Nested_Data.push_back(Values[0]->GetDataTree());
-
-    return data_type;
-}
 
 Value *NewVecExprAST::codegen(Value *scope_struct) {
     Checks();
@@ -4037,6 +4026,9 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
         type = Values[i]->GetDataTree().Type;
         value = Values[i]->codegen(scope_struct);
+
+
+        SetConditionalTake(parser_struct->function_name, Values[i]);
 
         if(!in_vec(type, primary_data_tokens)) {
             std::string copy_fn = type + "_Copy";
@@ -4069,7 +4061,6 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     if (fn_borrows[parser_struct->base_name].count(memid)>0) {
         int parent = fn_borrows[parser_struct->base_name][memid][0]&MASK_16;
         is_parent_owned = memid_to_ownedid[parser_struct->function_name].count(parent)>0;
-
         // std::cout << "parent memid: " << parent << "\n";
         // if(is_parent_owned)
         //     std::cout << "\n\t\033[33mBORROW NEWVEC" << "\033[0m\n\n";
@@ -5685,7 +5676,10 @@ void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr,
             );
     Disown(scope_struct, inner_dt, elem);
     // p2t("array clear: " + inner_dt.Type);
+    // call("print_void_ptr", {array_ptr});
     // call("print_void_ptr", {elem});
+    // call("print_int", {loop_var});
+    // call("print_int", {array_size});
     
     call("free", {elem});
 

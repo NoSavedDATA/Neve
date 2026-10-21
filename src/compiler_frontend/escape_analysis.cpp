@@ -11,6 +11,7 @@
 
 
 #include "escape_analysis.h"
+#include "include.h"
 #include "modules.h"
 #include "ownership.h"
 #include "expressions.h"
@@ -408,6 +409,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 is_incomplete_transfer = in_vec(ret_memid,
                                     fn_borrows_incomplete[basecallee]);
                 partialtakes.push_back({memid, ret_memid});
+                // std::cout << "\n\t\033[33mcallee ret partial " << basecallee << " | " << ret_memid << " (transfer to:) " << (fn_borrows[basecallee][ret_memid][0]&MASK_16) << "\033[0m\n\n";
                 break;
             }
         }
@@ -456,6 +458,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 fn_transfers=true;
                 is_incomplete_transfer = in_vec(ret_memid,
                                     fn_borrows_incomplete[basecallee]);
+                // std::cout << "\n\t\033[33mbinop ret partial " << basecallee << " | " << memid << "\033[0m\n\n";
                 partialtakes.push_back({memid, ret_memid});
                 break;
             }

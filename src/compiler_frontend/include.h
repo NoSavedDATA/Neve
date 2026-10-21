@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#define MASK_15 0x7FFFULL
 #define MASK_16 0xFFFFULL
 
 

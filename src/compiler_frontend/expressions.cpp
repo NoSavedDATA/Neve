@@ -49,6 +49,8 @@ std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 
+std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
+
 
 std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;
 
@@ -72,6 +74,7 @@ std::unordered_map<std::string,
 std::unordered_map<std::string,
        std::unordered_map<int,uint64_t>> fn_memid_to_branch;
 
+std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;
 
 std::unordered_map<std::string,
        std::unordered_map<int,ExprAST*>>
@@ -117,6 +120,9 @@ void ExprAST::SetIsVarLoad(bool isVarLoad) {
 }
 bool ExprAST::GetIsVarLoad() {
   return isVarLoad;
+}
+bool ExprAST::GetIsView() {
+  return false;
 }
 bool ExprAST::IsOwnableExpr() {
     return dynamic_cast<Nameable*>(this)!=nullptr
@@ -776,6 +782,8 @@ void ExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 }
 
 
+
+
 void FinishExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     for (auto &expr : Bodies) 
@@ -786,6 +794,13 @@ void LockExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     for (auto &body : Bodies)
         body->Traverse(fn);
+}
+
+
+void NewVecExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+    for (auto &expr : Values) 
+        expr->Traverse(fn);
 }
 
 void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
@@ -905,11 +920,6 @@ void NewExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
         var->Traverse(fn);
 }
 
-void NewExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
-    for (auto &var : Args)
-        var->Traverse(fn);
-    fn(this);
-}
 void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     for (auto &var : Args)
@@ -923,6 +933,18 @@ void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn) {
 
 
 void ExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    fn(this);
+}
+
+
+void NewExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : Args)
+        var->Traverse(fn);
+    fn(this);
+}
+void NewVecExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    for (auto &var : Values)
+        var->Traverse(fn);
     fn(this);
 }
 
@@ -1193,6 +1215,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
+          // fn_memid_to_expr[BaseName][memid] = this; // proto fail
           fn_memid[BaseName][arg_name] = memid;
           fn_memid_to_dt[this->Name][memid] = dt;
           fn_cond_memid[this->Name][arg_name][0] = memid;
@@ -1387,6 +1410,7 @@ StringExprAST::StringExprAST(Parser_Struct *parser_struct, std::string Val) : Va
 } 
 void StringExprAST::Checks() {
     MemId = (*parser_struct->mem_id)++;
+    fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 }
 std::vector<int> StringExprAST::GetMemId() {
     return {MemId};
@@ -1442,11 +1466,23 @@ NewTupleExprAST::NewTupleExprAST(
     Line = parser_struct->line;
 }
 
+Data_Tree NewVecExprAST::GetDataTree(bool from_assignment) {
+    // data_type.Type = "tuple";
+    // for (int i=1; i<Values.size(); i=i+2) {
+    //     Data_Tree type = Values[i]->GetDataTree();
+    //     data_type.Nested_Data.push_back(type);
+    // }
+    data_type = Data_Tree("array");
+    data_type.Nested_Data.push_back(Values[0]->GetDataTree());
+
+    return data_type;
+}
 void NewVecExprAST::Checks() {
   Data_Tree dt = GetDataTree();
   // if(!parser_struct)
   //     return;
   int memid = (*parser_struct->mem_id)++;
+  fn_memid_to_expr[parser_struct->base_name][memid] = this;
   Memids.push_back(memid);
   fn_memid_to_dt[parser_struct->function_name][memid] = dt;
   if (check_branch!=0)
@@ -1837,6 +1873,7 @@ void DataExprAST::SetMemId() {
                     : OM_non_obj;
         if (check_branch!=0)
             fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
+        fn_memid_to_expr[parser_struct->base_name][memid] = this;
         fn_memid[parser_struct->base_name][name] = memid;
         fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
         fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
@@ -1924,6 +1961,7 @@ void NewExprAST::Checks() {
         OwnedId = (*parser_struct->owned_id)++;
     
     MemId = (*parser_struct->mem_id)++;
+    fn_memid_to_expr[parser_struct->base_name][MemId] = this;
     fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
     if (check_branch!=0)
         fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
@@ -1948,6 +1986,9 @@ NewExprAST::NewExprAST(Parser_Struct *parser_struct, std::string DataName, std::
     Callee = DataName + "_Create";
     BaseCallee = DataName + "_Create";
 
+    for(auto &arg : this->Args) {
+        arg->Parent = this;
+    }
 }
 
 bool NewExprAST::GetNeedGCSafePoint() {
@@ -2510,6 +2551,7 @@ void BinaryExprAST::Checks() {
       memid = (*parser_struct->mem_id)++;
       Memids.push_back(memid);
       fn_memid_to_dt[parser_struct->function_name][memid] = dt;
+      fn_memid_to_expr[parser_struct->base_name][memid] = this;
       if (check_branch!=0)
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(BaseOperation)>0) {
@@ -3165,6 +3207,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (arg.IsFromArena()) {
           int MemId = (*parser_struct->mem_id)++;
+          // fn_memid_to_expr[BaseName][MemId] = this; // proto fail
           fn_memid[BaseName][arg_name] = MemId;
           fn_memid_to_dt[this->Name][MemId] = arg;
           fn_cond_memid[this->Name][arg_name][0] = MemId;
@@ -3223,6 +3266,7 @@ void ViewExprAST::Checks() {
             has_R_cast=true;
     }
   MemId = (*parser_struct->mem_id)++;
+  fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 } 
 std::vector<int> ViewExprAST::GetMemId() {
     return {MemId};
@@ -3576,6 +3620,7 @@ void Nameable::Checks() {
     } else
         memid = fn_global_to_memid[parser_struct->base_name][Name];
     Memids[0] = memid;
+    fn_memid_to_expr[parser_struct->base_name][memid] = this;
 
     if (IsOwnedUnique) {
         int ownedid;
@@ -3771,6 +3816,7 @@ void NameableCall::Checks() {
 
   MemId = (*parser_struct->mem_id)++;
   fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
+  fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 
   if (check_branch!=0)
     fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);

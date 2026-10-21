@@ -63,6 +63,7 @@ class ExprAST {
   
     virtual bool GetNameSolveToLast(); 
     virtual void SetNameSolveToLast(bool NameSolveToLast); 
+    virtual bool GetIsView();
   
     virtual void SetSelf(bool Self); 
     virtual bool GetSelf(); 
@@ -426,6 +427,8 @@ class NewVecExprAST : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Checks() override;
   std::vector<int> GetMemId() override;
+  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
 class NewDictExprAST : public ExprAST {
@@ -686,7 +689,7 @@ class Nameable : public ExprAST {
 
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
-  bool GetIsView();
+  bool GetIsView() override;
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
@@ -743,7 +746,7 @@ class NameableCall : public Nameable, public OwnedHolder, public ArgsBasedExpr {
   void Checks() override;
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
-  bool GetIsView();
+  bool GetIsView() override;
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
@@ -762,7 +765,7 @@ class NameableIdx : public Nameable {
   void Traverse(const std::function<void(ExprAST*)>& fn) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
-  bool GetIsView();
+  bool GetIsView() override;
   void Checks() override;
 };
 
@@ -1339,6 +1342,9 @@ extern std::unordered_map<std::string,
        std::unordered_map<int,
             std::vector<uint64_t>>> fn_borrows, fn_takens_branch;
 
+extern std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
+
+
 extern std::unordered_map<std::string,
        std::vector<int>> fn_conditional_created_memid;
 
@@ -1380,6 +1386,7 @@ extern std::unordered_map<std::string,int> fn_with_owned_self;
 extern int check_branch;
 extern std::unordered_map<std::string, std::vector<std::string>> fn_deps;
 
+extern std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;
 extern std::unordered_map<std::string,std::unordered_map<int,int>> cstmt_parents;
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnVersion;
 extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::string, Data_Tree>>> FnDynArgs;

@@ -2980,7 +2980,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
       ClassAttrsName[Name].push_back(IdentifierStr);
 
       if(is_view) {
-          std::cout << "\n\t\033[32mset view " <<Name << " | " << IdentifierStr << "\033[0m\n\n";
           fn_class_views[Name].push_back(IdentifierStr);
       }
 

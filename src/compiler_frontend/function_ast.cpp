@@ -974,19 +974,12 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
 
 
     if (size>cap&&cap!=0 || (cap==0&&size>1)) {
-        LogErrorS(line, "The code may try to borrow a value in non mutually exclusive branches.");
+        std::cout << "size " << size << "\n";
+        std::cout << "cap " << cap << "\n";
+        LogErrorS(line, base_name + ". The code may try to borrow " +std::to_string(memid)+ " in non mutually exclusive branches.");
     }
 
-    // uint64_t first_branch = fn_borrows[base_name][memid][0];
-    // int cstmt = (first_branch>>32)&MASK_16;
-    // for (auto branch : fn_borrows[base_name][memid]) {
-    //     int branch_cstmt = (branch>>32)&MASK_16;
-    //     std::cout << " " << cstmt << " | " << branch_cstmt << "\n";
-    //     if (cstmt!=branch_cstmt) {
-    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
 
-    //     }
-    // }
     if(!fn_bad_borrows.count(base_name))
         return;
 
@@ -1105,7 +1098,7 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
-        // if (begins_with(function_name, "Linear")||begins_with(function_name, "gpu"))
+        // if (begins_with(function_name, "ResNet")||begins_with(function_name, "Conv")||begins_with(function_name, "Batch"))
         //     std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
         ctakens[function_name][arg_memid] = &Arg;
     } else {
