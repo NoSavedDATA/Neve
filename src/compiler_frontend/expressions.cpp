@@ -54,7 +54,6 @@ std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
 
 std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;
 
-std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<int, int>>> fn_cond_memid;
 
 
 std::unordered_map<std::string, std::vector<std::string>> fn_deps;
@@ -63,7 +62,7 @@ std::unordered_map<std::string,
        std::unordered_map<int,int>> fn_borrows_c, fn_escape_to_memid;
 std::unordered_map<std::string,
        std::vector<std::tuple<int,int,int>>> fn_bad_borrows;
-std::unordered_map<std::string, std::unordered_map<int, std::vector<uint64_t>>> fn_borrows, fn_takens_branch;
+std::unordered_map<std::string, std::unordered_map<int, std::vector<ExprBranch>>> fn_borrows;
 std::unordered_map<std::string,int> function_own_ret_count, fn_retscount, fn_with_owned_ret, fn_with_pool;
 
 std::unordered_map<std::string,std::unordered_map<int, int>> memid_to_ownedid;
@@ -72,7 +71,7 @@ std::unordered_map<std::string,
        std::vector<int>> fn_borrows_incomplete, fn_conditional_created_memid;
 
 std::unordered_map<std::string,
-       std::unordered_map<int,uint64_t>> fn_memid_to_branch;
+       std::unordered_map<int,ExprBranch>> fn_memid_to_branch;
 
 std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;
 
@@ -91,9 +90,30 @@ std::vector<std::tuple<FunctionAST *,
        Parser_Struct*,
        std::string, std::string,bool>> generics_fn;
 
-int check_branch=0;
+ExprBranch check_branch=ExprBranch();
 
 
+ExprBranch::ExprBranch() {}
+ExprBranch::ExprBranch(uint16_t memid) : memid(memid) {}
+ExprBranch::ExprBranch(int memid) : memid(memid) {}
+ExprBranch::ExprBranch(uint16_t depth, uint16_t cstmt, uint16_t cap, uint16_t memid)
+    : depth(depth), cstmt(cstmt), cap(cap), memid(memid) {}
+
+
+uint64_t ExprBranch::pack64() {
+    return ((uint64_t)depth << 48) | 
+           ((uint64_t)cstmt << 32) | 
+           ((uint64_t)cap << 16) | 
+           ((uint64_t)memid);
+}
+
+bool ExprBranch::IsNull() {
+    return depth==0&&cstmt==0&&cap==0&&memid==0;
+}
+
+bool ExprBranch::IsCstmtSkip() {
+    return depth!=0||cstmt!=0||cap!=0||memid>2;
+}
 
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
@@ -111,7 +131,7 @@ void ExprAST::SetReturnType(std::string ReturnType) {
 }
 
 int ExprAST::GetBranchId() {
-    return (BranchId>>32)&MASK_16;
+    return BranchId.cstmt;
 }
 
 
@@ -211,21 +231,18 @@ void ExprTieBranch(Parser_Struct *parser_struct,
         std::vector<std::unique_ptr<ExprAST>> &Body,
         int branchid) {
     for (auto &body : Body) {
-        int cstmtid = (body->BranchId >> 32)&MASK_16;
+        int cstmtid = body->BranchId.cstmt;
         if (cstmtid!=branchid) {
             cstmt_parents[parser_struct->function_name][cstmtid] = branchid;
         }
     }
 }
 
-void ExprSetBranch(ExprAST *expr, uint64_t branch_id) {
-    if (expr->BranchId<=2)
+void ExprSetBranch(ExprAST *expr, ExprBranch branch_id) {
+    if (!expr->BranchId.IsCstmtSkip())
         expr->BranchId = branch_id;
-    else {
-        uint64_t branch = expr->BranchId & MASK_16;
-        if (branch<=2) {
-            expr->BranchId = (expr->BranchId &~MASK_16) | ( branch_id& MASK_16);
-        }
+    else if (expr->BranchId.memid<=2) {
+        expr->BranchId.memid = branch_id.memid;
     }
 }
 
@@ -820,13 +837,13 @@ void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
 void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     fn(this);
     Cond->Traverse(fn);
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,1);
     for (auto &expr : Then) 
         expr->Traverse(fn);
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &expr : Else) 
         expr->Traverse(fn);
-    check_branch=0;
+    check_branch=ExprBranch();
 }
 
 
@@ -974,14 +991,14 @@ void ForExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
 }
 
 void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,1);
     Cond->TraversePost(fn);
     for (auto &expr : Then) 
         expr->TraversePost(fn);
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &expr : Else) 
         expr->TraversePost(fn);
-    check_branch=0;
+    check_branch = ExprBranch();
     fn(this);
 }
 
@@ -1218,7 +1235,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           // fn_memid_to_expr[BaseName][memid] = this; // proto fail
           fn_memid[BaseName][arg_name] = memid;
           fn_memid_to_dt[this->Name][memid] = dt;
-          fn_cond_memid[this->Name][arg_name][0] = memid;
           fn_arg_memid[BaseName][arg_name] = memid;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
@@ -1485,7 +1501,7 @@ void NewVecExprAST::Checks() {
   fn_memid_to_expr[parser_struct->base_name][memid] = this;
   Memids.push_back(memid);
   fn_memid_to_dt[parser_struct->function_name][memid] = dt;
-  if (check_branch!=0)
+  if (!check_branch.IsNull())
     fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
 }
 
@@ -1593,7 +1609,6 @@ void ObjectExprAST::Checks() {
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
             fn_memid_to_dt[parser_struct->function_name][memid] = Data_Tree(ClassName);
-            fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
 
 
@@ -1694,7 +1709,6 @@ void UnkVarExprAST::Checks() {
     if (memid != OM_non_obj) {
         fn_memid[parser_struct->base_name][name] = memid; 
         fn_memid_to_dt[parser_struct->function_name][memid] = data_typeVars[parser_struct->function_name][name];
-        fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
     }
     Memids.push_back(memid);
   }
@@ -1871,12 +1885,11 @@ void DataExprAST::SetMemId() {
         memid = (data_type.IsFromArena())
                     ? (*parser_struct->mem_id)++
                     : OM_non_obj;
-        if (check_branch!=0)
+        if (!check_branch.IsNull())
             fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
         fn_memid_to_expr[parser_struct->base_name][memid] = this;
         fn_memid[parser_struct->base_name][name] = memid;
         fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
-        fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         Memids.push_back(memid);
     } else {
         expr->Checks();
@@ -1884,7 +1897,6 @@ void DataExprAST::SetMemId() {
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
             fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
-            fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
         }
     }
     Memids.push_back(memid);
@@ -1963,7 +1975,7 @@ void NewExprAST::Checks() {
     MemId = (*parser_struct->mem_id)++;
     fn_memid_to_expr[parser_struct->base_name][MemId] = this;
     fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
-    if (check_branch!=0)
+    if (!check_branch.IsNull())
         fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
 
 
@@ -2552,7 +2564,7 @@ void BinaryExprAST::Checks() {
       Memids.push_back(memid);
       fn_memid_to_dt[parser_struct->function_name][memid] = dt;
       fn_memid_to_expr[parser_struct->base_name][memid] = this;
-      if (check_branch!=0)
+      if (!check_branch.IsNull())
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
       if (fn_with_owned_ret.count(BaseOperation)>0) {
           OwnedId = (*parser_struct->owned_id)++;
@@ -2568,12 +2580,9 @@ void BinaryExprAST::Checks() {
           int owned_id = RHS->GetIsOwned();
           function_owns[parser_struct->function_name][name] = owned_id;
 
-          if (check_branch==0)
-              fn_cond_memid[parser_struct->function_name][name].clear();
 
           fn_memid[parser_struct->base_name][name] = memid;
           fn_memid_to_dt[parser_struct->function_name][memid] = R_dt;
-          fn_cond_memid[parser_struct->function_name][name][check_branch] = memid;
 
           data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
           data_typeVars[parser_struct->function_name][name].is_view = R_dt.is_view;
@@ -2797,15 +2806,13 @@ void ForEachExprAST::Checks() {
 
 void IfExprAST::Checks() {
 
-    // int prev_check_branch = check_branch;
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 1;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,1);
     for (auto &body : Then)
         body->Checks();
-    check_branch = (((BranchId>>32)&MASK_16)<<16) | 2;
+    check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &body : Else)
         body->Checks();
-    check_branch=0;
-    // check_branch = prev_check_branch;
+    check_branch = ExprBranch();
 }  
 
 
@@ -2822,24 +2829,23 @@ IfExprAST::IfExprAST(Parser_Struct *parser_struct,
   Line = parser_struct->line;
 
   uint64_t depth = scope_depth+1;
-  branch_id = (depth<<48) | (control_stmt_id << 32) | (2 << 16) | branch_id;
-  BranchId = branch_id;
+  BranchId = ExprBranch(depth&MASK_16, control_stmt_id, 2, branch_id);
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
 
 
 
   for (auto &body : this->Then) {
-      if (body->BranchId>2)
+      if (body->BranchId.IsCstmtSkip())
           continue;
       // no skip, may overwrite the if branch if not found
-      body->Traverse([&branch_id](ExprAST *node) {
-        ExprSetBranch(node, branch_id);
+      body->Traverse([this](ExprAST *node) {
+        ExprSetBranch(node, BranchId);
       });
   }
   for (auto &body : this->Else) {
-      body->Traverse([&branch_id](ExprAST *node) {
-        ExprSetBranch(node, branch_id);
+      body->Traverse([this](ExprAST *node) {
+        ExprSetBranch(node, BranchId);
       });
   }
 
@@ -2862,7 +2868,8 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
   uint64_t depth = scope_depth+1;
   uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
-  BranchId = branch_id;
+
+  BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
   fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
@@ -2870,10 +2877,10 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
 
   for (auto &body : this->Body) {
-      if (body->BranchId>2)
+      if (body->BranchId.IsCstmtSkip())
           continue;
-      body->Traverse([&branch_id](ExprAST *node) {
-        ExprSetBranch(node, branch_id);
+      body->Traverse([this](ExprAST *node) {
+        ExprSetBranch(node, BranchId);
       });
   }
 
@@ -2896,18 +2903,17 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName,
 
   this->Vec->Parent = this;
   uint64_t depth = scope_depth+1;
-  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
-  BranchId = branch_id;
+  BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
   fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
 
 
   for (auto &body : this->Body) {
-      if (body->BranchId>2)
+      if (body->BranchId.IsCstmtSkip())
           continue;
-      body->Traverse([&branch_id](ExprAST *node) {
-        ExprSetBranch(node, branch_id);
+      body->Traverse([this](ExprAST *node) {
+        ExprSetBranch(node, BranchId);
       });
   }
 
@@ -2936,17 +2942,16 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
     Line = parser_struct->line;
 
   uint64_t depth = scope_depth+1;
-  uint64_t branch_id = (depth<<48) | (control_stmt_id << 32) | (1<<16) | (uint64_t)2;
-  BranchId = branch_id;
+  BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
   fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
   fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
 
   for (auto &body : this->Body) {
-      if (body->BranchId>2)
+      if (body->BranchId.IsCstmtSkip())
           continue;
-      body->Traverse([&branch_id](ExprAST *node) {
-        ExprSetBranch(node, branch_id);
+      body->Traverse([this](ExprAST *node) {
+        ExprSetBranch(node, BranchId);
       });
   }
   ExprTieBranch(parser_struct, this->Body, control_stmt_id);
@@ -3210,7 +3215,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           // fn_memid_to_expr[BaseName][MemId] = this; // proto fail
           fn_memid[BaseName][arg_name] = MemId;
           fn_memid_to_dt[this->Name][MemId] = arg;
-          fn_cond_memid[this->Name][arg_name][0] = MemId;
           fn_arg_memid[BaseName][arg_name] = MemId;
           fn_memid_to_branch[BaseName][MemId] = MemId;
         }
@@ -3818,7 +3822,7 @@ void NameableCall::Checks() {
   fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
   fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 
-  if (check_branch!=0)
+  if (!check_branch.IsNull())
     fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
 
 

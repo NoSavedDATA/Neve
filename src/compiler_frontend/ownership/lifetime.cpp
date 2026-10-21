@@ -1,14 +1,15 @@
 
 #include "../include.h"
+#include <cstdint>
 
 
-uint64_t FormatLifetime(uint64_t branch, int memid) {
-    return (branch&~MASK_16) | (uint16_t)memid;
+ExprBranch FormatLifetime(ExprBranch branch, int memid) {
+    return ExprBranch(branch.depth, branch.cstmt, branch.cap, memid);
 }
 
 
-uint64_t GetLifetime(Parser_Struct *parser_struct,
-        ExprAST *borrowed, std::unordered_map<int,uint64_t> &memid_to_branch) {
+ExprBranch GetLifetime(Parser_Struct *parser_struct,
+        ExprAST *borrowed, std::unordered_map<int,ExprBranch> &memid_to_branch) {
 
     if (auto *newvec_expr = dynamic_cast<NewVecExprAST*>(borrowed)) {
         // std::cout << "AS NEW VEC " << "\n";
@@ -35,19 +36,19 @@ uint64_t GetLifetime(Parser_Struct *parser_struct,
     } 
 
 
-    uint64_t lifetime = (memid_to_branch.count(memid)>0)
+    ExprBranch lifetime = (memid_to_branch.count(memid)>0)
         ? memid_to_branch[memid]
-        : memid; // is function arg
+        : ExprBranch(memid); // is function arg
 
-    uint64_t cap = (borrowed->BranchId>>16) & MASK_16;
-    return (lifetime & ~(MASK_16<<16)) | (cap<<16);
+    return ExprBranch(lifetime.depth,lifetime.cstmt,
+            borrowed->BranchId.cap,lifetime.memid);
 }
 
 
 
-uint64_t GetLifetime(Parser_Struct *parser_struct,
+ExprBranch GetLifetime(Parser_Struct *parser_struct,
         ExprAST *owner_expr, ExprAST *borrowed,
-        std::unordered_map<int,uint64_t> &memid_to_branch,
+        std::unordered_map<int,ExprBranch> &memid_to_branch,
         bool verbose) {
 
     if (auto *newvec_expr = dynamic_cast<NewVecExprAST*>(borrowed)) {
@@ -75,20 +76,20 @@ uint64_t GetLifetime(Parser_Struct *parser_struct,
     // int memid = owner_expr->GetMemId()[0];
 
 
-    uint64_t lifetime = (memid_to_branch.count(memid)>0)
+    ExprBranch lifetime = (memid_to_branch.count(memid)>0)
         ? memid_to_branch[memid]
-        : memid; // is function arg or self
+        : ExprBranch(memid); // is function arg or self
 
     if (verbose) {
         std::cout << "lifetime of " << borrowed->GetName() << "\n";
         std::cout << "owner " << parser_struct->function_name<<"|"<<owner_expr->Name << "\n";
         std::cout << "has " << (memid_to_branch.count(memid)>0) << "\n";
-        std::cout << "life " << lifetime << "\n";
+        std::cout << "life " << lifetime.pack64() << "\n";
     }
 
 
-    uint64_t cap = (borrowed->BranchId>>16) & MASK_16;
-    return (lifetime & ~(MASK_16<<16)) | (cap<<16);
+    return ExprBranch(lifetime.depth,lifetime.cstmt,
+            borrowed->BranchId.cap,lifetime.memid);
 }
 
 

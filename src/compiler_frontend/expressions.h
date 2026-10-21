@@ -27,6 +27,33 @@ enum MemTy {
     unkmemTy = 3,
 };
 
+class ExprBranch {
+    public:
+        uint16_t depth=0, cstmt=0, cap=0, memid=0;
+        ExprBranch();
+        ExprBranch(uint16_t);
+        ExprBranch(int);
+        ExprBranch(uint16_t,uint16_t,uint16_t,uint16_t);
+
+        // ExprBranch(uint64_t packed) {
+        //     depth = (packed >> 48) & 0xFFFF;
+        //     cstmt = (packed >> 32) & 0xFFFF;
+        //     cap   = (packed >> 16) & 0xFFFF;
+        //     memid = packed & 0xFFFF;
+        // }
+
+        // operator uint64_t() const {
+        //     return ((uint64_t)depth << 48) | 
+        //            ((uint64_t)cstmt << 32) | 
+        //            ((uint64_t)cap << 16) | 
+        //            ((uint64_t)memid);
+        // }
+
+        bool IsNull();
+        bool IsCstmtSkip();
+        uint64_t pack64();
+};
+
 /// ExprAST - Base class for all expression nodes.
 class ExprAST {
   public:
@@ -44,7 +71,7 @@ class ExprAST {
     bool NameSolveToLast = true;
     bool isMessage = false;
     int Line=-1;
-    uint64_t BranchId=2;
+    ExprBranch BranchId=ExprBranch(2);
     Parser_Struct *parser_struct=nullptr;
     ExprAST *Parent=nullptr;
   
@@ -497,9 +524,7 @@ class DataExprAST : public VarExprAST {
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 
   void SetMemId();
-  void SetMemId2();
-  void SetMemId(std::unordered_map<int, uint64_t> &map);
-
+  void SetMemId(std::unordered_map<int,ExprBranch> &map);
 };
 
 
@@ -1340,7 +1365,7 @@ extern std::unordered_map<std::string, std::vector<int>> function_escapes, funct
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,
-            std::vector<uint64_t>>> fn_borrows;
+            std::vector<ExprBranch>>> fn_borrows;
 
 extern std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
 
@@ -1358,7 +1383,7 @@ extern std::unordered_map<std::string,
        std::vector<std::tuple<int,int,int>>> fn_bad_borrows;
 
 extern std::unordered_map<std::string,
-       std::unordered_map<int,uint64_t>> fn_memid_to_branch;
+       std::unordered_map<int,ExprBranch>> fn_memid_to_branch;
 
 extern std::unordered_map<std::string,
        std::unordered_map<int,ExprAST*>>
@@ -1382,7 +1407,7 @@ extern std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_me
 extern std::unordered_map<std::string,int> fn_with_owned_self;
 
 
-extern int check_branch;
+extern ExprBranch check_branch;
 extern std::unordered_map<std::string, std::vector<std::string>> fn_deps;
 
 extern std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;

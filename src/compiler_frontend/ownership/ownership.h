@@ -9,11 +9,11 @@
 
 class TransferChecker {
     public:
-        std::unordered_map<int,std::vector<uint64_t>> borrow_ids;
-        std::unordered_map<int,std::vector<uint64_t>> borrow_branches;
+        std::unordered_map<int,std::vector<ExprBranch>> borrow_ids;
+        std::unordered_map<int,std::vector<ExprBranch>> borrow_branches;
         std::vector<int> borrow_views;
         std::unordered_map<int,int> borrow_c;
-        std::unordered_map<int,uint64_t> memid_to_branch;
+        std::unordered_map<int,ExprBranch> memid_to_branch;
         std::vector<std::tuple<int,int,int>> bad_borrows;
         std::string fn, base_fn;
 
@@ -23,8 +23,8 @@ class TransferChecker {
 
         void GetCallMostRestrictive(Parser_Struct *,
             std::string, ExprAST *, ExprAST *,
-            std::vector<uint64_t> &,
-            int, uint64_t, int,
+            std::vector<ExprBranch> &,
+            int, ExprBranch, int,
             std::vector<std::tuple<int,int>> &);
 
 
@@ -41,7 +41,7 @@ class TransferChecker {
         void HandleUnkvar(Parser_Struct*,UnkVarExprAST*,std::unordered_map<std::string, int> &);
         void HandleReturn(Parser_Struct*,RetExprAST*,std::unordered_map<std::string, int> &);
 
-        void RegisterMove(Parser_Struct *, uint64_t,
+        void RegisterMove(Parser_Struct *, ExprBranch,
                      ExprAST *, ExprAST *,
                      bool return_on_view=true);
 

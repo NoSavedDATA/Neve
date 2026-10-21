@@ -44,7 +44,7 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
 
     
 
-    uint64_t taken_lifetime = GetLifetime(parser_struct,
+    ExprBranch taken_lifetime = GetLifetime(parser_struct,
         (Nameable*)nameable, memid_to_branch);
 
     if (borrow_ids.count(memid)) {
@@ -61,23 +61,23 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
         }
 
 
-        uint64_t expr_branch = nameable->BranchId;
-        int expr_control_stmt = (expr_branch>>32)&MASK_16;
-        int expr_depth = (expr_branch>>48)&MASK_16;
+        ExprBranch expr_branch = nameable->BranchId;
+        int expr_control_stmt = expr_branch.cstmt;
+        int expr_depth = expr_branch.depth;
         int line = nameable->Line;
 
         int i=0;
-        uint64_t first_taken_branch = borrow_branches[memid][0];
+        ExprBranch first_taken_branch = borrow_branches[memid][0];
         for (auto &lifetime : borrow_ids[memid]) {
-            uint64_t taken_branch = borrow_branches[memid][i++];
+            ExprBranch taken_branch = borrow_branches[memid][i++];
 
 
             bool has_loop = match_cstmt_has_loop(
                         parser_struct->base_name,
-                    (taken_lifetime>>32)&MASK_16, expr_control_stmt);
+                    taken_lifetime.cstmt, expr_control_stmt);
 
-            int control_stmt = (lifetime>>32)&MASK_16;
-            int depth = (lifetime>>48)&MASK_16;
+            int control_stmt = lifetime.cstmt;
+            int depth = lifetime.depth;
             bool match = expr_depth>=depth&&(match_cstmt_parent(
                         parser_struct->base_name,
                     control_stmt, expr_control_stmt));
@@ -96,7 +96,7 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
 
 
             if (i!=0
-                &&((first_taken_branch>>32)&MASK_16) != ((taken_branch>>32)&MASK_16)) {
+                &&(first_taken_branch.cstmt != taken_branch.cstmt)) {
                 std::cout << "SET BAD BORROW " << memid << "\n";
                 bad_borrows.push_back({memid,1,line});
                 return;
@@ -115,7 +115,7 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
 
 
 
-void DataExprAST::SetMemId(std::unordered_map<int,uint64_t> &memid_to_branch) {
+void DataExprAST::SetMemId(std::unordered_map<int,ExprBranch> &memid_to_branch) {
   if (!data_type.IsFromArena())
       return;
 
@@ -135,15 +135,15 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
             std::string callee,
             ExprAST *callexpr,
             ExprAST *argexpr,
-            std::vector<uint64_t> &arg_parents,
-            int arg_memid, uint64_t callexpr_branch,
+            std::vector<ExprBranch> &arg_parents,
+            int arg_memid, ExprBranch callexpr_branch,
             int memid,
             std::vector<std::tuple<int,int>> &partialtakes) {
 
     // Try borrow to most restrict caller owner.
     // Else, use call expr as the lifetime.
-    uint64_t fn_owner_branch = fn_borrows[callee][arg_memid][0];
-    int cap = (fn_owner_branch>>16)&MASK_16;
+    ExprBranch fn_owner_branch = fn_borrows[callee][arg_memid][0];
+    int cap = fn_owner_branch.cap;
 
     // std::cout << "-------__>cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
 
@@ -168,27 +168,27 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
     }
 
 
-    uint64_t first_branch = arg_parents[0];
-    int cstmt = (first_branch>>32) & MASK_16;
+    ExprBranch first_branch = arg_parents[0];
+    int cstmt = first_branch.cstmt;
     borrow_ids[memid].push_back(first_branch);
 
 
     if (begins_with(parser_struct->function_name, "Res"))
-    std::cout << "PUSH BORROW  " << parser_struct->function_name << ", memid: " << memid << " to parent " << (first_branch&MASK_16) << ", to call " << (callexpr_branch&MASK_16)<< "\n";
+    std::cout << "PUSH BORROW  " << parser_struct->function_name << ", memid: " << memid << " to parent " << (first_branch.memid) << ", to call " << (callexpr_branch.memid)<< "\n";
 
-    if ((first_branch&MASK_16)==0)
+    if ((first_branch.memid)==0)
         LogError(-1, "Parent is impossible to be 0");
 
 
 
     int most_restrictive = 0;
     for (int i=1; i<arg_parents.size(); ++i) {
-        uint64_t branch = arg_parents[i];
+        ExprBranch branch = arg_parents[i];
 
         borrow_ids[memid].push_back(branch);
         borrow_branches[memid].push_back(callexpr_branch);
 
-        int cstmt_i = (branch>>32) & MASK_16;
+        int cstmt_i = branch.cstmt;
         if (cstmt_i>cstmt)
             most_restrictive=i;
     }
@@ -202,13 +202,13 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
 
 
 void TransferChecker::RegisterMove(Parser_Struct *parser_struct,
-             uint64_t parent_lifetime,
+             ExprBranch parent_lifetime,
              ExprAST *parent_expr, ExprAST *expr, bool return_on_view
          ) {
     int appended_memid = expr->GetMemId()[0];
     if (appended_memid == OM_non_obj)
         return;
-    uint64_t branch = expr->BranchId;
+    ExprBranch branch = expr->BranchId;
 
 
     if (parent_expr->GetIsView()) {
@@ -216,7 +216,7 @@ void TransferChecker::RegisterMove(Parser_Struct *parser_struct,
             return;
         fn_borrow_views[parser_struct->base_name].push_back(appended_memid);
     }
-    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << " in branch " << ((branch>>32)&MASK_16) << "\n"; 
+    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << " in branch " << (branch.cstmt) << "\n"; 
     borrow_ids[appended_memid].push_back(parent_lifetime);
     borrow_branches[appended_memid].push_back(branch);
     borrow_c[appended_memid]++;
@@ -232,10 +232,6 @@ void TransferChecker::RegisterMove(Parser_Struct *parser_struct,
 
 
 void TransferChecker::HandleAppend(Parser_Struct* parser_struct, NameableCall *callexpr,std::string callee) {
-
-
-    uint64_t append_lifetime = GetLifetime(parser_struct, (Nameable*)callexpr,
-        callexpr->Args[0].get(), memid_to_branch);
     RegisterMove(parser_struct,
                     GetLifetime(parser_struct, (Nameable*)callexpr,
                         callexpr->Args[0].get(), memid_to_branch),
@@ -263,7 +259,7 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
     std::vector<std::string> argnames;
     bool has_borrow = false;
 
-    std::unordered_map<int, uint64_t> arg_to_caller_memid;
+    std::unordered_map<int, ExprBranch> arg_to_caller_memid;
     std::vector<std::tuple<int,int>> partialtakes;
 
 
@@ -306,7 +302,7 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
 
 
 
-        uint64_t parent_memid = GetLifetime(parser_struct,
+        ExprBranch parent_memid = GetLifetime(parser_struct,
                 argexpr.get(), memid_to_branch);
 
 
@@ -365,9 +361,9 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
 
         if (is_transfer) {
             // Route param parent to arg parent
-            std::vector<uint64_t> caller_parents;
+            std::vector<ExprBranch> caller_parents;
             for (auto &borrow : fn_borrows[base_callee][arg_memid]) {
-                int owner_memid = borrow&MASK_16;
+                int owner_memid = borrow.memid;
                 if (arg_to_caller_memid.count(owner_memid)) {
                     caller_parents.push_back(
                         arg_to_caller_memid[owner_memid]
@@ -455,10 +451,9 @@ void TransferChecker::HandleNewVec(Parser_Struct* parser_struct,
     bool is_vec_view = in_vec(memid,fn_borrow_views[parser_struct->base_name]);
 
     bool is_parent_owned=false;
-    uint64_t parent_lifetime=0;
     ExprAST *parent_expr = nullptr;
     if (borrow_ids.count(memid)>0) {
-        int parent = borrow_ids[memid][0]&MASK_16;
+        int parent = borrow_ids[memid][0].memid;
         if (fn_memid_to_expr[parser_struct->base_name].count(parent)) {
             parent_expr = fn_memid_to_expr[parser_struct->base_name][parent];
             parent_expr->GetDataTree().Print();
@@ -476,11 +471,7 @@ void TransferChecker::HandleNewVec(Parser_Struct* parser_struct,
         if (val_memid==OM_non_obj)
             return;
 
-
         if (parent_expr&&!is_vec_view) {
-            uint64_t vec_lifetime = GetLifetime(parser_struct, parent_expr,
-                val.get(), memid_to_branch);
-
             RegisterMove(parser_struct,
                 GetLifetime(parser_struct, parent_expr,
                     val.get(), memid_to_branch),
@@ -530,14 +521,14 @@ void TransferChecker::HandleNameable(Parser_Struct* parser_struct, ExprAST *expr
 
     int memid = nameable->GetMemId()[0];
     if (!nameable->IsAttr&&memid!=OM_non_obj) {
-        uint64_t branch = nameable->BranchId;
-        branch = (branch&~MASK_16) | memid;
+        ExprBranch branch = nameable->BranchId;
+        branch.memid = memid;
         fn_memid_to_lastseen[parser_struct->base_name][memid] = expr;
 
         if (borrow_ids.count(memid)!=0) {
             for(auto &parent_branch : borrow_ids[memid])
               fn_memid_to_lastseen[parser_struct->base_name]\
-                  [parent_branch&MASK_16] = expr;
+                  [parent_branch.memid] = expr;
         }
     }
 
@@ -667,8 +658,8 @@ void TransferChecker::RegisterFn() {
             fn_memid_to_branch[base_fn][memid] = branch;
 
         for(auto &[memid,borrows]: borrow_branches) {
-            uint64_t take_branch = borrows[0];
-            int cap = (take_branch>>16)&MASK_16;
+            ExprBranch take_branch = borrows[0];
+            int cap = take_branch.cap;
 
             bool has_incomplete = borrow_c[memid]<cap;
             if (has_incomplete) {

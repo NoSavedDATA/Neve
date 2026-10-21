@@ -942,9 +942,9 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
         return;
 
 
-    std::vector<uint64_t> branch = fn_borrows[base_name][memid];
-    int cap = (branch[0] >> 16)&MASK_16;
-    int branch_id = (branch[0] >> 32)&MASK_16;
+    std::vector<ExprBranch> branch = fn_borrows[base_name][memid];
+    int cap = branch[0].cap;
+    int branch_id = branch[0].cstmt;
     int size = fn_borrows_c[base_name][memid];
 
     // std::cout << "<>"<< base_name << " -- " << memid << " | size: " << size << " | cap: " << cap << "\n";
@@ -1004,13 +1004,6 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
                 break;
         }
     }
-
-    // auto &borrow_branches = fn_borrows[Callee][arg_memid];
-    // uint64_t first_borrow = borrow_branches[0];
-    // for (int j=1; j<borrow_branches.size(); j++) {
-    //     if (first_borrow!=borrow_branches[j])
-    //         LogErrorS(parser_struct->line, "The code may try to borrow a value in non mutually exclusive branches.");
-    // }
 }
 
 

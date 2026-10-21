@@ -4059,7 +4059,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
 
     if (fn_borrows[parser_struct->base_name].count(memid)>0) {
-        int parent = fn_borrows[parser_struct->base_name][memid][0]&MASK_16;
+        int parent = fn_borrows[parser_struct->base_name][memid][0].memid;
         is_parent_owned = memid_to_ownedid[parser_struct->function_name].count(parent)>0;
         // std::cout << "parent memid: " << parent << "\n";
         // if(is_parent_owned)
@@ -5055,7 +5055,7 @@ Value *Nameable::codegen(Value *scope_struct) {
             if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
                 ExprAST *outermost = this;
                 GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
-                        (fn_memid_to_branch[base_fn][memid]>>32)&MASK_16);
+                        fn_memid_to_branch[base_fn][memid].cstmt);
                 if (!fn_memid_to_val[fn].count(memid)) {
                     LogErrorS(Line, "Cannot track memid Value*: " + std::to_string(memid) + " in function " + fn);
                 }
@@ -5080,18 +5080,6 @@ Value *Nameable::codegen(Value *scope_struct) {
         if (function_allocas[fn].count(Name)>0)
             return function_allocas[fn][Name]; 
         if (function_values[fn].count(Name)>0) {
-            // int memid = GetMemId();
-            // bool is_owned = dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
-
-            // if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
-            //     if (fn_memid_to_lastseen[fn][memid]==this) {
-            //         std::cout << "last seen " << memid << ": " << this << "\n";
-            //         ExprAST *outermost = this;
-            //         GetOutermostConditionalExpr(GetBranchId(), fn, outermost,
-            //                 (fn_memid_to_branch[fn][memid]>>32)&MASK_16);
-            //         DispatchOwnedFree(fn, function_values[fn][Name], memid, dt, outermost);
-            //     }
-            // }
 
             return function_values[fn][Name];
         }

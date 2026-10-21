@@ -1,16 +1,17 @@
 #pragma once
 
 #include "include.h"
+#include <cstdint>
 
 
 
 
-uint64_t FormatLifetime(uint64_t branch, int memid); 
-uint64_t GetLifetime(Parser_Struct *parser_struct,
-        ExprAST *borrowed, std::unordered_map<int,uint64_t> &memid_to_branch); 
-uint64_t GetLifetime(Parser_Struct *parser_struct,
+ExprBranch FormatLifetime(ExprBranch branch, int memid); 
+ExprBranch GetLifetime(Parser_Struct *parser_struct,
+        ExprAST *borrowed, std::unordered_map<int,ExprBranch> &memid_to_branch); 
+ExprBranch GetLifetime(Parser_Struct *parser_struct,
         ExprAST *owner_expr, ExprAST *borrowed,
-        std::unordered_map<int,uint64_t> &memid_to_branch,
+        std::unordered_map<int,ExprBranch> &memid_to_branch,
         bool verbose=false); 
 
 
