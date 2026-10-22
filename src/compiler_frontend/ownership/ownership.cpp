@@ -22,16 +22,14 @@ TransferChecker::TransferChecker(std::string fn, std::string base_fn)
 void TransferChecker::CheckBadMove(Parser_Struct *parser_struct, 
                  ExprAST *parent, ExprAST *nameable) {
 
-    if (auto *stmt = dynamic_cast<Nameable*>(nameable)) {
-        if (stmt->Depth>1)  {
-            std::cout << "\n\t\033[33mTransfer attribute " << stmt->GetName() << "\033[0m\n\n";
-
-        }
-        if (stmt->Depth>1&&stmt->Inner->GetIsOwned())  {
-            std::cout << "\n\t\033[33mAttr owned " << stmt->GetName() << "\033[0m\n\n";
-
-        }
-    }
+    // if (auto *stmt = dynamic_cast<Nameable*>(nameable)) {
+    //     if (stmt->Depth>1)  {
+    //         std::cout << "\n\t\033[33mTransfer attribute " << stmt->GetName() << "\033[0m\n\n";
+    //     }
+    //     if (stmt->Depth>1&&stmt->Inner->GetIsOwned())  {
+    //         std::cout << "\n\t\033[33mAttr owned " << stmt->GetName() << "\033[0m\n\n";
+    //     }
+    // }
 
 
     int memid = nameable->GetMemId()[0];
@@ -456,14 +454,12 @@ void TransferChecker::HandleNewVec(Parser_Struct* parser_struct,
         int parent = borrow_ids[memid][0].memid;
         if (fn_memid_to_expr[parser_struct->base_name].count(parent)) {
             parent_expr = fn_memid_to_expr[parser_struct->base_name][parent];
-            parent_expr->GetDataTree().Print();
 
             int ownedid = parent_expr->GetIsOwned();
             is_parent_owned = parent_expr->GetIsOwned()!=OM_non_obj;
-
-
         }
     }
+    newvecexpr->is_parent_owned=is_parent_owned;
 
 
     for(auto &val : newvecexpr->Values) {
@@ -629,10 +625,7 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     parser_struct->self_obj_owned = fn_with_owned_self.count(fn_name);
 
 
-
-
     *parser_struct->mem_id = parser_struct->memid_arg_offset;
-
 
     TransferChecker tc = TransferChecker(fn_name, base_callee);
 

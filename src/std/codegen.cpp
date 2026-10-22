@@ -256,6 +256,23 @@ Value *c_open(Parser_Struct * parser_struct, Function *TheFunction,
     return callret("open", {str, const_int(0)});
 }
 
+
+Value *c_free(Parser_Struct * parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type,
+                 std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args,
+                 std::vector<Value*> &ArgsV) {
+
+    if (args_type[0].Type=="str")
+        call("free", {Builder->CreateExtractValue(ArgsV[0], {0})});
+    else
+        call("free", {ArgsV[0]});
+
+    return const_int(0);
+}
+
+
+
 Value *c_read(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>& Args, std::vector<Value*> &ArgsV) {

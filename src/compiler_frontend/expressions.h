@@ -443,6 +443,7 @@ class NewVecExprAST : public ExprAST {
     std::vector<std::unique_ptr<ExprAST>> Values;
     std::string Type;
     int Line;
+    bool is_parent_owned=false;
     
     NewVecExprAST(Parser_Struct*,
         std::vector<std::unique_ptr<ExprAST>> Values,

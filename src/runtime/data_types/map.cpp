@@ -36,8 +36,9 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size) {
     expand_at = capacity*4;
 
     nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
-    for (int i=0; i<capacity; ++i)
+    for (int i=0; i<capacity; ++i) {
         nodes[i] = nullptr;
+    }
 }
 void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std::string key_type, std::string value_type) {
     this->size = size;
@@ -50,12 +51,12 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
     capacity = ((size + 7) / 8) * 8;
     if (capacity<8)
         capacity=8;
-    std::cout << "cap: " << capacity << "\n";
     expand_at = capacity*4;
 
     nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
-    for (int i=0; i<capacity; ++i)
+    for (int i=0; i<capacity; ++i) {
         nodes[i] = nullptr;
+    }
     // std::cout << "create map: " << key_size << "/" << value_size  << "/" << key_type << ".\n";
 }
 
@@ -86,7 +87,9 @@ extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
 
 extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, Data_Tree dt) {
     if (dt.Nested_Data.size()<2)
-        LogErrorC(scope_struct->code_line, "map requires key and value info");
+
+    LogErrorC(scope_struct->code_line, "map requires key and value info");
+
 
     std::string key_type = dt.Nested_Data[0].Type;
     int key_size;

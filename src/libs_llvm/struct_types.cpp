@@ -131,7 +131,6 @@ void Generate_Class_Types() {
 
     for (auto &class_pair : Classes) {
         const std::string &class_name = class_pair.first;
-        // LogBlue(class_name);
         std::vector<llvm::Type*> types;
         for (auto &attr : ClassAttrsName[class_name]) {
             Data_Tree dt = data_typeVars[class_name][attr];
@@ -152,7 +151,8 @@ void Generate_Class_Types() {
             ClassSize[class_name] = layout->getSizeInBytes();
 
             int idx=0, pointers_count=0;
-            std::vector<uint16_t> offsets, types16;
+            std::vector<uint64_t> offsets;
+            std::vector<uint16_t> types16;
             for (auto &attr : ClassAttrsName[class_name]) {
                 Data_Tree dt = data_typeVars[class_name][attr];
                 // uint64_t offset = layout->getElementOffset(idx);

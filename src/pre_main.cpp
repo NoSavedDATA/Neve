@@ -438,7 +438,7 @@ void build_dicts() {
   fn_ret_dt["c_read"] = Data_Tree("i64");
   Function_Arg_DataTypes["c_read"]["0"] = Data_Tree("Scope_Struct");
   Function_Arg_DataTypes["c_read"]["1"] = Data_Tree("int");
-  Function_Arg_DataTypes["c_read"]["2"] = Data_Tree("charv");
+  Function_Arg_DataTypes["c_read"]["2"] = Data_Tree("any");
   Function_Arg_DataTypes["c_read"]["3"] = Data_Tree("int");
   fn_argnames["c_read"] = {"0", "1", "2", "3"};
   Function_Required_Arg_Count["c_read"] = 3;

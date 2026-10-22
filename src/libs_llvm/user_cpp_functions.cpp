@@ -73,6 +73,7 @@ void set_user_functions() {
 	llvm_callee["c_read"] = c_read;
 	llvm_callee["err"] = err;
 	llvm_callee["c_malloc"] = c_malloc;
+	llvm_callee["c_free"] = c_free;
 	llvm_callee["c_malloc32"] = c_malloc32;
 	llvm_callee["c_malloc64"] = c_malloc64;
 	llvm_callee["c_malloc_str"] = c_malloc_str;

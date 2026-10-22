@@ -98,6 +98,11 @@ Value *err(Parser_Struct * parser_struct, Function *TheFunction,
 Value *c_malloc(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);
+Value *c_free(Parser_Struct * parser_struct, Function *TheFunction,
+                 std::string Callee, Data_Tree data_type,
+                 std::vector<Data_Tree> &args_type,
+                 Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Args,
+                 std::vector<Value*> &ArgsV);
 Value *c_malloc32(Parser_Struct * parser_struct, Function *TheFunction,
                  std::string Callee, Data_Tree data_type, std::vector<Data_Tree> &args_type,
                  Value *scope_struct, std::vector<std::unique_ptr<ExprAST>>&, std::vector<Value*> &ArgsV);

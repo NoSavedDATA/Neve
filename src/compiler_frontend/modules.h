@@ -116,6 +116,8 @@ inline Value *global_str(std::string _string) {
 }
 
 inline Function *getFunctionCheck(std::string Name) {
+  // if (Name!="print_codegen")
+  //   p2t(Name);
   if (auto *F = CurModule->getFunction(Name)) {
 
     return F;

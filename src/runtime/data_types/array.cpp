@@ -103,7 +103,7 @@ extern "C" DT_array *array_Create_Owned(Scope_Struct *scope_struct,
           8, elem_size, scope_struct->thread_id,
           elem_type);
 
-  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+  vec->virtual_size = 0;
 
   return vec;
 }
@@ -120,7 +120,7 @@ extern "C" DT_array *array_Create_Taken(Scope_Struct *scope_struct,
           8, elem_size, scope_struct->thread_id,
           elem_type);
 
-  __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
+  vec->virtual_size = 0;
 
   return vec;
 }

@@ -887,7 +887,7 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
         // std::cout << "SET " << name << " TO " << "\n";
         // dt.Print();
         if (dt.Type=="layout")
-            layout_strides[fn_name][name] = GetStrides(parser_struct, dt, scope_struct);
+            layout_strides[fn_name][name] = GetStrides(parser_struct, parser_struct->line, dt, scope_struct);
   }
 
   

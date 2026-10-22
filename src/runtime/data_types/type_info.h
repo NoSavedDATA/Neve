@@ -4,7 +4,7 @@
 #include <cstdint>
 
 struct PtrInfo {
-    uint16_t offset;
+    uint64_t offset;
     uint16_t type;
 
 };

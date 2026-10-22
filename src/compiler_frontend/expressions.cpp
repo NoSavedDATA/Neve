@@ -433,9 +433,9 @@ void AssignGenericTypes(Parser_Struct *parser_struct, CallArgsTy &cargs, CallArg
         templ.template_ret = ret_dt;
     }
 
-    for (auto &[name, dt] : generics_map) {
-        std::cout << name << "\n";
-    }
+    // for (auto &[name, dt] : generics_map) {
+    //     std::cout << name << "\n";
+    // }
 }
 
 
@@ -762,10 +762,6 @@ std::string SolveTemplate(Parser_Struct *parser_struct,
       
 
       if (!found) {
-          if (begins_with(Callee, "backprop_reg")) {
-              std::cout << "try " << Callee << "\n"; 
-              std::cout << "has owned? " << has_owned << "\n";
-          }
           if (FnLastVersion.count(Callee)==0) {
                 LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
           } else 
@@ -1232,7 +1228,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
-          // fn_memid_to_expr[BaseName][memid] = this; // proto fail
           fn_memid[BaseName][arg_name] = memid;
           fn_memid_to_dt[this->Name][memid] = dt;
           fn_arg_memid[BaseName][arg_name] = memid;
@@ -1747,7 +1742,7 @@ TupleExprAST::TupleExprAST(
     Data_Tree other_type = Init->GetDataTree();
     
     if(this->Type=="tuple")
-      Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+      Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
     data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
@@ -1768,7 +1763,7 @@ ListExprAST::ListExprAST(
 
     Data_Tree other_type = Init->GetDataTree();
     
-    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
     data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
@@ -1790,7 +1785,7 @@ DictExprAST::DictExprAST(
 
     Data_Tree other_type = Init->GetDataTree();
     
-    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
     data_typeVars[parser_struct->function_name][VarName] = data_type;
   }
@@ -1811,7 +1806,7 @@ void DataExprAST::Checks() {
     Data_Tree init_dt = Init->GetDataTree();
     std::string init_type = init_dt.Type;
 
-    Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct);
+    Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct, Line);
 
 
     data_typeVars[parser_struct->function_name][VarName] = data_type;
@@ -2614,7 +2609,7 @@ void BinaryExprAST::Checks() {
       
     }
     if (this->LHS->GetIsList()) {
-        Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+        Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
         return;
     }
 
@@ -2626,7 +2621,7 @@ void BinaryExprAST::Checks() {
         // map["x"] = y
         if(LType=="map") {
             Data_Tree map_dt = dt;
-            Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+            Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
             std::string key_type = map_dt.Nested_Data[0].Type;
             std::string query_type = LHSV->Idx->GetDataTree().Type;
 
@@ -2638,18 +2633,18 @@ void BinaryExprAST::Checks() {
 
         // arr[x] = y
         if (LType=="array")
-          Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+          Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
     }
 
     // is_alloca
     else if(!this->LHS->GetSelf()&&!this->LHS->GetIsAttribute()) {
-      Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+      Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
 
       if (data_typeVars[parser_struct->function_name].count(Lname)==0)
           LogErrorS(parser_struct->line, "Variable " + Lname + " not yet declared");
       
     } else
-        Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+        Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
 
     return;
   }
@@ -2657,10 +2652,10 @@ void BinaryExprAST::Checks() {
 
   // --- Handle operation --- //
   
-  CheckIsSenderChannel(Elements, parser_struct, Lname);
+  CheckIsSenderChannel(Elements, parser_struct, Line, Lname);
 
   if(L_dt.Type=="channel"||R_dt.Type=="channel")
-    Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct);
+    Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
 }
 
 
@@ -2699,7 +2694,7 @@ void RetExprAST::Checks() {
     if (this->Vars.size()==1) {
         returning_type = this->Vars[0]->GetDataTree();
 
-        if (!Check_Is_Compatible_Data_Type(return_expected_type, returning_type, parser_struct))
+        if (!Check_Is_Compatible_Data_Type(return_expected_type, returning_type, parser_struct, Line))
             std::cout << "*Incompatible return type" << ".\n\n\n";
     }
 
@@ -3212,7 +3207,6 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
         if (arg.IsFromArena()) {
           int MemId = (*parser_struct->mem_id)++;
-          // fn_memid_to_expr[BaseName][MemId] = this; // proto fail
           fn_memid[BaseName][arg_name] = MemId;
           fn_memid_to_dt[this->Name][MemId] = arg;
           fn_arg_memid[BaseName][arg_name] = MemId;
@@ -3760,13 +3754,14 @@ void NameableCall::Checks() {
   bool is_native_method=false, is_method=false;
   if(Depth>1 && !FromLib) {
       sent_args++;
-      std::string first_arg_dt = this->Inner->GetDataTree().Type; 
+      Data_Tree inner_dt = this->Inner->GetDataTree();
+      std::string first_arg_dt = inner_dt.Type; 
       // check is data method
 
-      is_method = (begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
+      is_method = (begins_with(Callee, first_arg_dt) && (!in_str(first_arg_dt, primary_data_tokens))||inner_dt.IsAnyComposite());        
       is_native_method = (ClassNativeMethods.count(first_arg_dt)>0&&in_vec(Callee, ClassNativeMethods[first_arg_dt]));
       is_nsk_fn = is_nsk_fn ||\
-       (!is_native_method&&begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
+       (!is_native_method&&is_method);        
       // is_nsk_fn = is_nsk_fn ||\
        // (Classes.count(first_arg_dt)==0&&begins_with(Callee, first_arg_dt) && !in_str(first_arg_dt, primary_data_tokens));        
   }
@@ -3780,6 +3775,7 @@ void NameableCall::Checks() {
       arg_type_check_offset++;
   if (gpu_fn.count(Callee)>0||gpu_ffi.count(Callee))
       arg_type_check_offset--;
+
 
 
   if (is_obj||(is_method&&!is_native_method))

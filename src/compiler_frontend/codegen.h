@@ -63,7 +63,7 @@ AllocaInst *CreateEntryBlockAlloca(llvm::Type *);
 
 
 
-std::vector<Value *> GetStrides(Parser_Struct *parser_struct, Data_Tree layout, Value *ctx);
+std::vector<Value *> GetStrides(Parser_Struct *parser_struct, int, Data_Tree layout, Value *ctx);
 
 
 void ArrayClearOwned(Value *scope_struct, Data_Tree &dt, Value *ptr,bool);
@@ -85,11 +85,11 @@ llvm::Type *get_type_from_data(Parser_Struct*,Data_Tree);
 
 
 
-bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct);
+bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct *parser_struct, int);
 
 bool CheckIsEquivalent(std::string LType, std::string RType);
 
-bool CheckIsSenderChannel(std::string Elements, Parser_Struct *parser_struct, std::string LName);
+bool CheckIsSenderChannel(std::string Elements, Parser_Struct *parser_struct, int, std::string LName);
 
 
 void Allocate_On_Pointer_Stack(Value *, std::string, std::string, Data_Tree, Value *);

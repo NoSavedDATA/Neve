@@ -161,7 +161,7 @@ void gen_fn(std::string fn, std::vector<std::string> &seen,
 }
 
 llvm::Error KaleidoscopeJIT::genAST() {
-    std::cout << " -- codegen --" << "\n";
+    // std::cout << " -- codegen --" << "\n";
     warmup_generics();
     fn_map["__anon_expr"]->codegen(); // let main setup globals
     gen_generics();
