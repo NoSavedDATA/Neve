@@ -13,6 +13,7 @@
 #include "map.h"
 #include "list.h"
 #include "str_view.h"
+#include "type_info.h"
 
 
 
@@ -40,7 +41,7 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size) {
         nodes[i] = nullptr;
     }
 }
-void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std::string key_type, std::string value_type) {
+void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, uint16_t key_type, uint16_t value_type) {
     this->size = size;
     this->key_size = key_size;
     this->val_size = value_size;
@@ -62,44 +63,39 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
 
 extern "C" DT_map *map_Create(Scope_Struct *scope_struct, uint16_t key_ty, uint16_t val_ty) {
 
-    std::string key_type = data_type_to_name()[key_ty];
     int key_size;
-    if(data_name_to_size.count(key_type)>0)
-        key_size = data_name_to_size[key_type];
+    if(data_type_to_size.count(key_ty)>0)
+        key_size = data_type_to_size[key_ty];
     else
         key_size = 8;
 
-    std::string value_type = data_type_to_name()[val_ty];
     int value_size;
-    if(data_name_to_size.count(value_type)>0)
-        value_size = data_name_to_size[value_type];
+    if(data_type_to_size.count(val_ty)>0)
+        value_size = data_type_to_size[val_ty];
     else
         value_size = 8;
 
     DT_map *map = newT<DT_map>(scope_struct, "map");
-    map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
+    map->New(scope_struct, 0, key_size, value_size, key_ty, val_ty); 
 
     
     return map;
 }
 
 extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, uint16_t key_ty, uint16_t val_ty) {
-
-
     std::string key_type = data_type_to_name()[key_ty];
     int key_size;
-    if(data_name_to_size.count(key_type)>0)
-        key_size = data_name_to_size[key_type];
+    if(data_type_to_size.count(key_ty)>0)
+        key_size = data_type_to_size[key_ty];
     else
         key_size = 8;
 
     std::string value_type = data_type_to_name()[val_ty];
     int value_size;
-    if(data_name_to_size.count(value_type)>0)
-        value_size = data_name_to_size[value_type];
+    if(data_type_to_size.count(val_ty)>0)
+        value_size = data_type_to_size[val_ty];
     else
         value_size = 8;
-
 
     DT_map *map = (DT_map*)malloc(sizeof(DT_map));
     std::cout << "CREATE MAP TAKEN " << map << "\n";
@@ -108,8 +104,8 @@ extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, uint16_t key_ty,
     std::cout << "key " << key_type << "\n";
     std::cout << "val " << value_type << "\n";
     // map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
-    map->key_type = key_type;
-    map->val_type = value_type;
+    map->key_type = key_ty;
+    map->val_type = val_ty;
 
     return map;
 }
@@ -125,8 +121,8 @@ void map_Clean_Up(void *ptr, int tid) {
     DT_map_node **nodes = __atomic_load_n(&map->nodes,__ATOMIC_ACQUIRE);
 
 
-    bool key_primary = data_name_to_type()[map->key_type] < 100;
-    bool val_primary = data_name_to_type()[map->val_type] < 100;
+    bool key_primary = map->key_type < 100;
+    bool val_primary = map->val_type < 100;
 
     for (int i=0; i<capacity; ++i) {
         DT_map_node *node = nodes[i];
@@ -210,31 +206,35 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
         while (node!=nullptr) {
             DT_map_node *next = node->next;
             unsigned int hashed;
-            if (map->key_type=="str") {
+            // uint16_t key_ty = data_name_to_type()[map->key_type];
+            uint16_t key_ty = map->key_type;
+
+
+            if (key_ty==100) {
                 char *key = static_cast<char*>(node->key);
                 hashed = str_hash(key);
-            } else if (map->key_type=="int") {
+            } else if (key_ty==2) {
                 int *key = static_cast<int*>(node->key);
                 hashed = *key;
                 unsigned int bucket_pos = hashed % capacity;
-            } else if (map->key_type=="i64") {
+            } else if (key_ty==8) {
                 int64_t *key = static_cast<int64_t*>(node->key);
                 hashed = *key;
                 unsigned int bucket_pos = hashed % capacity;
-            } else if (map->key_type=="float") {
+            } else if (key_ty==3) {
                 float *key = static_cast<float*>(node->key);
                 hashed = float_hash(*key);
-            } else if (map->key_type=="array") {
+            } else if (key_ty==102) {
                 DT_array *key = static_cast<DT_array*>(node->key);
                 if (key->type==2)
                     hashed = hash_array_int(scope_struct, key);
                 else
-                    LogErrorC(-1, "map expand not implemented for key array of type " + map->key_type);
+                    LogErrorC(-1, "map expand not implemented for key array of type " + std::to_string(map->key_type));
 
-            } else if (ClassSize.count(map->key_type)>0) {
+            } else if (type_info[map->key_type]!=nullptr) {
                 hashed = hash_ptr(scope_struct, node->key);
             } else { 
-                LogErrorC(-1, "map expand not implemented for " + map->key_type);
+                LogErrorC(-1, "map expand not implemented for " + std::to_string(map->key_type));
                 std::exit(0);
             }
             
@@ -415,7 +415,7 @@ extern "C" int map_node_overwrite(Scope_Struct *scope_struct, DT_map *map, DT_ma
 
 extern "C" DT_array *map_keys_str(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, map->key_type);
 
     DT_str *vec = static_cast<DT_str*>(array->data);
     
@@ -436,7 +436,7 @@ extern "C" DT_array *map_keys_str(Scope_Struct *scope_struct, DT_map *map) {
 extern "C" DT_array *map_keys_void_ptr(Scope_Struct *scope_struct, DT_map *map) {
     std::cout << "keys void ptr" << "\n";
     DT_array *array = newT<DT_array>(scope_struct, "any");
-    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, map->key_type);
 
     void **vec = static_cast<void**>(array->data);
     
@@ -455,7 +455,7 @@ extern "C" DT_array *map_keys_void_ptr(Scope_Struct *scope_struct, DT_map *map) 
 
 extern "C" DT_array *map_keys_array(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, map->key_type);
 
     DT_array **vec = static_cast<DT_array**>(array->data);
     
@@ -474,7 +474,7 @@ extern "C" DT_array *map_keys_array(Scope_Struct *scope_struct, DT_map *map) {
 
 extern "C" DT_array *map_keys_i64(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, map->key_type);
 
     int64_t *vec = static_cast<int64_t*>(array->data);
     
@@ -493,22 +493,22 @@ extern "C" DT_array *map_keys_i64(Scope_Struct *scope_struct, DT_map *map) {
 
 extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, data_name_to_type()[map->key_type]);
+    array->New(scope_struct, map->size, map->key_size, scope_struct->thread_id, map->key_type);
 
     
     int idx=0;
     for (int i=0; i<map->capacity; ++i) {
         DT_map_node *node = map->nodes[i];
         while (node!=nullptr) {
-            if (map->key_type=="int") {
+            if (map->key_type==2) {
                 int *key = static_cast<int*>(node->key);
                 int *vec = static_cast<int*>(array->data);
                 vec[idx] = *key;
-            } else if (map->key_type=="float") {
+            } else if (map->key_type==3) {
                 float *key = static_cast<float*>(node->key);
                 float *vec = static_cast<float*>(array->data);
                 vec[idx] = *key;
-            } else if (map->key_type=="array") {
+            } else if (map->key_type==102) {
                 DT_array *key = static_cast<DT_array*>(node->key);
                 DT_array **vec = static_cast<DT_array**>(array->data);
                 vec[idx] = key;
@@ -524,35 +524,35 @@ extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
 
 extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, data_name_to_type()[map->val_type]);
+    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, map->val_type);
     
     int idx=0;
     for (int i=0; i<map->capacity; ++i) {
         DT_map_node *node = map->nodes[i];
         while (node!=nullptr) {
-            if (map->val_type=="str") {
+            if (map->val_type==100) {
                 char *value = static_cast<char*>(node->value);
                 DT_str *vec = static_cast<DT_str*>(array->data);
                 int size = strlen(value);
                 vec[idx] = DT_str(value, size);
-            } else if (map->val_type=="int") {
+            } else if (map->val_type==2) {
                 int *vec = static_cast<int*>(array->data);
                 int *value = static_cast<int*>(node->value);
                 vec[idx] = *value;
-            } else if (map->key_type=="i64") {
+            } else if (map->key_type==8) {
                 int64_t *value = static_cast<int64_t*>(node->value);
                 int64_t *vec = static_cast<int64_t*>(array->data);
                 vec[idx] = *value;
-            } else if (map->val_type=="float") {
+            } else if (map->val_type==3) {
                 float *value = static_cast<float*>(node->value);
                 float *vec = static_cast<float*>(array->data);
                 vec[idx] = *value;
-            } else if (map->key_type=="array") {
+            } else if (map->key_type==102) {
                 DT_array *value = static_cast<DT_array*>(node->value);
                 DT_array **vec = static_cast<DT_array**>(array->data);
                 vec[idx] = value;
             } else {
-                LogErrorC(-1, "unsupported keys of " + map->key_type);
+                LogErrorC(-1, "unsupported keys of " + std::to_string(map->key_type));
                 std::exit(0);
             }
             
@@ -566,7 +566,7 @@ extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
 
 extern "C" DT_array *map_values_int(Scope_Struct *scope_struct, DT_map *map) {
     DT_array *array = newT<DT_array>(scope_struct, "array");
-    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, data_name_to_type()[map->val_type]);
+    array->New(scope_struct, map->size, map->val_size, scope_struct->thread_id, map->val_type);
     int *vec = static_cast<int*>(array->data);
     
     int idx=0;
@@ -652,21 +652,21 @@ void DT_map::print() {
     for (int i=0; i<capacity; ++i) {
         DT_map_node *node = nodes[i];
         while (node!=nullptr) {
-            if (key_type=="str") {
+            if (key_type==100) {
                 char *key = static_cast<char*>(node->key);
                 std::cout << "bucket[" << i << "]: " << key << "\n";
-            } else if (key_type=="int") {
+            } else if (key_type==2) {
                 int *key = static_cast<int*>(node->key);
                 std::cout << "bucket[" << i << "]: " << *key << "\n";
-            } else if (key_type=="i64") {
+            } else if (key_type==8) {
                 int64_t *key = static_cast<int64_t*>(node->key);
                 std::cout << "bucket[" << i << "]: " << *key << "\n";
-            } else if (key_type=="float") {
+            } else if (key_type==3) {
                 float *key = static_cast<float*>(node->key);
                 std::cout << "bucket[" << i << "]: " << *key << "\n";
             }
 
-            if (val_type=="int") {
+            if (val_type==2) {
                 int *value = static_cast<int*>(node->value);
                 std::cout << "val: " << *value << "\n\n";
             }

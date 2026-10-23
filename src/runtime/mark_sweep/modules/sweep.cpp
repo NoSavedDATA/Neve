@@ -196,8 +196,8 @@ void GC_Arena::gc_list(void *ptr, uint16_t root_type, uint64_t mark_bit) {
     if (root_type==uint16_t{104}) { // map 
         DT_map *map = static_cast<DT_map*>(ptr);
 
-        uint16_t ktype = data_name_to_type()[map->key_type];
-        uint16_t vtype = data_name_to_type()[map->val_type];
+        uint16_t ktype = map->key_type;
+        uint16_t vtype = map->val_type;
         bool mark_key = ktype>100; //not primary
         bool mark_val = vtype>100;
         int map_capacity = __atomic_load_n(&map->capacity,__ATOMIC_ACQUIRE);

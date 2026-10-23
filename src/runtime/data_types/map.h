@@ -2,6 +2,7 @@
 
 #include "../compiler_frontend/logging_v.h"
 
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -59,15 +60,16 @@ struct DT_map {
     int size;
     int capacity;
     int expand_at;
-    int key_size;    // sizeof(key)
-    int val_size;    // sizeof(value)
+    int key_size;
+    int val_size;
     DT_map_node **nodes;
-    std::string key_type;    // sizeof(key)
-    std::string val_type;    // sizeof(value)
+    // std::string key_type; 
+    // std::string val_type; 
+    uint16_t key_type, val_type;
     std::mutex snapshot_mtx;
 
     DT_map();
-    void New(Scope_Struct *, int, int, int, std::string, std::string);
+    void New(Scope_Struct *, int, int, int, uint16_t, uint16_t);
     void New(Scope_Struct *, int, int, int);
     void Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes);
 
