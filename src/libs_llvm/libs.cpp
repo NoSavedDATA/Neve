@@ -1134,6 +1134,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
 
+	FunctionType *str_intTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, struct_types["DT_str"]},
+		false
+	);
+	TheModule->getOrInsertFunction("str_int", str_intTy);
+
 	FunctionType *str_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, struct_types["DT_str"]},

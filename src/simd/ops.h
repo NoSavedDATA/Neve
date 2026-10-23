@@ -4,6 +4,7 @@
  
 
 Value *simd_add(Parser_Struct *, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R);
+Value *simd_sub(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R);
 Value *simd_mult(Parser_Struct *, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R);
 Value *simd_equal(Parser_Struct *, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R);
 Value *simd_dif(Parser_Struct *, std::unique_ptr<ExprAST> &LHS, std::unique_ptr<ExprAST> &RHS, Value *L, Value *R);

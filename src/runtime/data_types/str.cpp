@@ -52,6 +52,27 @@ extern "C" DT_str str_str_add(Scope_Struct *scope_struct, DT_str x, DT_str y) {
 }
 
 
+extern "C" int str_int(Scope_Struct *scope_struct, DT_str str) {
+    char* p = str.str;
+    char* end = str.str + str.size;
+
+    bool neg = false;
+    if (p < end && (*p == '-' || *p == '+')) {
+        neg = (*p == '-');
+        ++p;
+    }
+
+    int value = 0;
+
+    // integer part
+    while (p < end && *p >= '0' && *p <= '9') {
+        value = value * 10 + (*p - '0');
+        ++p;
+    }
+
+    return neg ? -value : value;
+}
+
 extern "C" float str_float(Scope_Struct *scope_struct, DT_str str) {
     char* p = str.str;
     char* end = str.str + str.size;

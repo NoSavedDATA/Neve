@@ -439,7 +439,7 @@ void AssignGenericTypes(Parser_Struct *parser_struct, CallArgsTy &cargs, CallArg
 }
 
 
-std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Parser_Struct *parser_struct, std::string fn,
+std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Parser_Struct *parser_struct, int Line, std::string fn,
                         CallArgsTy CArgs, bool &found) {
     FunctionAST *fn_ast=nullptr; 
     for (auto &tpair : Template_FnAST[fn]) {
@@ -467,7 +467,7 @@ std::vector<std::tuple<std::string, std::string, Data_Tree>> GetDynamicArgs(Pars
     } 
     std::cout << "\nSent" << "\n";
     print_dt_vec(CArgs.dts);
-    LogErrorS(parser_struct->line, "Could not match arguments for "+fn);
+    LogErrorS(Line, "Could not match arguments for "+fn);
 
 }
 
@@ -736,7 +736,7 @@ bool MatchOwned(Parser_Struct *parser_struct,
 }
 
 
-std::string SolveTemplate(Parser_Struct *parser_struct, 
+std::string SolveTemplate(Parser_Struct *parser_struct, int Line,
         bool is_inner_owned, std::string Callee, CallArgsTy &CArgs) {
 
   // std::string base_callee = Callee;
@@ -763,7 +763,7 @@ std::string SolveTemplate(Parser_Struct *parser_struct,
 
       if (!found) {
           if (FnLastVersion.count(Callee)==0) {
-                LogErrorS(parser_struct->line, "Function " + Callee + " does not exist.");
+                LogErrorS(Line, "Function " + Callee + " does not exist.");
           } else 
               FnNotFound(parser_struct, Callee, CArgs);
       }
@@ -1282,12 +1282,12 @@ void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs) 
         std::cout << "...\n";
     std::cout << "\nsent:" << "\n";
     print_dt_vec(CArgs.dts);
-    LogErrorS(parser_struct->line, "Unmatched call args for " + fn);
+    LogErrorS(Line, "Unmatched call args for " + fn);
 }
 
 
 
-inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
+inline void Semantic_Arguments_Check(Parser_Struct *parser_struct, int Line,
                                   std::vector<std::unique_ptr<ExprAST>> &Args,
                                   std::string fn_name,
                                   bool is_nsk_fn, int sent_args, int arg_offset=1) {
@@ -1295,7 +1295,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
 
   if (Function_Required_Arg_Count.count(fn_name)>0) {
       if (sent_args<Function_Required_Arg_Count[fn_name] && !is_vararg)
-          LogErrorS(parser_struct->line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
+          LogErrorS(Line, "Passed " + std::to_string(sent_args) + " arguments to " + fn_name + ", but " + std::to_string(Function_Required_Arg_Count[fn_name]) + " are required.");
   }
 
 
@@ -1311,11 +1311,11 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
 
 
     if(fn_argnames.count(fn_name)==0) {
-        LogErrorS(parser_struct->line, "Function " + fn_name + " does not require arguments.");
+        LogErrorS(Line, "Function " + fn_name + " does not require arguments.");
         return;
     }
     if(tgt_arg>=fn_argnames[fn_name].size()) {
-        LogErrorS(parser_struct->line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(fn_argnames[fn_name].size()));
+        LogErrorS(Line, "Extrapolated " + fn_name + " arguments count. Sent at least: " + std::to_string(tgt_arg) + ", but expected " + std::to_string(fn_argnames[fn_name].size()));
         return;
     }
 
@@ -1330,7 +1330,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
 
         int differences = expected_data_type.Compare(data_type);
         if (differences>0) { 
-          int line = (!parser_struct) ? 0 : parser_struct->line;
+          int line = (!parser_struct) ? 0 : Line;
           std::cout << "Expected\n   ";
           expected_data_type.Print();
           std::cout << "\nPassed\n   ";
@@ -1351,7 +1351,7 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct,
       for (; i<Args.size(); ++i) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg)
-            LogErrorS(parser_struct->line, "Standard argument followed by positional argument.");
+            LogErrorS(Line, "Standard argument followed by positional argument.");
       }
   }
 }
@@ -1585,7 +1585,7 @@ void ObjectExprAST::Checks() {
         data_typeVars[parser_struct->function_name][name] = Data_Tree(ClassName);
         if (this->HasInit[i]) { // callee init
           std::string create_fn = ClassName+"___init__";
-          Semantic_Arguments_Check(this->parser_struct, this->Args[i], create_fn, false, this->Args[i].size(), 1);
+          Semantic_Arguments_Check(this->parser_struct, Line, this->Args[i], create_fn, false, this->Args[i].size(), 1);
           FunctionChecks(create_fn);
         }  
     }
@@ -1822,7 +1822,7 @@ void DataExprAST::Checks() {
     if(DtHasCreateFn) {
       if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(this->VarNames[i].second.get())) {
             if (!(create_fn=="array_Create" || create_fn=="map_Create"))
-              Semantic_Arguments_Check(parser_struct, this->Notes, create_fn, true, this->Notes.size(), 1);
+              Semantic_Arguments_Check(parser_struct, Line, this->Notes, create_fn, true, this->Notes.size(), 1);
       }
     }
   }
@@ -1862,11 +1862,11 @@ DataExprAST::DataExprAST(
   if(data_type.Type=="charv") {      
       int size;
       if(this->Notes.size()<1)
-            LogErrorS(parser_struct->line, "charv requires size argument");
+            LogErrorS(Line, "charv requires size argument");
       if (auto num_expr = dynamic_cast<IntExprAST*>(this->Notes[0].get()))
             size = num_expr->Val;
       else
-            LogErrorS(parser_struct->line, "charv size must be int");
+            LogErrorS(Line, "charv size must be int");
 
       data_type.Nested_Data.push_back(Data_Tree(std::to_string(size)));
   }
@@ -1937,7 +1937,7 @@ Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
         Callee = DataName + "___init__";
         BaseCallee=Callee;
         if (Classes.count(DataName)==0)
-            LogErrorS(parser_struct->line, "New not implemented for data type " + DataName);
+            LogErrorS(Line, "New not implemented for data type " + DataName);
         is_high_level_obj = true;
         data_type = Data_Tree(DataName);
         data_type.is_own = MemoryType;
@@ -1979,7 +1979,7 @@ void NewExprAST::Checks() {
         dts.push_back(arg->GetDataTree());
     CArgs = CallArgsTy(dts);
 
-    Callee = SolveTemplate(parser_struct, OwnedId!=OM_non_obj, Callee, CArgs);
+    Callee = SolveTemplate(parser_struct, Line, OwnedId!=OM_non_obj, Callee, CArgs);
 }
 
 
@@ -2048,7 +2048,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 
 
     if(!(has_nv||has_so_lib))
-      LogErrorS(parser_struct->line, "Failed to import library: " + LibName + ".\n\t    Could not find .nv or lib.so file.");
+      LogErrorS(Line, "Failed to import library: " + LibName + ".\n\t    Could not find .nv or lib.so file.");
     else
       imported_libs.push_back(LibName);
   }
@@ -2228,7 +2228,7 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct,
 
 void LaunchExprAST::Checks() {
     // std::cout << "CHECK LAUNCH:  " << parser_struct->function_name << "|" << fn_name << "\n";
-    Semantic_Arguments_Check(parser_struct, Args, fn_name, false, Args.size(), 0);
+    Semantic_Arguments_Check(parser_struct, Line, Args, fn_name, false, Args.size(), 0);
 }
 
 LaunchExprAST::LaunchExprAST(Parser_Struct *parser_struct, std::unique_ptr<ExprAST> Grid,
@@ -2358,7 +2358,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     RType = "channel";
 
   if ((LType=="list"||RType=="list") && Op!='=')
-    LogErrorS(parser_struct->line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
+    LogErrorS(Line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
 
 
   
@@ -2515,7 +2515,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
             if (!found) {
                 Operation = GenTemplate(parser_struct, fn, CArgs, found, !has_generic);
             }
-            DynamicArgs = GetDynamicArgs(parser_struct, fn, CArgs, found);
+            DynamicArgs = GetDynamicArgs(parser_struct, Line, fn, CArgs, found);
             FunctionChecks(Operation);
 
             if (found) {
@@ -2524,7 +2524,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
                 return fn_ret_dt[Operation];
             }
           }
-          LogErrorS(parser_struct->line, "Operation function " + Operation + " not found.");
+          LogErrorS(Line, "Operation function " + Operation + " not found.");
       }
   }
 
@@ -2603,9 +2603,9 @@ void BinaryExprAST::Checks() {
     // ch <-
     if(Op==tok_arrow) {
       if(ChannelDirections[parser_struct->function_name].count(this->RHS->GetName())==0)
-        LogErrorS(parser_struct->line, "Could not find channel " + this->RHS->GetName());
+        LogErrorS(Line, "Could not find channel " + this->RHS->GetName());
       if(ChannelDirections[parser_struct->function_name][this->RHS->GetName()]==ch_receiver)
-        LogErrorS(parser_struct->line, "Trying to unpack data from a receiver only channel.");
+        LogErrorS(Line, "Trying to unpack data from a receiver only channel.");
       
     }
     if (this->LHS->GetIsList()) {
@@ -2628,7 +2628,7 @@ void BinaryExprAST::Checks() {
 
             if (!(query_type=="int"&&key_type=="float")&&\
                   query_type!=key_type)
-                    LogErrorS(parser_struct->line, "Querying " + key_type + " map with " + LHSV->Idx->GetDataTree().Type);
+                    LogErrorS(Line, "Querying " + key_type + " map with " + LHSV->Idx->GetDataTree().Type);
         }
 
         // arr[x] = y
@@ -2641,7 +2641,7 @@ void BinaryExprAST::Checks() {
       Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
 
       if (data_typeVars[parser_struct->function_name].count(Lname)==0)
-          LogErrorS(parser_struct->line, "Variable " + Lname + " not yet declared");
+          LogErrorS(Line, "Variable " + Lname + " not yet declared");
       
     } else
         Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
@@ -2786,7 +2786,7 @@ void ForEachExprAST::Checks() {
 
   data_type = Vec->GetDataTree();
   if(data_type.Nested_Data.size()==0) {
-    LogError(parser_struct->line, "Using a non-compound data type at a \"for in\" expression.");
+    LogError(Line, "Using a non-compound data type at a \"for in\" expression.");
     data_type.Print();
   }
   data_typeVars[parser_struct->function_name][VarName] = data_type.Nested_Data[0];
@@ -3018,7 +3018,7 @@ void AsyncsExprAST::Checks() {
 
   std::string type = this->Count->GetDataTree().Type;
   if (!in_vec(type, int_types))
-    LogErrorC(parser_struct->line, "asyncs count must be int. Got " + type);
+    LogErrorC(Line, "asyncs count must be int. Got " + type);
 }
 
   /// AsyncExprAST - Expression class for async.
@@ -3171,7 +3171,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     CArgs = CallArgsTy(cargs_types);
     if (IsOperator) {
         if (this->Types.size()==ctx_offset)
-            LogErrorS(parser_struct->line, "Operator function prototype has no args.");
+            LogErrorS(Line, "Operator function prototype has no args.");
         if (this->Types.size()>ctx_offset+1)
             this->Name = this->Types[ctx_offset].Type +"_" + this->Types[ctx_offset+1].Type + "_" + this->Name;
         else
@@ -3259,7 +3259,7 @@ void ViewExprAST::Checks() {
     std::string R_Type = this->RHS->GetDataTree().Type;
     if(R_Type!="int") {
         if (!in_vec(R_Type, int_types))
-            LogErrorS(parser_struct->line, "Tried to set view size as " + R_Type);
+            LogErrorS(Line, "Tried to set view size as " + R_Type);
         else
             has_R_cast=true;
     }
@@ -3347,11 +3347,11 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
       int idx = expr->Val;
       if (idx>=inner_dt.Nested_Data.size())
-        LogErrorS(parser_struct->line, "Tuple index out of range. Index at: " + std::to_string(idx) + ", but the tuple size is " + std::to_string(inner_dt.Nested_Data.size()));
+        LogErrorS(Line, "Tuple index out of range. Index at: " + std::to_string(idx) + ", but the tuple size is " + std::to_string(inner_dt.Nested_Data.size()));
 
       return Data_Tree(inner_dt.Nested_Data[idx].Type);
     } else
-      LogErrorS(parser_struct->line, "Can only index tuple with a constant integer.");
+      LogErrorS(Line, "Can only index tuple with a constant integer.");
   } 
 
   if(compound_type=="list" && inner_dt.Nested_Data.size()==0)
@@ -3731,9 +3731,9 @@ void NameableCall::Checks() {
             int args_size = Args.size();
             int idxs_size = idx_stmt->Idx->Idxs.size();
             if (args_size!=idxs_size)
-                LogErrorS(parser_struct->line, "Tile size requires idxs equal to the number of tile");
+                LogErrorS(Line, "Tile size requires idxs equal to the number of tile");
             if (!idx_stmt->IsBracket&&inner_dt.Type!="layout")
-                LogErrorS(parser_struct->line, "Type " + inner_dt.Type + " works only with bracket tiling.");
+                LogErrorS(Line, "Type " + inner_dt.Type + " works only with bracket tiling.");
 
         }
     }
@@ -3802,7 +3802,7 @@ void NameableCall::Checks() {
   BaseCallee = Callee;
   if (needs_version) {
       
-      Callee = SolveTemplate(parser_struct, Inner->GetIsOwned()!=OM_non_obj, Callee, CArgs);
+      Callee = SolveTemplate(parser_struct, Line, Inner->GetIsOwned()!=OM_non_obj, Callee, CArgs);
       if (Callee!=BaseCallee && gpu_fn.count(BaseCallee)>0)
         gpu_fn[Callee] = 1;
 

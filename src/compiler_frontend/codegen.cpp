@@ -2978,6 +2978,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             case '+':
                 ret = simd_add(parser_struct, LHS, RHS, L, R);
                 break;
+            case '-':
+                ret = simd_sub(parser_struct, LHS, RHS, L, R);
+                break;
             case '*':
                 ret = simd_mult(parser_struct, LHS, RHS, L, R);
                 break;

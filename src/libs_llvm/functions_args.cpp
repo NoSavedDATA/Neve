@@ -2127,6 +2127,15 @@ void set_functions_args_type() {
 		fn_argnames["str_str_add"].push_back("1");
 		fn_argnames["str_str_add"].push_back("2");
 		
+		Function_Arg_Types["str_int"]["0"] = "Scope_Struct";
+		Function_Arg_Types["str_int"]["1"] = "str";
+		
+		Function_Arg_DataTypes["str_int"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["str_int"]["1"] = Data_Tree("str");
+		
+		fn_argnames["str_int"].push_back("0");
+		fn_argnames["str_int"].push_back("1");
+		
 		Function_Arg_Types["str_float"]["0"] = "Scope_Struct";
 		Function_Arg_Types["str_float"]["1"] = "str";
 		
