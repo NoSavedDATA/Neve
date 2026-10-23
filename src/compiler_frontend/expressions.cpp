@@ -765,7 +765,7 @@ std::string SolveTemplate(Parser_Struct *parser_struct, int Line,
           if (FnLastVersion.count(Callee)==0) {
                 LogErrorS(Line, "Function " + Callee + " does not exist.");
           } else 
-              FnNotFound(parser_struct, Callee, CArgs);
+              FnNotFound(parser_struct, Line, Callee, CArgs);
       }
   }
   FunctionChecks(Callee);
@@ -1269,7 +1269,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
 
 
 
-void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs) {
+void FnNotFound(Parser_Struct *parser_struct, int Line, std::string fn, CallArgsTy CArgs) {
     std::cout << "\n\nFound implementations" << "\n";
     int i=0;
     for (auto cargs : FnVersion[fn]) {

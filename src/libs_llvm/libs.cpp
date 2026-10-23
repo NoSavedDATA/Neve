@@ -268,14 +268,14 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *map_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt16Ty(*TheContext), Type::getInt16Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("map_Create", map_CreateTy);
 
 	FunctionType *map_Create_TakenTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt16Ty(*TheContext), Type::getInt16Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("map_Create_Taken", map_Create_TakenTy);

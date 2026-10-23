@@ -1328,11 +1328,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                             ArgsV.push_back(const_int(std::stoi(data_type.Nested_Data[1].Type)));
                         }
                         else {
-                            Data_Tree *dt = new Data_Tree(data_type.Type);
-                            dt->Nested_Data.push_back(data_type.Nested_Data[0]);
-                            if(create_fn=="map_Create")
-                                dt->Nested_Data.push_back(data_type.Nested_Data[1]);
-                            ArgsV.push_back(VoidPtr_toValue(dt));
+                            // dt->Nested_Data.push_back(data_type.Nested_Data[0]);
+                            // if(create_fn=="map_Create")
+                            //     dt->Nested_Data.push_back(data_type.Nested_Data[1]);
+                            ArgsV.push_back(const_int16(
+                                        data_name_to_type()[data_type.Nested_Data[0].Type]));
+                            ArgsV.push_back(const_int16(
+                                        data_name_to_type()[data_type.Nested_Data[1].Type]));
                         }
                         
                     }
@@ -2219,7 +2221,7 @@ Value *strviewcmp(Value *ctx, Value *a, Value *b) {
 
 Value *new_map_node(Value *scope_struct, Value *query, Value *Val, std::string key_type, std::string value_type) {
     StructType *st_node = struct_types["map_node"];
-    Value *new_node_ptr = callret("malloc", {const_int(24)});
+    Value *new_node_ptr = callret("malloc", {const_int(24)}); // 3 ptrs
 
     Value *nullPtr = ConstantPointerNull::get(
                 cast<PointerType>(int8PtrTy)
@@ -3767,11 +3769,13 @@ inline void SetUniques(Value *scope_struct) {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                 ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
             } else { //map
-                Data_Tree *dt_ptr = new Data_Tree(type);
-                dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
-                if(type=="map")
-                    dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
-                ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                // Data_Tree *dt_ptr = new Data_Tree(type);
+                // dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
+                // if(type=="map")
+                //     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
+                // ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[1].Type]));
             }
             Value *compound = callret(create_fn, ArgsDT_Create);
             Value *compound_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
@@ -3808,11 +3812,15 @@ inline void SetGlobalOwneds(Value *scope_struct) {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                 ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
             } else { //map
-                Data_Tree *dt_ptr = new Data_Tree(type);
-                dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
-                if(type=="map")
-                    dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
-                ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                // Data_Tree *dt_ptr = new Data_Tree(type);
+                // dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
+                // if(type=="map")
+                //     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
+                // ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                ArgsDT_Create.push_back(
+                        const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(
+                        const_int16(data_name_to_type()[dt.Nested_Data[1].Type]));
             }
             create_fn+="_Taken";
             Value *compound = callret(create_fn, ArgsDT_Create);
@@ -4204,11 +4212,15 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                         ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                         ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
                     } else { //map
-                        Data_Tree *dt_ptr = new Data_Tree(type);
-                        dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
-                        if(type=="map")
-                            dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
-                        ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                        // Data_Tree *dt_ptr = new Data_Tree(type);
+                        // dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
+                        // if(type=="map")
+                        //     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
+                        // ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                        ArgsDT_Create.push_back(
+                                const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                        ArgsDT_Create.push_back(
+                                const_int16(data_name_to_type()[dt.Nested_Data[1].Type]));
                     }
                     create_fn += postfix;
                     Value *compound = callret(create_fn, ArgsDT_Create);
@@ -4346,11 +4358,15 @@ Value *NewExprAST::codegen(Value *scope_struct) {
                 ArgsDT_Create.push_back(const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
                 ArgsDT_Create.push_back(const_int(stoi(dt.Nested_Data[1].Type)));
             } else { //map
-                Data_Tree *dt_ptr = new Data_Tree(type);
-                dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
-                if(type=="map")
-                    dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
-                ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                // Data_Tree *dt_ptr = new Data_Tree(type);
+                // dt_ptr->Nested_Data.push_back(dt.Nested_Data[0]);
+                // if(type=="map")
+                //     dt_ptr->Nested_Data.push_back(dt.Nested_Data[1]);
+                // ArgsDT_Create.push_back(VoidPtr_toValue(dt_ptr));
+                ArgsDT_Create.push_back(
+                        const_int16(data_name_to_type()[dt.Nested_Data[0].Type]));
+                ArgsDT_Create.push_back(
+                        const_int16(data_name_to_type()[dt.Nested_Data[1].Type]));
             }
             create_fn+=postfix;
             Value *compound = callret(create_fn, ArgsDT_Create);

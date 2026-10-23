@@ -60,18 +60,16 @@ void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size, std:
     // std::cout << "create map: " << key_size << "/" << value_size  << "/" << key_type << ".\n";
 }
 
-extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
-    if (dt.Nested_Data.size()<2)
-        LogErrorC(scope_struct->code_line, "map requires key and value info");
+extern "C" DT_map *map_Create(Scope_Struct *scope_struct, uint16_t key_ty, uint16_t val_ty) {
 
-    std::string key_type = dt.Nested_Data[0].Type;
+    std::string key_type = data_type_to_name()[key_ty];
     int key_size;
     if(data_name_to_size.count(key_type)>0)
         key_size = data_name_to_size[key_type];
     else
         key_size = 8;
 
-    std::string value_type = dt.Nested_Data[1].Type;
+    std::string value_type = data_type_to_name()[val_ty];
     int value_size;
     if(data_name_to_size.count(value_type)>0)
         value_size = data_name_to_size[value_type];
@@ -85,29 +83,34 @@ extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
     return map;
 }
 
-extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, Data_Tree dt) {
-    if (dt.Nested_Data.size()<2)
-
-    LogErrorC(scope_struct->code_line, "map requires key and value info");
+extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, uint16_t key_ty, uint16_t val_ty) {
 
 
-    std::string key_type = dt.Nested_Data[0].Type;
+    std::string key_type = data_type_to_name()[key_ty];
     int key_size;
     if(data_name_to_size.count(key_type)>0)
         key_size = data_name_to_size[key_type];
     else
         key_size = 8;
 
-    std::string value_type = dt.Nested_Data[1].Type;
+    std::string value_type = data_type_to_name()[val_ty];
     int value_size;
     if(data_name_to_size.count(value_type)>0)
         value_size = data_name_to_size[value_type];
     else
         value_size = 8;
 
+
     DT_map *map = (DT_map*)malloc(sizeof(DT_map));
+    std::cout << "CREATE MAP TAKEN " << map << "\n";
     map->New(scope_struct, 0, key_size, value_size); 
-    
+    std::cout << "CREATE MAP TAKEN " << map << "\n";
+    std::cout << "key " << key_type << "\n";
+    std::cout << "val " << value_type << "\n";
+    // map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
+    map->key_type = key_type;
+    map->val_type = value_type;
+
     return map;
 }
 
@@ -192,7 +195,11 @@ void DT_map::Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes) {
 }
 
 extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
+
+    // std::cout << "expand map " << map << "\n";
     int capacity = map->capacity*32;
+    // std::cout << "cap " << capacity << "\n";
+    // std::cout << "key type " << map->key_type << "\n";
 
     DT_map_node **nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
     for (int i=0; i<capacity; i++)

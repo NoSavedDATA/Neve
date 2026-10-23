@@ -75,7 +75,8 @@ void DT_array::New(Scope_Struct *ctx, int size, int tid, uint16_t type) {
 extern "C" DT_array *array_Create(Scope_Struct *scope_struct,
         uint16_t elem_type) { 
 
-  // std::cout << "(GC) array" << "\n";
+  if(elem_type==8)
+      std::cout << "(GC) array " << elem_type << "\n";
 
   int elem_size = (data_type_to_size.count(elem_type)>0)
       ? data_type_to_size[elem_type]

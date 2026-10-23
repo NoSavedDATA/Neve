@@ -501,22 +501,28 @@ void set_functions_args_type() {
 	
 		
 		Function_Arg_Types["map_Create"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_Create"]["1"] = "Data_Tree";
+		Function_Arg_Types["map_Create"]["1"] = "i16";
+		Function_Arg_Types["map_Create"]["2"] = "i16";
 		
 		Function_Arg_DataTypes["map_Create"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_Create"]["1"] = Data_Tree("Data_Tree");
+		Function_Arg_DataTypes["map_Create"]["1"] = Data_Tree("i16");
+		Function_Arg_DataTypes["map_Create"]["2"] = Data_Tree("i16");
 		
 		fn_argnames["map_Create"].push_back("0");
 		fn_argnames["map_Create"].push_back("1");
+		fn_argnames["map_Create"].push_back("2");
 		
 		Function_Arg_Types["map_Create_Taken"]["0"] = "Scope_Struct";
-		Function_Arg_Types["map_Create_Taken"]["1"] = "Data_Tree";
+		Function_Arg_Types["map_Create_Taken"]["1"] = "i16";
+		Function_Arg_Types["map_Create_Taken"]["2"] = "i16";
 		
 		Function_Arg_DataTypes["map_Create_Taken"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["map_Create_Taken"]["1"] = Data_Tree("Data_Tree");
+		Function_Arg_DataTypes["map_Create_Taken"]["1"] = Data_Tree("i16");
+		Function_Arg_DataTypes["map_Create_Taken"]["2"] = Data_Tree("i16");
 		
 		fn_argnames["map_Create_Taken"].push_back("0");
 		fn_argnames["map_Create_Taken"].push_back("1");
+		fn_argnames["map_Create_Taken"].push_back("2");
 		
 		Function_Arg_Types["map_node_reclaim"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_node_reclaim"]["1"] = "map";

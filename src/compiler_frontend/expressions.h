@@ -1348,7 +1348,7 @@ struct Arg_Pair {
 
 int SetFnVersion(std::string fn, CallArgsTy CArgs, bool overwrite=false);
 std::string GetFnVersion(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs, bool &found, bool accept_layout=true, bool match_own=true);
-void FnNotFound(Parser_Struct *parser_struct, std::string fn, CallArgsTy CArgs);
+void FnNotFound(Parser_Struct *parser_struct, int Line, std::string fn, CallArgsTy CArgs);
 std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         CallArgsTy CArgs, bool &found, bool is_op=false);
 void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee);

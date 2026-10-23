@@ -3000,9 +3000,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
           Ty = boolTy;
       } else if(data_type=="str") {
           Ty = struct_types["DT_str"];
-      } else if(data_type=="charv") {
-        int size = std::stoi(data_tree.Nested_Data[0].Type);
-        Ty = ArrayType::get(int8Ty, size);
       } else {
         class_pointers.push_back(last_offset);
         class_pointers_type.push_back(data_name_to_type()[data_type]);
