@@ -739,7 +739,7 @@ bool MatchOwned(Parser_Struct *parser_struct,
 std::string SolveTemplate(Parser_Struct *parser_struct, int Line,
         bool is_inner_owned, std::string Callee, CallArgsTy &CArgs) {
 
-  // std::string base_callee = Callee;
+  std::string base_callee = Callee;
   bool has_owned = MatchOwned(parser_struct, is_inner_owned, Callee, CArgs);
 
 
@@ -768,6 +768,7 @@ std::string SolveTemplate(Parser_Struct *parser_struct, int Line,
               FnNotFound(parser_struct, Line, Callee, CArgs);
       }
   }
+  // FunctionChecks(base_callee);
   FunctionChecks(Callee);
   return Callee;
 }
@@ -3494,6 +3495,12 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         return Data_Tree("generic_fn");
     else {
         bt(10);
+        std::cout << "variables: " << "\n";
+        for(auto &[name, dt] : data_typeVars[parser_struct->function_name]) {
+            std::cout << "\nvar  " << name << "\n\t";
+            dt.Print();
+
+        }
         LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->function_name + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }
