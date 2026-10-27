@@ -55,7 +55,7 @@ inline void ClearOne(Value *scope_struct, std::string fn,
 inline void Clear_Fn_Owned_Values(Value *scope_struct,
         Parser_Struct *parser_struct,
         std::vector<Value *> &returned_values) {
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
         if (in_vec(ptr, returned_values))
@@ -65,7 +65,7 @@ inline void Clear_Fn_Owned_Values(Value *scope_struct,
     set_scope_obj(scope_struct, previous_obj);
 }
 void Clear_Fn_Owned_Values(Value *scope_struct, Parser_Struct *parser_struct) {
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
         ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
@@ -96,7 +96,7 @@ void FreeOwnedPool(Value *scope_struct, Parser_Struct *parser_struct) {
     return;
 
 
-  // p2t("free pool " + parser_struct->function_name);
+  // p2t("free pool " + parser_struct->fn());
   // call("print_void_ptr", {get_scope_owned_pool(scope_struct)});
   call("free", {
     get_scope_owned_pool(scope_struct)
@@ -147,11 +147,11 @@ int Nameable::GetIsOwned() {
     if (IsOwnedUnique)
         return OM_self_obj;
     if (Name=="self"&&parser_struct->self_obj_owned) {
-        // std::cout << "\n\t\033[33mSELF OWNED: " << parser_struct->function_name << "\033[0m\n\n";
+        // std::cout << "\n\t\033[33mSELF OWNED: " << parser_struct->fn() << "\033[0m\n\n";
         return OM_self_obj;
     }
 
-    std::string scope = parser_struct->function_name;
+    std::string scope = parser_struct->fn();
 
     if (function_owns[scope].count(Name)==0)
         return OM_non_obj;
@@ -235,12 +235,10 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
         std::vector<std::unique_ptr<ExprAST>> &Body) {
 
     if (fn_ret_dt.count(fn_name)>0) {
-
         parser_struct->borrow_ret = fn_ret_dt[fn_name].is_borrow;
         // if(parser_struct->borrow_ret)
         //     LogBlue("RET AS BORROW " + fn_name);
     }
-
 
     // Set own pool
     int last_offset=0;
@@ -252,15 +250,14 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
     bool has_owned_pool = last_offset>0;
 
     if (has_owned_pool) {
-        // LogBlue("=="+parser_struct->function_name + " has offset " + std::to_string(last_offset));
+        // LogBlue("=="+parser_struct->fn() + " has offset " + std::to_string(last_offset));
         parser_struct->has_owned_pool = true;
         Value *ownedpool = callret("malloc", {const_int(last_offset)});
         set_scope_owned_pool(scope_struct, ownedpool);
-        // p2t("    SEt pool " + parser_struct->function_name);
+        // p2t("    SEt pool " + parser_struct->fn());
         // call("print_void_ptr", {get_scope_owned_pool(scope_struct)});
-        fn_with_pool[parser_struct->function_name] = 1;
+        fn_with_pool[parser_struct->fn()] = 1;
     }
-
 }
 
 
@@ -521,7 +518,7 @@ void EscapeAnalysis(std::string base_callee, std::string fn_name,
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
-    parser_struct->function_name = fn_name;
+    parser_struct->sfn(fn_name);
     parser_struct->self_obj_owned = fn_with_owned_self.count(fn_name);
 
     std::vector<int> owned_ids;

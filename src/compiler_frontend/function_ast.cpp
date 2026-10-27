@@ -907,7 +907,7 @@ Function *FunctionAST::codegen_gpu(int idx, std::vector<std::unique_ptr<Arg_Pair
     // }
     // std::cout << "(gpu)" << typeid(*body).name() << "\n";
     // std::cout << "idx: " << idx << "\n";
-    // std::cout << "codegen " << parser_struct->function_name << "\n";
+    // std::cout << "codegen " << parser_struct->fn() << "\n";
     body->codegen(scope_struct);
   }
 
@@ -1025,24 +1025,24 @@ Function *FunctionAST::codegen() {
 
   PrototypeAST *P;
   if (!Proto) {
-    P = FunctionProtos[parser_struct->function_name].get();
+    P = FunctionProtos[parser_struct->fn()].get();
   }
   else {
     P = Proto.get();
     FunctionProtos[Proto->getName()] = std::move(Proto);
-        // parser_struct->function_name = fn;
-        // parser_struct->cvalues = proto->CArgs.cvalues;
-        // function_name = fn;
   }
   parser_struct->self_obj_owned = P->CArgs.self_obj_owned;
 
 
   int idx = P->CArgs.version;
 
+  std::cout << "Codegen fn: " << function_name << "\n";
   if (function_name == "")
       function_name = P->getName();
   std::string base_name = P->BaseName;
-  parser_struct->function_name = function_name;
+  parser_struct->sfn(function_name);
+
+  std::cout << "Codegen PSTO fn: " << function_name << "\n";
 
 
 
@@ -1126,6 +1126,7 @@ Function *FunctionAST::codegen() {
     fn_stack_offset[function_name] = 0;
   }
 
+  Body[0]->sfn(parser_struct->fn());
 
   // Solve templates
   std::unordered_map<int, int> ownid_to_memid;
@@ -1135,11 +1136,8 @@ Function *FunctionAST::codegen() {
 
     body->Traverse([&ownid_to_memid, &idx, this](ExprAST *node) {
         if (idx>=0&&node->parser_struct!=nullptr&&parser_struct!=nullptr) {
-            node->parser_struct->function_name = parser_struct->function_name;
             node->parser_struct->cvalues = parser_struct->cvalues;
         }
-        // if (node->parser_struct)
-        //     node->parser_struct->function_name=function_name;
         if (auto *stmt = dynamic_cast<Nameable*>(node)) {
             if (stmt->IsOwnedUnique)
                 ownid_to_memid[stmt->Ownedids[0]] = stmt->Memids[0];

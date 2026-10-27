@@ -82,7 +82,7 @@ ExprBranch GetLifetime(Parser_Struct *parser_struct,
 
     if (verbose) {
         std::cout << "lifetime of " << borrowed->GetName() << "\n";
-        std::cout << "owner " << parser_struct->function_name<<"|"<<owner_expr->Name << "\n";
+        std::cout << "owner " << parser_struct->fn()<<"|"<<owner_expr->Name << "\n";
         std::cout << "has " << (memid_to_branch.count(memid)>0) << "\n";
         std::cout << "life " << lifetime.pack64() << "\n";
     }

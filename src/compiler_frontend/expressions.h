@@ -79,6 +79,13 @@ class ExprAST {
 
   
   
+
+    virtual inline void sfn(std::string fn) {
+        if (!parser_struct)
+            return;
+        parser_struct->sfn(fn);
+    }
+
     virtual Value *codegen(Value *scope_struct) = 0;
     virtual Data_Tree GetDataTree(bool from_assignment=false);
 
@@ -567,6 +574,7 @@ class NewExprAST : public ExprAST, public ArgsBasedExpr {
       std::unique_ptr<ExprAST> meminfer_expr=nullptr);
 
   Value *codegen(Value *scope_struct) override;
+  void SetUnitToNull(Value *scope_struct,Value*,std::string);
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
   int GetIsOwned() override;
@@ -1418,5 +1426,6 @@ extern std::unordered_map<std::string, std::vector<std::tuple<std::string, std::
 extern std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 extern std::unordered_map<std::string,int> FnLastVersion;
 extern std::unordered_map<std::string,std::unordered_map<int, int>> memid_to_ownedid;
+extern std::unordered_map<std::string, std::vector<std::string>> ctor_init_vars, ctor_unnitialized;
 
 extern std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;

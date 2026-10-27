@@ -56,10 +56,10 @@ std::vector<int> NameableCall::GetMemId() {
 
 bool Nameable::GetIsView() {
     bool is_view=false;
-    if (in_vec(GetMemId()[0], fn_views[parser_struct->function_name])) {
+    if (in_vec(GetMemId()[0], fn_views[parser_struct->fn()])) {
         is_view=true;
     }
-    std::string scope = (Depth==1) ? parser_struct->function_name
+    std::string scope = (Depth==1) ? parser_struct->fn()
                                    : Inner->GetDataTree().Type;
     if (in_vec(Name, fn_class_views[scope])) {
         is_view=true;

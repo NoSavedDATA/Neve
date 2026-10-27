@@ -311,26 +311,26 @@ void GetOwnedType(Parser_Struct *parser_struct, Data_Tree dt, int memid, int own
     if (fn_borrows[parser_struct->base_name].count(memid)>0) {
         type = 3;
         
-    } else if (in_vec(ownedid, function_escapes[parser_struct->function_name])) {
+    } else if (in_vec(ownedid, function_escapes[parser_struct->fn()])) {
         if (parser_struct->borrow_ret)
             type = 2;
         else
             type = 1;
     }
-    OwnedValues[parser_struct->function_name].push_back({memid, dt, ptr, type});
+    OwnedValues[parser_struct->fn()].push_back({memid, dt, ptr, type});
 }
 
 
 inline Value *get_smem_offset(Parser_Struct *parser_struct, bool &had) {
-    if (function_values[parser_struct->function_name].count("smem_offset")>0) {
+    if (function_values[parser_struct->fn()].count("smem_offset")>0) {
         had = true;
-        return function_values[parser_struct->function_name]["smem_offset"];
+        return function_values[parser_struct->fn()]["smem_offset"];
     }
     return const_int(0);
 }
 inline Value *get_smem_offset(Parser_Struct *parser_struct) {
-    if (function_values[parser_struct->function_name].count("smem_offset")>0)
-        return function_values[parser_struct->function_name]["smem_offset"];
+    if (function_values[parser_struct->fn()].count("smem_offset")>0)
+        return function_values[parser_struct->fn()]["smem_offset"];
     return const_int(0);
 }
 
@@ -386,9 +386,9 @@ Value *Idx_Calc_Codegen(Parser_Struct *parser_struct, int Line, std::string name
   auto &indices = idxs->Idxs;
   if (type=="layout") {
 
-    if(layout_strides[parser_struct->function_name].count(name)==0)
+    if(layout_strides[parser_struct->fn()].count(name)==0)
         LogErrorC(Line, "Failed to get layout " + name + " strides");
-    std::vector<Value *> strides = layout_strides[parser_struct->function_name][name];
+    std::vector<Value *> strides = layout_strides[parser_struct->fn()][name];
     
     Value *offset = const_int(0);
     int j=1;
@@ -663,7 +663,7 @@ bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Stru
   int differences = LType.Compare(RType);
   if (differences>0) {
       bt(5);
-      std::cout << " " << parser_struct->function_name << "\n";
+      std::cout << " " << parser_struct->fn() << "\n";
     std::cout << "Left type:\n   ";
     LType.Print();
     std::cout << "\nRight type:\n   ";
@@ -714,10 +714,10 @@ inline bool Check_Required_Args_Count(const std::string &Callee, int sent_args,
 
 // void Cache_Array(Parser_Struct *parser_struct, Value *var) {
 //     Value *vec_gep = Builder->CreateStructGEP(struct_types["array"], var, 3);
-//     function_vecs[parser_struct->function_name][var] = vec_gep;
+//     function_vecs[parser_struct->fn()][var] = vec_gep;
 // }
 
-inline Value *Load_Array(std::string &function_name, Value *var) {
+inline Value *Load_Array(std::string function_name, Value *var) {
     Value *vec_gep;
     // if (function_vecs[function_name].count(var)==0) { // handles self.array
     //     vec_gep = Builder->CreateStructGEP(struct_types["array"], var, 3);
@@ -787,7 +787,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
 
   Builder->SetInsertPoint(SweepThenBB);
 
-  Set_Stack_Top(scope_struct, parser_struct->function_name);
+  Set_Stack_Top(scope_struct, parser_struct->fn());
   call("scope_struct_Sweep", {scope_struct});
   Builder->CreateBr(SweepContinueBB);
 
@@ -846,7 +846,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
 
       
-    Data_Tree init_dt = data_typeVars[parser_struct->function_name][VarName]; 
+    Data_Tree init_dt = data_typeVars[parser_struct->fn()][VarName]; 
     Type = init_dt.Type;
 
 
@@ -859,11 +859,11 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     bool is_layout = Type=="layout";
     if (is_layout) {
         auto *layout_stmt = dynamic_cast<LayoutExprAST*>(Init);
-        layout_strides[parser_struct->function_name][VarName] = layout_stmt->GetStrides(scope_struct);
+        layout_strides[parser_struct->fn()][VarName] = layout_stmt->GetStrides(scope_struct);
     }
 
     if((in_vec(Type, primary_data_tokens)||is_layout)&&!(is_self||is_attr)) { 
-      StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
+      StoreVal(TheFunction, parser_struct->fn(), VarName, initial_value, init_dt);
       continue;
     }
 
@@ -886,9 +886,9 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
       if (Type=="str") {
             unpacked_val = Builder->CreateExtractValue(initial_value, {0});
       }
-      StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
+      StoreVal(TheFunction, parser_struct->fn(), VarName, initial_value, init_dt);
       if(parser_struct->gpu==0)
-          Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, data_type, unpacked_val); 
+          Allocate_On_Pointer_Stack(scope_struct, parser_struct->fn(), VarName, data_type, unpacked_val); 
     }
       
 
@@ -921,7 +921,7 @@ Value *TupleExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
     data_type.Print();
     
-    StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, data_type);
+    StoreVal(TheFunction, parser_struct->fn(), VarName, initial_value, data_type);
   }
 
   return ConstantFP::get(*TheContext, APFloat(0.0));
@@ -1004,7 +1004,7 @@ void Set_Pointer_Stack(Value *scope_struct, Parser_Struct *parser_struct, std::s
     if (parser_struct->gpu!=0)
         return;
 
-    std::string function_name = parser_struct->function_name;
+    std::string function_name = parser_struct->fn();
     if (function_pointers[function_name].count(var_name)==0) {
         Allocate_On_Pointer_Stack(scope_struct, function_name, var_name, Data_Tree("aux"), val);
         return;
@@ -1093,8 +1093,8 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct, 
             does_op_create_memory = (does_op_create_memory||stmt->Op!=tok_offby);
 
         if (does_op_create_memory) {
-            Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct->function_name, arg);
-            Set_Stack_Top(scope_struct, parser_struct->function_name);
+            Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct->fn(), arg);
+            Set_Stack_Top(scope_struct, parser_struct->fn());
         }
     }
 
@@ -1205,14 +1205,14 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
         std::string callee,
         std::vector<std::tuple<int,int>> &partialtakes,
         std::vector<Value*> &ArgsV) {
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
 
 
 
     // When they are partial in the current function, but not in the callee
     for(auto &[_,_,arg_memid,taken_id] : CArgs.borrows) {
         if (!in_vec(arg_memid,fn_borrows_incomplete[callee])) {
-            SetConditionalTake(parser_struct->function_name, taken_id);
+            SetConditionalTake(parser_struct->fn(), taken_id);
         }
     }
 
@@ -1223,10 +1223,10 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
         if (!ctakens[fn].count(memid))
             return; // fix for when partial registered for the wrong generic
                     //
-        // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->function_name + "|"+ callee + ": " + std::to_string(memid));
+        // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->fn() + "|"+ callee + ": " + std::to_string(memid));
 
         ArgsV.push_back(ctakens[fn][memid]);
-        SetConditionalMaybeTake(parser_struct->function_name, memid);
+        SetConditionalMaybeTake(parser_struct->fn(), memid);
     }
 }
 
@@ -1277,7 +1277,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
             if (auto *null_stmt = dynamic_cast<NullPtrExprAST*>(VarNames[i].second.get())) {
                 AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, \
                                                 get_type_from_data(parser_struct, data_type));
-                function_allocas[parser_struct->function_name][VarName] = alloca;
+                function_allocas[parser_struct->fn()][VarName] = alloca;
                 continue;
             } 
         }
@@ -1297,7 +1297,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
             if (Type!=init_dt.Type&&in_vec(Type, int_types)&&in_vec(init_dt.Type, int_types))
                 initial_value = Builder->CreateIntCast(initial_value,
                                         get_type_from_data(parser_struct, data_type), true);
-            StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
+            StoreVal(TheFunction, parser_struct->fn(), VarName, initial_value, init_dt);
             continue;
         }
 
@@ -1320,7 +1320,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                     if (create_fn=="array_Create" || create_fn=="map_Create" || create_fn=="channel_Create") {
                         if (create_fn=="array_Create") {
                             // if (postfix=="")
-                            //     p2t("data array_Create " + parser_struct->function_name + " | " + VarName);
+                            //     p2t("data array_Create " + parser_struct->fn() + " | " + VarName);
                             ArgsV.push_back(const_int16(data_name_to_type()[data_type.Nested_Data[0].Type]));
                         }
                         else if (create_fn=="channel_Create") {
@@ -1384,9 +1384,9 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                 unpacked_val = Builder->CreateExtractValue(initial_value, {0});
 
             if (parser_struct->gpu==0)
-                Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, data_type, unpacked_val); 
+                Allocate_On_Pointer_Stack(scope_struct, parser_struct->fn(), VarName, data_type, unpacked_val); 
 
-            StoreVal(TheFunction, parser_struct->function_name, VarName, initial_value, init_dt);
+            StoreVal(TheFunction, parser_struct->fn(), VarName, initial_value, init_dt);
         }
 
         if (IsOwned) {
@@ -1395,8 +1395,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
         if (Memids[i]!=OM_non_obj) {
-            // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << Memids[i] <<  "\033[0m\n\n";
-            fn_memid_to_val[parser_struct->function_name][Memids[i]] = initial_value;
+            // std::cout << "\n\t\033[32mto val " << parser_struct->fn() << ": " << Memids[i] <<  "\033[0m\n\n";
+            fn_memid_to_val[parser_struct->fn()][Memids[i]] = initial_value;
         }
     }
 
@@ -1418,7 +1418,7 @@ Value *GCSafePointExprAST::codegen(Value *scope_struct) {
     if (parser_struct->gpu>0)
         return const_float(0.0f);
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    Set_Stack_Top(scope_struct, parser_struct->function_name);
+    Set_Stack_Top(scope_struct, parser_struct->fn());
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
     return const_float(0.0f);
 }
@@ -1434,7 +1434,7 @@ void BlockConditionals(std::string fn) {
 Value *IfExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0.0f);
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
 
 
     Value *CondV = Cond->codegen(scope_struct);
@@ -1553,7 +1553,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {
     if (not ShallCodegen)
         return const_float(0.0f);
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
 
 
     Value *CondV = Cond->codegen(scope_struct);
@@ -1729,7 +1729,7 @@ void SetBreakPHIS(Parser_Struct *parser_struct, std::vector<std::string> &assign
                 phi_val->addIncoming(function_phi_values[name], LoopPredecessor);
                 phi_val->addIncoming(pair.second, bb);
 
-                function_values[parser_struct->function_name][name] = phi_val;
+                function_values[parser_struct->fn()][name] = phi_val;
             }
         }
     }
@@ -1793,7 +1793,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0);
 
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
@@ -1928,7 +1928,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 Value *ForEachExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
@@ -2069,7 +2069,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 Value *WhileExprAST::codegen(Value *scope_struct) {
     if (not ShallCodegen)
         return const_float(0.0f);
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
@@ -2181,9 +2181,9 @@ bool CheckIs_CastInt_to_FloatChannel(std::string Operation, Data_Tree LTree) {
 bool CheckIsSenderChannel(std::string Elements, Parser_Struct *parser_struct, int Line, std::string LName) {
 
     if(begins_with(Elements, "channel")) {
-        if(ChannelDirections[parser_struct->function_name].count(LName)>0) {
-            if(((int)ChannelDirections[parser_struct->function_name][LName])==(int)ch_sender) {
-                LogErrorS(Line, "1 Tried to attribute data to a sender only channel." + parser_struct->function_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct->function_name].count(LName)) + "; " + std::to_string(ChannelDirections[parser_struct->function_name][LName]) );
+        if(ChannelDirections[parser_struct->fn()].count(LName)>0) {
+            if(((int)ChannelDirections[parser_struct->fn()][LName])==(int)ch_sender) {
+                LogErrorS(Line, "1 Tried to attribute data to a sender only channel." + parser_struct->fn() + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct->fn()].count(LName)) + "; " + std::to_string(ChannelDirections[parser_struct->fn()][LName]) );
                 return false;
             }
         }
@@ -2351,12 +2351,12 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
 
             Function *F = CurModule->getFunction(store_trigger);
             if (F) {
-                Value *old_val = LoadVal(parser_struct->function_name, Lname, ldt);
+                Value *old_val = LoadVal(parser_struct->fn(), Lname, ldt);
                 call(store_trigger, {scope_struct, old_val, Val_indexed});
             }
 
 
-            StoreVal(TheFunction, parser_struct->function_name, Lname, Val_indexed, ldt);
+            StoreVal(TheFunction, parser_struct->fn(), Lname, Val_indexed, ldt);
 
             if (!in_vec(list_LType, primary_data_tokens))
                 Set_Pointer_Stack(scope_struct, parser_struct, Lname, Val_indexed);
@@ -2615,7 +2615,7 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
             if (elem_type=="float"&&RType=="int")
                 Val = Builder->CreateSIToFP(Val, floatTy);
 
-            Value *vec = Load_Array(parser_struct->function_name, vec_ptr);
+            Value *vec = Load_Array(parser_struct->fn(), vec_ptr);
 
             llvm::Type *idxTy;
             if (elem_type=="int")
@@ -2694,8 +2694,8 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
             // Store trigger behavior for supported types (i.e, function <DT>_StoreTrigger exists)
             Function *F = CurModule->getFunction(store_trigger);
 
-            if (F && function_values[parser_struct->function_name].count(Lname)>0) {
-                Value *old_val = LoadVal(parser_struct->function_name, Lname, L_dt);
+            if (F && function_values[parser_struct->fn()].count(Lname)>0) {
+                Value *old_val = LoadVal(parser_struct->fn(), Lname, L_dt);
                 Val = callret(store_trigger, {scope_struct, old_val, Val});
             }
 
@@ -2706,7 +2706,7 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
                 Set_Pointer_Stack(scope_struct, parser_struct, Lname, unpacked_val);
             }
 
-            StoreVal(TheFunction, parser_struct->function_name, Lname, Val, L_dt);
+            StoreVal(TheFunction, parser_struct->fn(), Lname, Val, L_dt);
 
         } else { // self|attr 
             Value *src = LHSV->Inner->codegen(scope_struct);
@@ -2765,7 +2765,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (Op == '=' || (Op==tok_arrow&&!begins_with(Elements, "channel"))) {
         BinaryStore(parser_struct, Line, scope_struct, Op, Operation, LHS, RHS, R, L_dt, R_dt);
-        ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+        ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
         return const_int(0);
     }
 
@@ -2783,7 +2783,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (auto *rstmt = dynamic_cast<BinaryExprAST*>(RHS.get())) {
         if (rstmt->is_fused) {
-            ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+            ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
             return const_int(0);
         }
     }
@@ -3127,7 +3127,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
                 ret = Builder->CreateICmpSGT(L, R, "cmptmp");
                 break;
             case tok_equal:
-                if (parser_struct->function_name=="tensor_gpu_view") {
+                if (parser_struct->fn()=="tensor_gpu_view") {
 
                 call("print_int", {L});
                 call("print_int", {R});
@@ -3180,7 +3180,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         }
 
         if (partialtakes.count(Operation)>0) {
-            // std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->function_name << " | "<< Operation << "\033[0m\n\n";
+            // std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->fn() << " | "<< Operation << "\033[0m\n\n";
             Codegen_Partialtakes(parser_struct, CArgs,
                     BaseOperation,
                     partialtakes[Operation],
@@ -3199,16 +3199,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         BinaryStore(parser_struct, Line, scope_struct,
                     '=', Operation, LHS, LHS,
                     ret, LHS->GetDataTree(true), L_dt);
-        ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+        ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
         return const_int(0);
     }
 
 
     if (IsCall)
-        fn_memid_to_val[parser_struct->function_name][Memids[0]] = ret;
+        fn_memid_to_val[parser_struct->fn()][Memids[0]] = ret;
 
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
     return ret;
 
 
@@ -3322,8 +3322,8 @@ Value *ChannelExprAST::codegen(Value *scope_struct) {
                                 const_int(buffer_size)});
 
 
-    StoreVal(TheFunction, parser_struct->function_name, Name, initial_value, Data_Tree("channel"));
-    Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, Name, Data_Tree("channel"), initial_value);
+    StoreVal(TheFunction, parser_struct->fn(), Name, initial_value, Data_Tree("channel"));
+    Allocate_On_Pointer_Stack(scope_struct, parser_struct->fn(), Name, Data_Tree("channel"), initial_value);
 
     return const_float(0);
 }
@@ -3408,15 +3408,15 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
     std::vector<std::string> previous_scope_value_types;
     std::vector<std::string> previous_scope_value_names;
-    for (auto &pair : function_values[parser_struct->function_name]) {
+    for (auto &pair : function_values[parser_struct->fn()]) {
         if(pair.first=="QQ_stack_top"||in_vec(pair.first, int_fn_values))
             continue;
 
         std::string type;
-        if (Object_toClass[parser_struct->function_name].count(pair.first)>0)
+        if (Object_toClass[parser_struct->fn()].count(pair.first)>0)
             type = "void";
         else {   
-            Data_Tree dt = data_typeVars[parser_struct->function_name][pair.first];
+            Data_Tree dt = data_typeVars[parser_struct->fn()][pair.first];
             type = UnmangleVec(dt);
             if(!in_vec(type, primary_data_tokens)||dt.is_array||dt.is_buffer)
                 type="void";
@@ -3453,7 +3453,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
-    std::string async_scope = parser_struct->function_name + async_suffix;
+    std::string async_scope = parser_struct->fn() + async_suffix;
     for(int i=0; i<previous_scope_value_names.size(); ++i) {
         std::string type = previous_scope_value_types[i];
         std::string var_name = previous_scope_value_names[i];
@@ -3468,7 +3468,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
-    block_values[BB] = function_values[parser_struct->function_name];
+    block_values[BB] = function_values[parser_struct->fn()];
     for (auto &body : asyncBody)
         V = body->codegen(scope_struct_typed);
 
@@ -3508,7 +3508,7 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct->function_name];
+    block_values[CurrentBB] = function_values[parser_struct->fn()];
 
     PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
@@ -3548,7 +3548,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", const_int(0));
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct->function_name];
+    block_values[CurrentBB] = function_values[parser_struct->fn()];
 
     Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
@@ -3592,7 +3592,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
     Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", count);
 
     Builder->SetInsertPoint(CurrentBB);
-    block_values[CurrentBB] = function_values[parser_struct->function_name];
+    block_values[CurrentBB] = function_values[parser_struct->fn()];
 
 
 
@@ -3927,7 +3927,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     std::vector<llvm::Type *> retTypes;
     Data_Tree tupleTy = Data_Tree("tuple");
     for (int i=0; i<Vars.size(); i++) {
-         if (parser_struct->function_name=="warpMax_float") {
+         if (parser_struct->fn()=="warpMax_float") {
             std::cout << "add ret type" << "\n";
             Vars[i]->GetDataTree().Print();
          }
@@ -4043,7 +4043,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         value = Values[i]->codegen(scope_struct);
 
 
-        SetConditionalTake(parser_struct->function_name, Values[i]);
+        SetConditionalTake(parser_struct->fn(), Values[i]);
 
         if(!in_vec(type, primary_data_tokens)) {
             std::string copy_fn = type + "_Copy";
@@ -4081,7 +4081,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
     std::string Callee = "array_" + type + "_NewVec"+postfix;
     // if (Callee=="array_int_NewVec")
-    //     p2t(parser_struct->function_name+"|"+Callee);
+    //     p2t(parser_struct->fn()+"|"+Callee);
     return callret(Callee, values);
 }
 
@@ -4168,9 +4168,9 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
                                         const_int16(data_name_to_type()[ClassName])});
             else
                 ptr = Init->codegen(scope_struct);
-            Allocate_On_Pointer_Stack(scope_struct, parser_struct->function_name, VarName, Data_Tree(ClassName), ptr);
+            Allocate_On_Pointer_Stack(scope_struct, parser_struct->fn(), VarName, Data_Tree(ClassName), ptr);
 
-            StoreVal(TheFunction, parser_struct->function_name, VarName, ptr, Data_Tree("ClassName"));
+            StoreVal(TheFunction, parser_struct->fn(), VarName, ptr, Data_Tree("ClassName"));
 
 
             if (HasInit[i]) { // callee init
@@ -4233,7 +4233,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
                 ArgsV = Codegen_Argument_List(parser_struct, Line, std::move(ArgsV), Args[i], ArgTypes, scope_struct, \
                         Callee, false, arg_type_check_offset); 
-                Set_Stack_Top(scope_struct, parser_struct->function_name);
+                Set_Stack_Top(scope_struct, parser_struct->fn());
                 call(Callee, ArgsV);
             }
         }      
@@ -4260,12 +4260,12 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
         ptr = callret("malloc",
                     {const_int((ClassSize[DataName]))
               });
-        // if(parser_struct->function_name=="gpu_tensor_gpu_tensor_add")
+        // if(parser_struct->fn()=="gpu_tensor_gpu_tensor_add")
         //     LogBlue("as malloc borrow");
     } else {
-        if (in_vec(OwnedId, function_escapes[parser_struct->function_name])) {
+        if (in_vec(OwnedId, function_escapes[parser_struct->fn()])) {
             if (parser_struct->borrow_ret) {
-                // if(parser_struct->function_name=="gpu_tensor_gpu_tensor_add")
+                // if(parser_struct->fn()=="gpu_tensor_gpu_tensor_add")
                 //     LogBlue("as malloc ret borrow");
 
                 // taken escape
@@ -4274,18 +4274,18 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
                       });
             }
             else {// escape
-                // if(parser_struct->function_name=="gpu_tensor_gpu_tensor_add")
+                // if(parser_struct->fn()=="gpu_tensor_gpu_tensor_add")
                 //     LogBlue("as escape pool");
-                ptr = fn_owned_ret_memory[parser_struct->function_name][OwnedId];
+                ptr = fn_owned_ret_memory[parser_struct->fn()][OwnedId];
             }
 
         } else {
-                // if(parser_struct->function_name=="gpu_tensor_gpu_tensor_add") {
+                // if(parser_struct->fn()=="gpu_tensor_gpu_tensor_add") {
 
 
                 //     LogBlue("as malloc pool" + parser_struct->base_name);
                 //     std::cout << "memid " << MemId << "\n";
-                //     for(auto &[borrow, br] : fn_borrows[parser_struct->function_name])
+                //     for(auto &[borrow, br] : fn_borrows[parser_struct->fn()])
                 //         std::cout << "found borrow " << borrow << "\n";
                 // }
             // own
@@ -4296,8 +4296,8 @@ void NewExprAST::AllocPtr(Value *scope_struct) {
         }
     }
 
-    fn_memid_to_val[parser_struct->function_name][MemId] = ptr;
-    // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << MemId <<  "\033[0m\n\n";
+    fn_memid_to_val[parser_struct->fn()][MemId] = ptr;
+    // std::cout << "\n\t\033[32mto val " << parser_struct->fn() << ": " << MemId <<  "\033[0m\n\n";
     if (MemoryType!=newTy)
         GetOwnedType(parser_struct, Data_Tree(DataName), MemId, OwnedId, ptr);
 }
@@ -4307,8 +4307,26 @@ Value *MeminferExpr::codegen(Value *scope_struct) {
     return const_int(0);
 }
 
+void NewExprAST::SetUnitToNull(Value *scope_struct, Value *ptr, std::string Callee) {
+    if (MemoryType==newTy)
+        return;
+
+   for(auto &unit_var : ctor_unnitialized[DataName]) {
+        int attr_idx = ClassAttrs[DataName][unit_var];
+        StructType *st = struct_types["class_"+DataName]; 
+
+        Value *unitvar_gep = Builder->CreateStructGEP(st, ptr, attr_idx);
+        Builder->CreateStore(
+                ConstantPointerNull::get(
+                    cast<PointerType>(int8PtrTy)
+                    ),
+                unitvar_gep
+            );
+   }
+}
 
 Value *NewExprAST::codegen(Value *scope_struct) {
+    Value *owned_pool, *prev_offset, *prev_stride;
     Value *nullPtr = ConstantPointerNull::get(
             cast<PointerType>(int8PtrTy)
             );
@@ -4332,10 +4350,8 @@ Value *NewExprAST::codegen(Value *scope_struct) {
 
     if (is_high_level_obj) {
         Value *previous_obj = get_scope_obj(scope_struct);
-
         
         AllocPtr(scope_struct);
-
 
         StructType *st = struct_types["class_"+DataName]; 
         for (auto attr : ClassAttrsName[DataName]) {
@@ -4377,8 +4393,15 @@ Value *NewExprAST::codegen(Value *scope_struct) {
             MakeWriteBarrier(parser_struct, TheFunction, scope_struct, ptr, compound_gep, compound, type);
           }
         }
+
         set_scope_obj(scope_struct, ptr);
+        SetUnitToNull(scope_struct,ptr,Callee);
+        if (fn_with_pool.count(Callee))
+            owned_pool = get_scope_owned_pool(scope_struct,
+                                prev_offset, prev_stride);
         call(Callee, ArgsV);
+        if (fn_with_pool.count(Callee))
+            set_scope_owned_pool(scope_struct, owned_pool);
         set_scope_obj(scope_struct, previous_obj);
         return ptr;
     }
@@ -4529,10 +4552,8 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
         types.push_back(Ty);
     }
 
-    // Parser_Struct *lambda_parser_struct = parser_struct->Copy();
-    // lambda_parser_struct->function_name = lambda_fn;
-    std::string prev_name = parser_struct->function_name;
-    parser_struct->function_name = lambda_fn;
+    std::string prev_name = parser_struct->fn();
+    parser_struct->sfn(lambda_fn);
     Body->SetCValues(parser_struct);
 
     Data_Tree ret_dt = Body->GetDataTree();
@@ -4591,7 +4612,7 @@ Value *LambdaExprAST::codegen(Value *scope_struct) {
     Value *ret = Body->codegen(scope_struct);
 
 
-    parser_struct->function_name = prev_name;
+    parser_struct->sfn(prev_name);
 
 
     Builder->CreateRet(ret);
@@ -4702,8 +4723,8 @@ Value *LayoutExprAST::DimsProd() {
             std::string name = expr->Name;
             if (parser_struct->cvalues.ints.count(name)>0)
                 dim_i = const_int(parser_struct->cvalues.ints[name]);
-            else if (function_values[parser_struct->function_name].count(name)>0)
-                dim_i = function_values[parser_struct->function_name][name];
+            else if (function_values[parser_struct->fn()].count(name)>0)
+                dim_i = function_values[parser_struct->fn()][name];
             else
                 LogErrorC(Line, "(dims prod) value \"" + name + "\" not found in layout expr");
         } else
@@ -4728,9 +4749,9 @@ std::vector<Value *> GetStrides(Parser_Struct *parser_struct, int Line, Data_Tre
         if (str=="smem")
             continue;
  
-        if(data_typeVars[parser_struct->function_name].count(str)==0)
+        if(data_typeVars[parser_struct->fn()].count(str)==0)
             LogErrorS(Line, "Failed to find " + str);
-        std::string type = data_typeVars[parser_struct->function_name][str].Type;
+        std::string type = data_typeVars[parser_struct->fn()][str].Type;
 
 
         Strides.insert(Strides.begin(), acc);
@@ -4738,7 +4759,7 @@ std::vector<Value *> GetStrides(Parser_Struct *parser_struct, int Line, Data_Tre
         if (type=="int") {
             // std::cout << "AS INT" << "\n";
             // cur_val = const_int(std::stoi(str));
-            cur_val = function_values[parser_struct->function_name][str];
+            cur_val = function_values[parser_struct->fn()][str];
             from_dynamic = true;
         }
         else if (type=="str") {
@@ -4816,7 +4837,7 @@ Value *LayoutExprAST::codegen_smem(Value *scope_struct, std::vector<Value*> &str
 
     Value *smem_gep = Builder->CreateGEP(smemTy, base_smem, {const_int(0), prev_smem});
     Value *new_smem = (had) ? Builder->CreateAdd(prev_smem, size) : size;
-    function_values[parser_struct->function_name]["smem_offset"] = new_smem;
+    function_values[parser_struct->fn()]["smem_offset"] = new_smem;
     Value *smem_ptr = Builder->CreateBitCast(
         smem_gep,
         PointerType::get(ty, 3));
@@ -5039,7 +5060,7 @@ Value *Nameable::codegen(Value *scope_struct) {
         return const_float(0.0f);
     Data_Tree dt = GetDataTree();
     std::string type = dt.Type;
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
     std::string base_fn = parser_struct->base_name;
 
     // std::cout << "\ncheck " << fn << " | " << base_fn << "\n";
@@ -5395,7 +5416,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
         // v[i]
         Check_Is_Array_Inbounds(scope_struct, parser_struct, Line, loaded_var, idx);
-        Value *vec = Load_Array(parser_struct->function_name, loaded_var);
+        Value *vec = Load_Array(parser_struct->fn(), loaded_var);
         Value *element = Builder->CreateGEP(elemTy, vec, idx);
         return Builder->CreateLoad(elemTy, element, "elem"); 
     }
@@ -5562,7 +5583,7 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
     std::vector<Value*> strides;
     if (is_layout) {
         std::string layout_name = Inner->Inner->GetName();
-        strides = layout_strides[parser_struct->function_name][layout_name];
+        strides = layout_strides[parser_struct->fn()][layout_name];
     }
 
 
@@ -5585,7 +5606,7 @@ Value *NameableCall::codegen_tile(Value *scope_struct) {
         offset = Builder->CreateAdd(offset, product);
     }
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
     return Builder->CreateGEP(ty, ptr, offset);
 }
 
@@ -5792,7 +5813,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Value *appended_val = Args[0]->codegen(scope_struct);
 
-    SetConditionalTake(parser_struct->function_name, Args[0]);
+    SetConditionalTake(parser_struct->fn(), Args[0]);
 
 
     std::string elem_type = inner_dt.Nested_Data[0].Type;
@@ -5808,7 +5829,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     StructType *st = struct_types["array"];
     llvm::Type *elemTy;
-    Value *vec = Load_Array(parser_struct->function_name, loaded_var);
+    Value *vec = Load_Array(parser_struct->fn(), loaded_var);
 
     if (!in_vec(elem_type, primary_data_tokens)&&!is_owned) {
         Value *gc_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 5);
@@ -5865,7 +5886,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
     //bad size (thus double array size)
     Builder->SetInsertPoint(bad_sizeBB);
     call("array_double_size"+postfix, {scope_struct, loaded_var}); 
-    vec = Load_Array(parser_struct->function_name, loaded_var);
+    vec = Load_Array(parser_struct->fn(), loaded_var);
     elem_gep = Builder->CreateGEP(elemTy, vec, vsize); 
     Builder->CreateStore(appended_val, elem_gep);
     next_vsize = Builder->CreateAdd(vsize, const_int(1));
@@ -5875,9 +5896,9 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     //post
     Builder->SetInsertPoint(postBB); 
-    // std::cout << "append post: " << parser_struct->function_name  << " " << postBB << "\n";
+    // std::cout << "append post: " << parser_struct->fn()  << " " << postBB << "\n";
 
-    ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+    ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
     return const_int(0);
 }
 
@@ -5903,7 +5924,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (may_allocate) {
         // Recovers the stack top value for the shadow stack (similar to assembly)
         // Also, prevents the case in which it allocates a slot for an argument
-        previous_stack_top = Load_Stack_Top(parser_struct->function_name);
+        previous_stack_top = Load_Stack_Top(parser_struct->fn());
         owned_pool = get_scope_owned_pool(scope_struct,
                                 prev_offset, prev_stride);
 
@@ -5914,7 +5935,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
             set_scope_retpool(scope_struct, owned_pool,
                     OwnedPoolOffset, ClassSize[ret]);
         }
-        Set_Stack_Top(scope_struct, parser_struct->function_name);
+        Set_Stack_Top(scope_struct, parser_struct->fn());
     }
 
     std::vector<Value*> ArgsV = {scope_struct};
@@ -6023,11 +6044,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if (has_obj_overwrite) // Retrieve previous object
     set_scope_obj(scope_struct, previous_obj);
   if (may_allocate) {
-      Set_Stack_Top(scope_struct, parser_struct->function_name);
-      // if (parser_struct->function_name=="ResidualModule_forward") {
-      //   p2t("PREV OFFSET" + Callee);
-      //   call("print_int", {prev_offset});
-      // }
+      Set_Stack_Top(scope_struct, parser_struct->fn());
 
 
       if (fn_with_pool.count(Callee)>0)
@@ -6066,11 +6083,11 @@ Value *NameableCall::codegen(Value *scope_struct) {
   }
 
   if (MemId!=OM_non_obj) {
-      // std::cout << "\n\t\033[32mto val " << parser_struct->function_name << ": " << MemId <<  "\033[0m\n\n";
-    fn_memid_to_val[parser_struct->function_name][MemId] = ret;
+      // std::cout << "\n\t\033[32mto val " << parser_struct->fn() << ": " << MemId <<  "\033[0m\n\n";
+    fn_memid_to_val[parser_struct->fn()][MemId] = ret;
   }
 
-  ClearOwned(scope_struct, parser_struct->function_name, parser_struct->base_name);
+  ClearOwned(scope_struct, parser_struct->fn(), parser_struct->base_name);
   return ret;
 }
 

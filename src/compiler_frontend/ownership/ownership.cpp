@@ -35,7 +35,7 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
     int memid = nameable->GetMemId()[0];
     if (memid==OM_non_obj)
         return;
-    // std::cout << "check bad_borrow " << parser_struct->function_name << " | " << memid << "\n";
+    // std::cout << "check bad_borrow " << parser_struct->fn() << " | " << memid << "\n";
 
     if (!dynamic_cast<Nameable*>(nameable))
         return;
@@ -86,7 +86,7 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
                 // std::cout << "match " << (expr_depth>=depth) << " | " << match_cstmt_parent(
                 //             parser_struct->base_name,
                 //         control_stmt, expr_control_stmt) << "\n";
-                // std::cout << parser_struct->function_name << "\n\n";
+                // std::cout << parser_struct->fn() << "\n\n";
 
                 bad_borrows.push_back({memid,0,line});
                 return;
@@ -171,8 +171,8 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
     borrow_ids[memid].push_back(first_branch);
 
 
-    if (begins_with(parser_struct->function_name, "Res"))
-    std::cout << "PUSH BORROW  " << parser_struct->function_name << ", memid: " << memid << " to parent " << (first_branch.memid) << ", to call " << (callexpr_branch.memid)<< "\n";
+    if (begins_with(parser_struct->fn(), "Res"))
+    std::cout << "PUSH BORROW  " << parser_struct->fn() << ", memid: " << memid << " to parent " << (first_branch.memid) << ", to call " << (callexpr_branch.memid)<< "\n";
 
     if ((first_branch.memid)==0)
         LogError(-1, "Parent is impossible to be 0");
@@ -214,7 +214,7 @@ void TransferChecker::RegisterMove(Parser_Struct *parser_struct,
             return;
         fn_borrow_views[parser_struct->base_name].push_back(appended_memid);
     }
-    // std::cout << "==========REGISTER " << parser_struct->function_name << " | " << appended_memid << " in branch " << (branch.cstmt) << "\n"; 
+    // std::cout << "==========REGISTER " << parser_struct->fn() << " | " << appended_memid << " in branch " << (branch.cstmt) << "\n"; 
     borrow_ids[appended_memid].push_back(parent_lifetime);
     borrow_branches[appended_memid].push_back(branch);
     borrow_c[appended_memid]++;
@@ -621,7 +621,7 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
     Parser_Struct *parser_struct = fn_ast->parser_struct;
-    parser_struct->function_name = fn_name;
+    parser_struct->sfn(fn_name);
     parser_struct->self_obj_owned = fn_with_owned_self.count(fn_name);
 
 

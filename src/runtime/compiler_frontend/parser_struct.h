@@ -85,7 +85,13 @@ struct CompValEqual {
 };
 
 
+struct Fnname {
+    std::string fn;
+    Fnname(std::string);
+};
+
 struct Parser_Struct {
+  Fnname *fnname=nullptr;
   std::string class_name="";
   std::string function_name="", base_name="";
   std::string prev_function_name="";
@@ -106,9 +112,19 @@ struct Parser_Struct {
   std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
   std::unordered_map<std::string, int> dyn_args_dict;
 
+  Parser_Struct();
+  Parser_Struct(std::string);
+
   Parser_Struct *Copy();
   bool has_own() {
     return *owned_id>0;
+  }
+
+  inline std::string fn() const {
+    return fnname->fn;
+  }
+  inline void sfn(std::string fn) const {
+    fnname->fn = fn;
   }
 
   std::vector<std::string> get_arg_names() {

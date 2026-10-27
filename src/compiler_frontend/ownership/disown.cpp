@@ -69,6 +69,32 @@ void OwnedClearComposite(Value *scope_struct, Data_Tree &dt, Value *ptr,
 
 
 void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr, bool is_view) {
+    // p2t("traverse");
+    // call("print_void_ptr", {ptr});
+
+    bool is_class = Classes.count(dt.Type)!=0;
+
+
+    BasicBlock *checkMaybeCreatedBB, *AfterBB;
+    if (is_class) {
+        Function *TheFunction = Builder->GetInsertBlock()->getParent();
+        checkMaybeCreatedBB = BasicBlock::Create(*TheContext, "disown.postnullcheck",
+                            TheFunction);
+        AfterBB = BasicBlock::Create(*TheContext, "disown.after",
+                            TheFunction);
+        Builder->CreateCondBr(
+            Builder->CreateICmpEQ(
+                ptr,
+                ConstantPointerNull::get(
+                    cast<PointerType>(int8PtrTy)
+                    )
+                ),
+            AfterBB, checkMaybeCreatedBB  
+        );
+        Builder->SetInsertPoint(checkMaybeCreatedBB);
+    }
+
+
     if (!is_view&&dt.IsTraversable())
         OwnedClearComposite(scope_struct, dt, ptr, false);
 
@@ -76,6 +102,11 @@ void Disown(Value *scope_struct, Data_Tree &dt, Value *ptr, bool is_view) {
     if (fn_ret_dt.count(disown_method)>0) {
         set_scope_obj(scope_struct, ptr);
         call(disown_method, {scope_struct});
+    }
+
+    if (is_class) {
+        Builder->CreateBr(AfterBB);
+        Builder->SetInsertPoint(AfterBB);
     }
 }
 
@@ -102,19 +133,24 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
 
     Value *previous_obj = get_scope_obj(scope_struct);
     for(auto &[dt, memid, ptr] : OwnedToClear[fn]) {
-
         OwnedsCleared[fn].push_back(ptr);
 
         bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
         BasicBlock *AfterBB, *DisownBB, *created_okBB;
+        Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+
+
+
+
         if (is_conditional) {
             // p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
             // call("print_bool", {Builder->CreateLoad(boolTy, ctakens[fn][memid])}); 
-            Function *TheFunction = Builder->GetInsertBlock()->getParent();
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
             DisownBB = BasicBlock::Create(*TheContext, "disown.disown",
                                 TheFunction);
+
 
 
             if (ctakens_maybe[fn].count(memid)>0) {
@@ -139,7 +175,7 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
         //     // call("print_void_ptr", {ptr});
         // }
 
-        // p2t("Disown " + dt.Type);
+        // p2t("Disown " + fn + " | " + dt.Type);
         Disown(scope_struct, dt, ptr, in_vec(memid, fn_views[fn]));
 
         if (is_conditional) {

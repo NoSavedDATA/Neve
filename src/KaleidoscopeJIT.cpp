@@ -114,16 +114,18 @@ void gen_generics() {
     for(auto &[fn_ast, _, parser_struct, fn, base_name, is_obj_own] : generics_fn) {
         if (in_vec(base_name, fn_called)) {
             erase(fn_called, base_name);
-            fn_ast->parser_struct->function_name = base_name;
+            fn_ast->parser_struct->sfn(base_name);
             TheJIT->fn_map[base_name]->codegen();   
         }
 
 
-        fn_ast->parser_struct->function_name = fn;
+
+        std::cout << "GENERIC " << fn << "\n"; 
+        fn_ast->parser_struct->sfn(fn);
+        fn_ast->function_name = fn;
         fn_ast->parser_struct->base_name = base_name;
         fn_ast->parser_struct->self_obj_owned = is_obj_own;
         fn_ast->parser_struct->cvalues = FunctionProtos[fn]->CArgs.cvalues;
-        fn_ast->function_name = fn;
         fn_ast->Proto = nullptr;
         fn_ast->codegen();
     }
@@ -131,7 +133,6 @@ void gen_generics() {
 
 void warmup_generics() {
     for(auto &[fn_ast, proto, parser_struct, fn, base_name, _] : generics_fn) {
-        
         if (parser_struct->gpu>0) {
             int gpu = parser_struct->gpu;
             parser_struct->gpu = (kernel_fn.count(base_name)>0) ? 1 : 2;

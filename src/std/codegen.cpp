@@ -85,7 +85,7 @@ Value *DT_charv_Create(Parser_Struct * parser_struct, Function *TheFunction,
     llvm::Type *charTy = ArrayType::get(int8Ty, size);
     AllocaInst *charv = CreateEntryBlockAlloca(TheFunction, "charv", charTy);
 
-    function_allocas[parser_struct->function_name][name] = charv;
+    function_allocas[parser_struct->fn()][name] = charv;
     
     return Builder->CreateInBoundsGEP(
         charTy,

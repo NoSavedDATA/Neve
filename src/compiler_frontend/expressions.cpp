@@ -56,6 +56,8 @@ std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_t
 
 
 
+std::unordered_map<std::string, std::vector<std::string>> ctor_init_vars, ctor_unnitialized;
+
 std::unordered_map<std::string, std::vector<std::string>> fn_deps;
 std::unordered_map<std::string, std::vector<int>> function_escapes, function_callee_escapes;
 std::unordered_map<std::string,
@@ -233,7 +235,7 @@ void ExprTieBranch(Parser_Struct *parser_struct,
     for (auto &body : Body) {
         int cstmtid = body->BranchId.cstmt;
         if (cstmtid!=branchid) {
-            cstmt_parents[parser_struct->function_name][cstmtid] = branchid;
+            cstmt_parents[parser_struct->fn()][cstmtid] = branchid;
         }
     }
 }
@@ -383,7 +385,7 @@ void AssignGenericTree(Parser_Struct *parser_struct,
             templ.dyn_args_dict[templ_type] = 1;
             templ.dyn_args.push_back(
                                     {dt.Type, templ_type,
-                                    data_typeVars[parser_struct->function_name][dt.Type]}
+                                    data_typeVars[parser_struct->fn()][dt.Type]}
                                 );
             return;
         } else
@@ -495,7 +497,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
     FunctionAST *fn_ast=nullptr; 
 
 
-    // std::cout << "\n\n\n-------\nGenTemplate " << parser_struct->function_name << " - " << fn << "\n";
+    // std::cout << "\n\n\n-------\nGenTemplate " << parser_struct->fn() << " - " << fn << "\n";
 
     for (auto &tpair : Template_FnAST[fn]) {
         CallArgsTy t_templ = tpair.first;
@@ -582,7 +584,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
                         CArgs, templ);
 
 
-        fn_ast->parser_struct->function_name = fn;
+        fn_ast->parser_struct->sfn(fn);
         fn_ast->parser_struct->base_name = base_name;
 
 
@@ -604,13 +606,7 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
             for (auto &body : fn_ast->Body) {
                   body->Traverse([parser_struct, &fn](ExprAST *node) {
                       std::string prev_name;
-                      if(node->parser_struct) {
-                          prev_name = node->parser_struct->function_name;
-                          node->parser_struct->function_name = fn;
-                      }
                       node->Checks();
-                      if(node->parser_struct)
-                          node->parser_struct->function_name = prev_name;
                   });
             }
 
@@ -630,30 +626,6 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
 
 
 
-
-            // std::string prev_name="";
-            // for (auto &body : fn_ast->Body) {
-            //       body->Traverse([parser_struct, &fn, &prev_name](ExprAST *node) {
-            //           if(node->parser_struct&&prev_name=="")  {
-            //               prev_name = node->parser_struct->function_name;
-            //           }
-            //           if(node->parser_struct) {
-            //               node->parser_struct->function_name = fn;
-            //           }
-            //       });
-            // }
-            // for (auto &body : fn_ast->Body) {
-            //       body->Traverse([parser_struct, &fn, &prev_name, &base_name](ExprAST *node) {
-            //           node->Checks();
-            //       });
-            // }
-            // for (auto &body : fn_ast->Body) {
-            //       body->Traverse([parser_struct, &fn, &prev_name, &base_name](ExprAST *node) {
-            //           if(node->parser_struct) {
-            //               node->parser_struct->function_name = base_name;
-            //           }
-            //       });
-            // }
 
 
 
@@ -1107,54 +1079,46 @@ void NameableCall::TraversePost(const std::function<void(ExprAST*)>& fn) {
 void ExprAST::SetCValues(Parser_Struct *parser_struct) {
     if (!this->parser_struct||!parser_struct)
         return;
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
 
 void ForExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body) 
         expr->SetCValues(parser_struct);
 }
 
 void ForEachExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
         expr->SetCValues(parser_struct);
 }
 
 void WhileExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
         expr->SetCValues(parser_struct);
 }
 
 void AsyncExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
         expr->SetCValues(parser_struct);
 }
 
 void AsyncsExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
         expr->SetCValues(parser_struct);
 }
 void SpawnExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
     for (auto &expr : Body)
         expr->SetCValues(parser_struct);
 }
 
 void AsyncFnPriorExprAST::SetCValues(Parser_Struct *parser_struct) {
-    this->parser_struct->function_name = parser_struct->function_name;
     this->parser_struct->cvalues = parser_struct->cvalues;
 }
 
@@ -1496,7 +1460,7 @@ void NewVecExprAST::Checks() {
   int memid = (*parser_struct->mem_id)++;
   fn_memid_to_expr[parser_struct->base_name][memid] = this;
   Memids.push_back(memid);
-  fn_memid_to_dt[parser_struct->function_name][memid] = dt;
+  fn_memid_to_dt[parser_struct->fn()][memid] = dt;
   if (!check_branch.IsNull())
     fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
 }
@@ -1553,8 +1517,8 @@ IntervalLoopExprAST::IntervalLoopExprAST(
 void IntervalLoopExprAST::Checks() {
     if (Check) return;
     Check = true;
-  // typeVars[parser_struct->function_name][VarName] = Start->GetDataTree().Type;
-  // data_typeVars[parser_struct->function_name][VarName] = Start->GetDataTree();
+  // typeVars[parser_struct->fn()][VarName] = Start->GetDataTree().Type;
+  // data_typeVars[parser_struct->fn()][VarName] = Start->GetDataTree();
 }
   
 NewVecExprAST::NewVecExprAST(
@@ -1583,7 +1547,7 @@ NewDictExprAST::NewDictExprAST(
 void ObjectExprAST::Checks() {
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
         std::string name = this->VarNames[i].first;
-        data_typeVars[parser_struct->function_name][name] = Data_Tree(ClassName);
+        data_typeVars[parser_struct->fn()][name] = Data_Tree(ClassName);
         if (this->HasInit[i]) { // callee init
           std::string create_fn = ClassName+"___init__";
           Semantic_Arguments_Check(this->parser_struct, Line, this->Args[i], create_fn, false, this->Args[i].size(), 1);
@@ -1601,10 +1565,10 @@ void ObjectExprAST::Checks() {
         }
 
         if (owned_id!=OM_non_obj) 
-            function_owns[parser_struct->function_name][name] = owned_id;
+            function_owns[parser_struct->fn()][name] = owned_id;
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
-            fn_memid_to_dt[parser_struct->function_name][memid] = Data_Tree(ClassName);
+            fn_memid_to_dt[parser_struct->fn()][memid] = Data_Tree(ClassName);
         }
 
 
@@ -1690,8 +1654,8 @@ void UnkVarExprAST::Checks() {
         LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
       dt = dt.Nested_Data[0];
     }
-    // std::cout << "UNK SET " << parser_struct->function_name << " | " << VarName << "\n";
-    data_typeVars[parser_struct->function_name][VarName] = dt;
+    std::cout << "UNK SET " << parser_struct->fn() << " | " << VarName << "\n";
+    data_typeVars[parser_struct->fn()][VarName] = dt;
   }
 
 
@@ -1700,11 +1664,11 @@ void UnkVarExprAST::Checks() {
     expr->Checks();
     int owned_id = expr->GetIsOwned();
     if (owned_id != OM_non_obj)
-        function_owns[parser_struct->function_name][name] = owned_id;
+        function_owns[parser_struct->fn()][name] = owned_id;
     int memid = expr->GetMemId()[0];
     if (memid != OM_non_obj) {
         fn_memid[parser_struct->base_name][name] = memid; 
-        fn_memid_to_dt[parser_struct->function_name][memid] = data_typeVars[parser_struct->function_name][name];
+        fn_memid_to_dt[parser_struct->fn()][memid] = data_typeVars[parser_struct->fn()][name];
     }
     Memids.push_back(memid);
   }
@@ -1745,7 +1709,7 @@ TupleExprAST::TupleExprAST(
     if(this->Type=="tuple")
       Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
-    data_typeVars[parser_struct->function_name][VarName] = data_type;
+    data_typeVars[parser_struct->fn()][VarName] = data_type;
   }
 }
 
@@ -1766,7 +1730,7 @@ ListExprAST::ListExprAST(
     
     Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
-    data_typeVars[parser_struct->function_name][VarName] = data_type;
+    data_typeVars[parser_struct->fn()][VarName] = data_type;
   }
 }
 
@@ -1788,7 +1752,7 @@ DictExprAST::DictExprAST(
     
     Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct, Line);
     
-    data_typeVars[parser_struct->function_name][VarName] = data_type;
+    data_typeVars[parser_struct->fn()][VarName] = data_type;
   }
 }
 
@@ -1810,8 +1774,8 @@ void DataExprAST::Checks() {
     Check_Is_Compatible_Data_Type(data_type, init_dt, parser_struct, Line);
 
 
-    data_typeVars[parser_struct->function_name][VarName] = data_type;
-    typeVars[parser_struct->function_name][IdentifierStr] = data_type.Type;
+    data_typeVars[parser_struct->fn()][VarName] = data_type;
+    typeVars[parser_struct->fn()][IdentifierStr] = data_type.Type;
 
 
     create_fn = this->Type;
@@ -1833,14 +1797,14 @@ void DataExprAST::Checks() {
   for(auto &[name, expr] : this->VarNames) {
     if (IsOwned&&dynamic_cast<NullPtrExprAST*>(expr.get())) {
         int owned_id = (*parser_struct->owned_id)++;
-        function_owns[parser_struct->function_name][name]=owned_id;
+        function_owns[parser_struct->fn()][name]=owned_id;
         Ownedids.push_back(owned_id);
     } else {
         expr->Checks();
         int owned_id = expr->GetIsOwned();
         Ownedids.push_back(owned_id);
         if (owned_id!=OM_non_obj)
-            function_owns[parser_struct->function_name][name] = owned_id;
+            function_owns[parser_struct->fn()][name] = owned_id;
     }
 
   }
@@ -1885,14 +1849,14 @@ void DataExprAST::SetMemId() {
             fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
         fn_memid_to_expr[parser_struct->base_name][memid] = this;
         fn_memid[parser_struct->base_name][name] = memid;
-        fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
+        fn_memid_to_dt[parser_struct->fn()][memid] = data_type;
         Memids.push_back(memid);
     } else {
         expr->Checks();
         memid = expr->GetMemId()[0];
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
-            fn_memid_to_dt[parser_struct->function_name][memid] = data_type;
+            fn_memid_to_dt[parser_struct->fn()][memid] = data_type;
         }
     }
     Memids.push_back(memid);
@@ -1970,7 +1934,7 @@ void NewExprAST::Checks() {
     
     MemId = (*parser_struct->mem_id)++;
     fn_memid_to_expr[parser_struct->base_name][MemId] = this;
-    fn_memid_to_dt[parser_struct->function_name][MemId] = dt;
+    fn_memid_to_dt[parser_struct->fn()][MemId] = dt;
     if (!check_branch.IsNull())
         fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
 
@@ -2228,7 +2192,7 @@ FnCompiledValues HandleCompiledArgs(Parser_Struct *parser_struct,
 }
 
 void LaunchExprAST::Checks() {
-    // std::cout << "CHECK LAUNCH:  " << parser_struct->function_name << "|" << fn_name << "\n";
+    // std::cout << "CHECK LAUNCH:  " << parser_struct->fn() << "|" << fn_name << "\n";
     Semantic_Arguments_Check(parser_struct, Line, Args, fn_name, false, Args.size(), 0);
 }
 
@@ -2558,7 +2522,7 @@ void BinaryExprAST::Checks() {
   if (IsCall&&Memids.size()==0) {
       memid = (*parser_struct->mem_id)++;
       Memids.push_back(memid);
-      fn_memid_to_dt[parser_struct->function_name][memid] = dt;
+      fn_memid_to_dt[parser_struct->fn()][memid] = dt;
       fn_memid_to_expr[parser_struct->base_name][memid] = this;
       if (!check_branch.IsNull())
           fn_conditional_created_memid[parser_struct->base_name].push_back(memid);
@@ -2574,14 +2538,14 @@ void BinaryExprAST::Checks() {
         if (nameable->Depth==1) {
           std::string name = nameable->GetName(); 
           int owned_id = RHS->GetIsOwned();
-          function_owns[parser_struct->function_name][name] = owned_id;
+          function_owns[parser_struct->fn()][name] = owned_id;
 
 
           fn_memid[parser_struct->base_name][name] = memid;
-          fn_memid_to_dt[parser_struct->function_name][memid] = R_dt;
+          fn_memid_to_dt[parser_struct->fn()][memid] = R_dt;
 
-          data_typeVars[parser_struct->function_name][name].is_own = R_dt.is_own;
-          data_typeVars[parser_struct->function_name][name].is_view = R_dt.is_view;
+          data_typeVars[parser_struct->fn()][name].is_own = R_dt.is_own;
+          data_typeVars[parser_struct->fn()][name].is_view = R_dt.is_view;
         }
     }
   }
@@ -2603,9 +2567,9 @@ void BinaryExprAST::Checks() {
 
     // ch <-
     if(Op==tok_arrow) {
-      if(ChannelDirections[parser_struct->function_name].count(this->RHS->GetName())==0)
+      if(ChannelDirections[parser_struct->fn()].count(this->RHS->GetName())==0)
         LogErrorS(Line, "Could not find channel " + this->RHS->GetName());
-      if(ChannelDirections[parser_struct->function_name][this->RHS->GetName()]==ch_receiver)
+      if(ChannelDirections[parser_struct->fn()][this->RHS->GetName()]==ch_receiver)
         LogErrorS(Line, "Trying to unpack data from a receiver only channel.");
       
     }
@@ -2641,7 +2605,7 @@ void BinaryExprAST::Checks() {
     else if(!this->LHS->GetSelf()&&!this->LHS->GetIsAttribute()) {
       Check_Is_Compatible_Data_Type(L_dt, R_dt, parser_struct, Line);
 
-      if (data_typeVars[parser_struct->function_name].count(Lname)==0)
+      if (data_typeVars[parser_struct->fn()].count(Lname)==0)
           LogErrorS(Line, "Variable " + Lname + " not yet declared");
       
     } else
@@ -2689,7 +2653,7 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
 
 
 void RetExprAST::Checks() {
-    std::string fn = parser_struct->function_name;
+    std::string fn = parser_struct->fn();
     return_expected_type = fn_ret_dt[fn];
 
     if (this->Vars.size()==1) {
@@ -2727,6 +2691,11 @@ ClassExprAST::ClassExprAST(Parser_Struct *parser_struct, const std::string &Name
   : Name(Name), Functions(Functions) {
     this->parser_struct = parser_struct;
     Line = parser_struct->line;
+
+    for(auto &[attr,dt] : data_typeVars[Name]) {
+        if (!in_vec(attr,ctor_init_vars[Name])&&Classes.count(dt.Type)!=0)
+            ctor_unnitialized[Name].push_back(attr);
+    }
 }
 
 
@@ -2777,10 +2746,11 @@ GCSafePointExprAST::GCSafePointExprAST(Parser_Struct *parser_struct) {
 }
   
 void ForExprAST::Checks() {
-  typeVars[parser_struct->function_name][VarName] = Start->GetDataTree().Type;
-  data_typeVars[parser_struct->function_name][VarName] = Start->GetDataTree();
-  for (auto &body : Body)
-      body->Checks();
+    typeVars[parser_struct->fn()][VarName] = Start->GetDataTree().Type;
+    data_typeVars[parser_struct->fn()][VarName] = Start->GetDataTree();
+    for (auto &body : Body) {
+        body->Checks();
+    }
 }
 
 void ForEachExprAST::Checks() {
@@ -2790,12 +2760,9 @@ void ForEachExprAST::Checks() {
     LogError(Line, "Using a non-compound data type at a \"for in\" expression.");
     data_type.Print();
   }
-  data_typeVars[parser_struct->function_name][VarName] = data_type.Nested_Data[0];
+  data_typeVars[parser_struct->fn()][VarName] = data_type.Nested_Data[0];
   Type = data_type.Nested_Data[0].Type;
   for (auto &body : Body) {
-        if (body->parser_struct)
-            body->parser_struct->function_name = parser_struct->function_name;
-
       body->Checks();
   }
 }
@@ -2827,7 +2794,7 @@ IfExprAST::IfExprAST(Parser_Struct *parser_struct,
   uint64_t depth = scope_depth+1;
   BranchId = ExprBranch(depth&MASK_16, control_stmt_id, 2, branch_id);
 
-  fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_conditional_stmt[parser_struct->fn()][control_stmt_id] = this;
 
 
 
@@ -2867,8 +2834,8 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
   BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
-  fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
-  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_conditional_stmt[parser_struct->fn()][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->fn()][control_stmt_id] = this;
 
 
 
@@ -2895,14 +2862,14 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName,
     this->parser_struct = parser_struct;
     Line = parser_struct->line;
     this->data_type = data_type;
-    typeVars[parser_struct->function_name][VarName] = "foreach_control_var";
+    typeVars[parser_struct->fn()][VarName] = "foreach_control_var";
 
   this->Vec->Parent = this;
   uint64_t depth = scope_depth+1;
   BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
-  fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
-  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_conditional_stmt[parser_struct->fn()][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->fn()][control_stmt_id] = this;
 
 
   for (auto &body : this->Body) {
@@ -2922,9 +2889,8 @@ void MainExprAST::Checks() {
 }
 void WhileExprAST::Checks() {
   for (auto &body : Body) {
-    if (body->parser_struct->function_name!=parser_struct->function_name)  {
-        std::cout << "CHANGE  " <<body->parser_struct->function_name << " to " << parser_struct->function_name << "\n"; 
-        body->parser_struct->function_name=parser_struct->function_name;
+    if (body->parser_struct->fn()!=parser_struct->fn())  {
+        std::cout << "CHANGE  " <<body->parser_struct->fn() << " to " << parser_struct->fn() << "\n"; 
     }
     body->Checks();
   }
@@ -2940,8 +2906,8 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
   uint64_t depth = scope_depth+1;
   BranchId = ExprBranch(depth, control_stmt_id, 1, 2);
 
-  fn_conditional_stmt[parser_struct->function_name][control_stmt_id] = this;
-  fn_loop_stmt[parser_struct->function_name][control_stmt_id] = this;
+  fn_conditional_stmt[parser_struct->fn()][control_stmt_id] = this;
+  fn_loop_stmt[parser_struct->fn()][control_stmt_id] = this;
 
   for (auto &body : this->Body) {
       if (body->BranchId.IsCstmtSkip())
@@ -2995,26 +2961,26 @@ SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_St
 AsyncFnPriorExprAST::AsyncFnPriorExprAST() {}
   
 void AsyncExprAST::Checks() {
-  std::string async_scope = parser_struct->function_name + "_async";
-  for (auto pair : typeVars[parser_struct->function_name])
+  std::string async_scope = parser_struct->fn() + "_async";
+  for (auto pair : typeVars[parser_struct->fn()])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct->function_name])
+  for (auto pair : data_typeVars[parser_struct->fn()])
     data_typeVars[async_scope][pair.first] = pair.second;
 }
 
 void SpawnExprAST::Checks() {
-  std::string async_scope = parser_struct->function_name + "_spawn";
-  for (auto pair : typeVars[parser_struct->function_name])
+  std::string async_scope = parser_struct->fn() + "_spawn";
+  for (auto pair : typeVars[parser_struct->fn()])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct->function_name])
+  for (auto pair : data_typeVars[parser_struct->fn()])
     data_typeVars[async_scope][pair.first] = pair.second;
 }
 
 void AsyncsExprAST::Checks() {
-  std::string async_scope = parser_struct->function_name + "_asyncs";
-  for (auto pair : typeVars[parser_struct->function_name])
+  std::string async_scope = parser_struct->fn() + "_asyncs";
+  for (auto pair : typeVars[parser_struct->fn()])
     typeVars[async_scope][pair.first] = pair.second;
-  for (auto pair : data_typeVars[parser_struct->function_name])
+  for (auto pair : data_typeVars[parser_struct->fn()])
     data_typeVars[async_scope][pair.first] = pair.second;
 
   std::string type = this->Count->GetDataTree().Type;
@@ -3476,8 +3442,8 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
         data_type = Data_Tree(parser_struct->class_name);
     else if(in_vec(Name, primary_data_tokens))
         data_type = Data_Tree(Name);
-    else if(data_typeVars[parser_struct->function_name].find(Name)!=data_typeVars[parser_struct->function_name].end()) {
-        data_type = data_typeVars[parser_struct->function_name][Name];
+    else if(data_typeVars[parser_struct->fn()].find(Name)!=data_typeVars[parser_struct->fn()].end()) {
+        data_type = data_typeVars[parser_struct->fn()][Name];
         return data_type;
     }
     else if(fn_ret_dt.count(Name)>0||function_return_overwrite.count(Name)>0) {
@@ -3496,12 +3462,12 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     else {
         bt(10);
         std::cout << "variables: " << "\n";
-        for(auto &[name, dt] : data_typeVars[parser_struct->function_name]) {
+        for(auto &[name, dt] : data_typeVars[parser_struct->fn()]) {
             std::cout << "\nvar  " << name << "\n\t";
             dt.Print();
 
         }
-        LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->function_name + ".");
+        LogErrorS(Line, "Could not find variable " + Name + " on scope " + parser_struct->fn() + ".");
         data_type = Data_Tree("any"); // this allows to proceed with error checking
     }
     return data_type;
@@ -3575,6 +3541,11 @@ void Nameable::AddNested(std::unique_ptr<Nameable> Inner) {
   this->Inner->IsLeaf = false;
   this->isSelf = this->isSelf||this->Inner->isSelf;
   this->Inner->Parent = this;
+
+
+  if (this->Depth==2&&this->isSelf&&ends_with(parser_struct->fn(), "__init__")) {
+      ctor_init_vars[parser_struct->class_name].push_back(this->Name);
+  }
 }
 
 NameableRoot::NameableRoot(Parser_Struct *parser_struct) : Nameable(parser_struct) {
@@ -3799,8 +3770,8 @@ void NameableCall::Checks() {
   bool needs_version =\
         !(in_vec(Callee, vararg_methods)
         ||Callee=="Unnamed"
-        ||data_typeVars[parser_struct->function_name].count(Callee)>0
-          &&data_typeVars[parser_struct->function_name][Callee].Type=="Function");
+        ||data_typeVars[parser_struct->fn()].count(Callee)>0
+          &&data_typeVars[parser_struct->fn()][Callee].Type=="Function");
 
   if(fn_ret_dt.count(Callee)>0)
       CArgs.template_ret = fn_ret_dt[Callee];
@@ -3815,14 +3786,14 @@ void NameableCall::Checks() {
 
       TemplateSolveCompiledArgs(Callee, BaseCallee);
 
-      fn_deps[parser_struct->function_name].push_back(Callee);
+      fn_deps[parser_struct->fn()].push_back(Callee);
   }
 
   for(auto &arg : Args)
     arg->Checks();
 
   MemId = (*parser_struct->mem_id)++;
-  fn_memid_to_dt[parser_struct->function_name][MemId] = GetDataTree();
+  fn_memid_to_dt[parser_struct->fn()][MemId] = GetDataTree();
   fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 
   if (!check_branch.IsNull())
@@ -3848,23 +3819,21 @@ Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
 
 
 void FunctionChecks(std::string fn_name) {
+
     if (TheJIT->fn_map.count(fn_name)>0) {
       if (in_vec(fn_name, fn_called))
            return;
       fn_called.push_back(fn_name);
 
+
+
       FunctionAST *fn = TheJIT->fn_map[fn_name];
-      // std::cout << "Checks " << fn_name << "\n";
+      std::cout << "check " << fn_name << " | " << fn->Body.size() << "\n";
+      fn->Body[0]->sfn(fn_name);
+
       for (auto &body : fn->Body) {
         body->Traverse([&fn_name](ExprAST *node) {
-              std::string prev_name;
-              if(node->parser_struct) {
-                  prev_name = node->parser_struct->function_name;
-                  node->parser_struct->function_name = fn_name;
-              }
               node->Checks();
-              if(node->parser_struct)
-                  node->parser_struct->function_name = prev_name;
         });
       }
     }
