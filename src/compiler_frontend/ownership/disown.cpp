@@ -136,7 +136,8 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
         OwnedsCleared[fn].push_back(ptr);
 
         bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
-        BasicBlock *AfterBB, *DisownBB, *created_okBB;
+        // BasicBlock *AfterBB, *DisownBB, *created_okBB;
+        BasicBlock *AfterBB, *DisownBB;
         Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
 
@@ -144,8 +145,12 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
 
 
         if (is_conditional) {
+            // if (fn=="ResidualModule_forward_2") {
+
             // p2t("------------------------->conditional " + fn + " -- " + std::to_string(memid));
+            // call("print_void_ptr", {ctakens[fn][memid]});
             // call("print_bool", {Builder->CreateLoad(boolTy, ctakens[fn][memid])}); 
+            // }
             AfterBB  = BasicBlock::Create(*TheContext, "disown.after",
                                 TheFunction);
             DisownBB = BasicBlock::Create(*TheContext, "disown.disown",
@@ -153,14 +158,6 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
 
 
 
-            if (ctakens_maybe[fn].count(memid)>0) {
-                created_okBB = BasicBlock::Create(*TheContext, "disown.disown",
-                                    TheFunction);
-                Value *was_created = Builder->CreateLoad(boolTy, ctakens_maybe[fn][memid]);
-                Builder->CreateCondBr(
-                            was_created, created_okBB, AfterBB);
-                Builder->SetInsertPoint(created_okBB);
-            }
 
             Builder->CreateCondBr(
                         Builder->CreateLoad(boolTy, ctakens[fn][memid]),
@@ -179,10 +176,10 @@ void OwnedHolder::ClearOwned(Value *scope_struct, std::string fn,
         Disown(scope_struct, dt, ptr, in_vec(memid, fn_views[fn]));
 
         if (is_conditional) {
+            // p2t("pre free");
             call("free", {ptr});
-            if (ctakens_maybe[fn].count(memid)>0) {
-                Builder->CreateStore(const_bool(false), ctakens_maybe[fn][memid]);
-            }
+            // p2t("post free");
+
             block_values[DisownBB] = function_values[fn];
             Builder->CreateBr(AfterBB);
             Builder->SetInsertPoint(AfterBB);

@@ -5,6 +5,7 @@
 #include <execution>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <map>
 #include <type_traits>
@@ -63,7 +64,8 @@ std::unordered_map<std::string, llvm::GlobalVariable*> global_values;
 
 std::vector<Value *> thread_pointers;
 
-std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens, ctakens_maybe;
+std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens;
+std::unordered_map<std::string, std::unordered_map<std::string,Value*>> ctakens_var;
 
 
 
@@ -352,6 +354,24 @@ Function *getFunction(std::string Name) {
 
   // If no existing prototype exists, return null.
   return nullptr;
+}
+
+
+void TieCtakenVar(std::string fn, std::string name, std::unique_ptr<ExprAST> &rhs, bool restrict=false) {
+    // if (restrict) {
+    //     if (auto *nameable = dynamic_cast<Nameable*>(rhs)) {
+    //         if (nameable->Depth==1)
+    //             return;
+    //     }
+    // }
+    int memid = rhs->GetMemId()[0];
+    if (ctakens[fn].count(memid)!=0)
+        ctakens_var[fn][name] = ctakens[fn][memid];
+}
+
+void TieCtakenVar(std::string fn, std::string name, int memid) {
+    if (ctakens[fn].count(memid)!=0)
+        ctakens_var[fn][name] = ctakens[fn][memid];
 }
 
 
@@ -827,10 +847,12 @@ void MakeWriteBarrier(Parser_Struct *parser_struct, Function *TheFunction, Value
 
 
 Value *UnkVarExprAST::codegen(Value *scope_struct) {
+    Checks();
   if (not ShallCodegen)
     return const_float(0.0f);
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string fn = parser_struct->fn();
 
   // Register all variables and emit their initializer.
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
@@ -844,6 +866,8 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     bool is_attr = GetIsAttribute();
 
     Value *initial_value = Init->codegen(scope_struct);
+
+    TieCtakenVar(fn, VarName, Memids[i]);
 
       
     Data_Tree init_dt = data_typeVars[parser_struct->fn()][VarName]; 
@@ -1163,40 +1187,41 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct, 
 }
 
 
-inline void SetConditionalMaybeTake(std::string fn, int memid) {
-    if(!ctakens_maybe.count(fn))
-        return;
-    if(!ctakens_maybe[fn].count(memid))
-        return;
-    // p2t("<<--------->>SET MAYBE " + fn + " - " + std::to_string(memid));
-    Builder->CreateStore(const_bool(1), ctakens_maybe[fn][memid]);
+std::optional<Value*> SolveCtaken(std::string base_fn, std::string fn, int memid) {
+    // if (map_has_val(fn_memid[base_fn],memid)) {
+    //     auto result = get_key_for_val(fn_memid[base_fn],memid);
+// // std::cout << "\n\t\033[33mFOUND " << result.value() << " - " << memid << "\033[0m\n\n";
+    //     return ctakens_var[fn][result.value()];
+    // } 
+    if(ctakens[fn].count(memid)!=0)
+        return ctakens[fn][memid];
+
+    return std::nullopt;
 }
-inline void SetConditionalTake(std::string fn, int memid) {
-    if(!ctakens.count(fn))
-        return;
-    if(!ctakens[fn].count(memid))
-        return;
+
+
+inline void SetConditionalTake(std::string base_fn, std::string fn, int memid) {
+    auto result = SolveCtaken(base_fn, fn, memid);
+    if (!result) return;
+    Value *ctaken = result.value();
 
     // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
     //     p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
 
-    Builder->CreateStore(const_bool(1), ctakens[fn][memid]);
+    Builder->CreateStore(const_bool(1), ctaken);
 
 
-    Value *v = Builder->CreateLoad(boolTy, ctakens[fn][memid]);
-
+    // Value *v = Builder->CreateLoad(boolTy, ctaken);
     // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
     //     call("print_bool", {v}); 
 
-    SetConditionalMaybeTake(fn, memid);
 }
-void SetConditionalMaybeTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
-    int memid = taken->GetMemId()[0];
-    SetConditionalMaybeTake(fn, memid);
-}
-void SetConditionalTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
-    int memid = taken->GetMemId()[0];
-    SetConditionalTake(fn, memid);
+void SetConditionalTake(std::string base_fn,
+        std::string fn, std::unique_ptr<ExprAST> &taken) {
+    auto result = taken->GetCtaken();
+    if(!result) return;
+    Value *ctaken = result.value();
+    Builder->CreateStore(const_bool(1), ctaken);
 }
 
 
@@ -1206,27 +1231,30 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
         std::vector<std::tuple<int,int>> &partialtakes,
         std::vector<Value*> &ArgsV) {
     std::string fn = parser_struct->fn();
+    std::string base_fn = parser_struct->base_name;
 
-
-
-    // When they are partial in the current function, but not in the callee
+    // When they are partial in caller, but not in callee
+    // TODO: still needed?
     for(auto &[_,_,arg_memid,taken_id] : CArgs.borrows) {
         if (!in_vec(arg_memid,fn_borrows_incomplete[callee])) {
-            SetConditionalTake(parser_struct->fn(), taken_id);
+            SetConditionalTake(parser_struct->base_name, parser_struct->fn(), taken_id);
         }
     }
 
     // Partials in the callee only
     for(auto &[memid, argmemid] : partialtakes) {
-        if (!ctakens.count(fn))
-            return; // fix for when partial registered for the wrong generic
-        if (!ctakens[fn].count(memid))
-            return; // fix for when partial registered for the wrong generic
+        auto result = SolveCtaken(base_fn, fn, memid);
+        if (!result) continue;
+        Value *ctaken = result.value();
+
+        // if (!ctakens.count(fn))
+        //     continue; // fix for when partial registered for the wrong generic
+        // if (!ctakens[fn].count(memid))
+        //     continue; // fix for when partial registered for the wrong generic
                     //
         // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->fn() + "|"+ callee + ": " + std::to_string(memid));
 
-        ArgsV.push_back(ctakens[fn][memid]);
-        SetConditionalMaybeTake(parser_struct->fn(), memid);
+        ArgsV.push_back(ctaken);
     }
 }
 
@@ -1237,18 +1265,19 @@ inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
 
 
 Value *DataExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return const_float(0.0f);
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
+    std::string fn = parser_struct->fn();
     // Register all variables and emit their initializer.
     for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
         const std::string &VarName = VarNames[i].first; 
         ExprAST *Init = VarNames[i].second.get();
 
-
-
+        TieCtakenVar(fn, VarName, Memids[i]);
 
         bool is_self = GetSelf();
         bool is_attr = GetIsAttribute();
@@ -1431,120 +1460,107 @@ void BlockConditionals(std::string fn) {
 
 
 
-Value *IfExprAST::codegen(Value *scope_struct) {
-    if (not ShallCodegen)
-        return const_float(0.0f);
-    std::string fn = parser_struct->fn();
-
-
-    Value *CondV = Cond->codegen(scope_struct);
-    if (!CondV)
-        return nullptr;
-
+void IfExprAST::CheckCtakens(Value *ctx, std::string fn,
+        BasicBlock *ThenPostBB, BasicBlock *ElsePostBB,
+        std::unordered_map<int,Value*> then_ctakens,
+        std::unordered_map<int,Value*> else_ctakens,
+        std::unordered_map<std::string,Value*> then_ctakens_var,
+        std::unordered_map<std::string,Value*> else_ctakens_var) {
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
-    // Create blocks for the then and else cases.  Insert the 'then' block at the
-    // end of the function.
-    BasicBlock *ThenPostBB, *ElsePostBB;
-    BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "if_then", TheFunction);
-    BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "if_else");
-    BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "if_cont");
-
-    std::string cond_type = Cond->GetDataTree().Type;
-
-    // handle pointer type
-    if (cond_type!="bool" && !in_vec(cond_type, primary_data_tokens)&&!in_vec(cond_type, compound_tokens))
-        CondV = Builder->CreateICmpNE(CondV,
-                        ConstantPointerNull::get(
-                            cast<PointerType>(int8PtrTy)
-                        ));
-
-    Builder->CreateCondBr(CondV, ThenBB, ElseBB);
-    Builder->SetInsertPoint(ThenBB);
-
-    auto old_allocas = function_allocas[fn];
-    auto old_values = function_values[fn];
+    for(auto &[name, memid] : pre_memid) {
+        int then_id = then_memid[name];
+        int else_id = (else_memid[name]==then_memid[name]) ? memid : else_memid[name];
+        int post_id = else_memid[name];
 
 
-    Value *ThenV;
-    for (auto &then_body : Then)
-        ThenV = then_body->codegen(scope_struct);
-    ThenPostBB = Builder->GetInsertBlock();
-    block_values[ThenPostBB] = function_values[fn];
+        if (else_ctakens_var.count(name)!=0
+            &&then_ctakens_var.count(name)!=0
+            &&else_ctakens_var[name]!=then_ctakens_var[name]) {
+
+            PHINode *phi = Builder->CreatePHI(int8PtrTy, 2, "ctaken_diverge_"+name);
+            phi->addIncoming(then_ctakens_var[name],
+                            ThenPostBB);
+            phi->addIncoming(else_ctakens_var[name],
+                            ElsePostBB);
+            ctakens_var[fn][name] = phi;
+            continue;
+        }
+
+//         bool then_ctaken = ctakens[fn].count(then_id)!=0;
+//         bool else_ctaken = ctakens[fn].count(else_id)!=0;
+
+//         if (else_ctakens.count(memid)!=0
+//             &&then_ctakens.count(memid)!=0
+//             &&else_ctakens[memid]!=then_ctakens[memid]) {
+
+//             PHINode *phi = Builder->CreatePHI(int8PtrTy, 2, "ctaken_diverge_"+std::to_string(then_id));
+//             phi->addIncoming(then_ctakens[memid],
+//                             ThenPostBB);
+//             phi->addIncoming(else_ctakens[memid],
+//                             ElsePostBB);
+//             ctakens[fn][memid] = phi;
+//             std::cout << "\n\t\033[33mdiverge phi " <<  memid << "\033[0m\n\n";
+//             continue;
+//         }
+
+//         if (!(then_ctaken&&else_ctaken)||then_id==else_id)
+//             continue;
 
 
-
-    bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
-    if (!ThenV)
-        return nullptr;
-    if (!ThenTerminated) {
-        ThenPostBB = Builder->GetInsertBlock();
-        block_values[ThenPostBB] = function_values[fn];
-        Builder->CreateBr(MergeBB);
+//         PHINode *phi = Builder->CreatePHI(int8PtrTy, 2, "ctaken_alias_"+std::to_string(post_id)+"____"+std::to_string(then_id)+"__"+std::to_string(else_id));
+//         phi->addIncoming(ctakens[fn][then_id],
+//                         ThenPostBB);
+//         phi->addIncoming(ctakens[fn][else_id],
+//                         ElsePostBB);
+//         ctakens[fn][post_id] = phi;
+//         std::cout << "\n\t\033[33malias phi " << post_id << "\033[0m\n\n";
     }
-
-    // Emit else block.
-    TheFunction->insert(TheFunction->end(), ElseBB);
-    Builder->SetInsertPoint(ElseBB);
-
-    function_values[fn] = old_values;
-    function_allocas[fn] = old_allocas;
-
-    Value *ElseV;
-    for (auto &else_body : Else)
-        ElseV = else_body->codegen(scope_struct);
-    ElsePostBB = Builder->GetInsertBlock();
-
-    if(Else.size()>0)
-        block_values[ElsePostBB] = function_values[fn];
-    else {
-        ElseV = const_int(0);
-        block_values[ElsePostBB] = old_values;
-    }
-
-    bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
-    if (!ElseV)
-        return nullptr;
-    if (!ElseTerminated) {
-        Builder->CreateBr(MergeBB);
-    }
-
-
-    if (ThenTerminated && ElseTerminated)
-        return nullptr;
-
-    // Emit merge block.
-    TheFunction->insert(TheFunction->end(), MergeBB);
-    Builder->SetInsertPoint(MergeBB);
+}
 
 
 
-    auto then_values = block_values[ThenPostBB];
-    auto else_values = block_values[ElsePostBB];
-    for (auto &[name, value] : old_values) {
-        if (!ThenTerminated&&!ElseTerminated) {
-            if (then_values[name]!=value || else_values[name]!=value) {
-                PHINode *phi = Builder->CreatePHI(value->getType(), 2);
-                phi->addIncoming(then_values[name], ThenPostBB);
-                phi->addIncoming(else_values[name], ElsePostBB);
-                function_values[fn][name] = phi;
-                if (fn_memid[fn].count(name)>0) {
-                    int memid = fn_memid[fn][name];
-                    fn_memid_to_val[fn][memid] = phi;
+void IfExprAST::GetBodyPartials(Value *scope_struct,
+        std::string fn,
+        std::vector<std::unique_ptr<ExprAST>> &_Body,
+        std::map<std::string,std::vector<int>> &set_block) {
+    for (auto &body : _Body) {
+        body->Traverse([&fn,&set_block,this](ExprAST *node) {
+            if (auto *binop = dynamic_cast<BinaryExprAST*>(node)) {
+                if (binop->Op!='=')
+                    return;
+                if (auto lhs = dynamic_cast<NameableIdx*>(binop->LHS.get()))
+                    return;
+                if (auto lhs = dynamic_cast<NameableCall*>(binop->LHS.get()))
+                    return;
+                if (auto lhs = dynamic_cast<Nameable*>(binop->LHS.get())) {
+                    if (lhs->Depth>1)
+                        return;
+                    int memid = binop->RHS->GetMemId()[0];
+                    if (ctakens[fn].count(memid)==0||memid<=base_memid)
+                        return;
+                    set_block[lhs->GetName()].push_back(memid);
                 }
             }
-        } else if (!ThenTerminated)
-            function_values[fn][name] = then_values[name];
-        else if (!ElseTerminated)
-            function_values[fn][name] = else_values[name];
-        else {}
+        });
     }
-
-    ClearOwned(scope_struct, fn, parser_struct->base_name);
-    BlockConditionals(fn);
-    return const_float(0.0f);
 }
+
+void IfExprAST::SetPartialCtaken(std::map<std::string,std::vector<int>> &set_block, std::string base_fn, std::string fn) {
+    // when a value is conditionally created and transfered, 
+    // set its ctaken flag to true in the complementary branch
+    for(auto &[name, memid_vec] : set_block) {
+        for(auto &memid : memid_vec) {
+            SetConditionalTake("__ignored__",fn,memid);
+        }
+    }
+}
+
+
+
+
+
 
 
 Value *IfExprAST::codegen_from_loop(Value *scope_struct,
@@ -1554,12 +1570,18 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     if (not ShallCodegen)
         return const_float(0.0f);
     std::string fn = parser_struct->fn();
+    std::string base_fn = parser_struct->base_name;
+
+    std::map<std::string,std::tuple<int,int>> set_both;
+    std::map<std::string,std::vector<int>> set_then, set_else;
+
+    GetBodyPartials(scope_struct, fn, Then, set_then);
+    GetBodyPartials(scope_struct, fn, Else, set_else);
 
 
     Value *CondV = Cond->codegen(scope_struct);
     if (!CondV)
         return nullptr;
-
 
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -1576,8 +1598,8 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     Builder->CreateCondBr(CondV, ThenBB, ElseBB);
     Builder->SetInsertPoint(ThenBB);
 
-    auto old_values = function_values[fn];
-    auto old_allocas = function_allocas[fn];
+
+    SnapshotEnv(fn);
 
 
     Value *ThenV;
@@ -1610,15 +1632,16 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     //     return nullptr;
     // }
     if (!ThenTerminated) {
+        SetPartialCtaken(set_else, parser_struct->base_name, fn);
         Builder->CreateBr(MergeBB);
     }
+    auto then_ctakens = ctakens[fn];
+    auto then_ctakens_var = ctakens_var[fn];
 
     // Emit else block.
     Builder->SetInsertPoint(ElseBB);
 
-
-    function_values[fn] = old_values;
-    function_allocas[fn] = old_allocas;
+    RestoreEnv(fn);
 
     Value *ElseV;
     for (auto &else_body : Else)
@@ -1636,8 +1659,11 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     if (!ElseV)
         return nullptr;
     if (!ElseTerminated) {
+        SetPartialCtaken(set_then, parser_struct->base_name, fn);
         Builder->CreateBr(MergeBB);
     }
+    auto else_ctakens = ctakens[fn];
+    auto else_ctakens_var = ctakens_var[fn];
 
 
     if (ThenTerminated && ElseTerminated)
@@ -1646,6 +1672,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     // Emit merge block.
     Builder->SetInsertPoint(MergeBB);
 
+    RestoreEnv(fn);
 
     auto then_values = block_values[ThenPostBB];
     auto else_values = block_values[ElsePostBB];
@@ -1656,10 +1683,10 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
                 phi->addIncoming(then_values[name], ThenPostBB);
                 phi->addIncoming(else_values[name], ElsePostBB);
                 function_values[fn][name] = phi;
-                if (fn_memid[fn].count(name)>0) {
-                    int memid = fn_memid[fn][name];
-                    fn_memid_to_val[fn][memid] = phi;
-                }
+                // if (fn_memid[base_fn].count(name)>0) {
+                //     int memid = fn_memid[base_fn][name];
+                //     fn_memid_to_val[fn][memid] = phi;
+                // }
             }
         } else if (!ThenTerminated)
             function_values[fn][name] = then_values[name];
@@ -1668,6 +1695,11 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
         else {}
     }
 
+
+    CheckCtakens(scope_struct,fn,ThenPostBB, ElsePostBB,
+            then_ctakens, else_ctakens, then_ctakens_var,
+            else_ctakens_var);
+
     ClearOwned(scope_struct, fn, parser_struct->base_name);
     BlockConditionals(fn);
     return const_float(0.0f);
@@ -1675,7 +1707,37 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
 
 
 
+void IfExprAST::SnapshotEnv(std::string fn) {
+    old_allocas = function_allocas[fn];
+    old_values = function_values[fn];
+    prev_ctakens = ctakens[fn];
+    prev_ctakens_vars = ctakens_var[fn];
+}
 
+void IfExprAST::RestoreEnv(std::string fn) {
+    function_values[fn] = old_values;
+    function_allocas[fn] = old_allocas;
+    ctakens[fn] = prev_ctakens;
+    ctakens_var[fn] = prev_ctakens_vars;
+}
+
+
+
+Value *IfExprAST::codegen(Value *scope_struct) {
+    std::map<std::string, Value*> dummy_break_snapshot;
+    std::vector<BasicBlock *> dummy_break_bb;
+    std::vector<BasicBlock *> dummy_continue_bb;
+
+    return codegen_from_loop(
+        scope_struct,
+        nullptr,  // LoopBB
+        nullptr,  // IncBB
+        nullptr,  // LoopAfter
+        dummy_break_snapshot,
+        dummy_break_bb,
+        dummy_continue_bb
+    );
+}
 
 
 
@@ -2289,6 +2351,7 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
                  Value *R, Data_Tree L_dt, Data_Tree R_dt) {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     std::string LType = L_dt.Type;
+    std::string fn = parser_struct->fn();
 
 
     Value *Val;
@@ -2680,6 +2743,9 @@ void BinaryStore(Parser_Struct *parser_struct, int Line, Value *scope_struct, in
 
     if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
         if (LHSV->Depth==1) { // is_alloca
+
+            TieCtakenVar(fn, Lname, RHS);
+
             std::string store_trigger = LType + "_StoreTrigger";
             std::string copy_fn = LType + "_Copy";
 
@@ -4043,7 +4109,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         value = Values[i]->codegen(scope_struct);
 
 
-        SetConditionalTake(parser_struct->fn(), Values[i]);
+        SetConditionalTake(parser_struct->base_name,parser_struct->fn(),Values[i]);
 
         if(!in_vec(type, primary_data_tokens)) {
             std::string copy_fn = type + "_Copy";
@@ -4145,10 +4211,12 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
 
 Value *ObjectExprAST::codegen(Value *scope_struct) {
+    Checks();
     if (not ShallCodegen)
         return ConstantFP::get(*TheContext, APFloat(0.0f));
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
+    std::string fn = parser_struct->fn();
 
     // Register all variables and emit their initializer.
     Value *previous_obj;
@@ -4160,6 +4228,8 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         const std::string &VarName = VarNames[i].first;
         ExprAST *Init = VarNames[i].second.get();
 
+
+        TieCtakenVar(fn, VarName, Memids[i]);
 
         if(!isSelf&&!isAttribute) {   
             Value *ptr;
@@ -5167,6 +5237,23 @@ Value *Nameable::codegen(Value *scope_struct) {
 }
 
 
+std::optional<Value*> ExprAST::GetCtaken() {
+    if (!parser_struct)
+        return std::nullopt;
+    std::string fn = parser_struct->fn();
+    return SolveCtaken(parser_struct->base_name, fn, GetMemId()[0]);
+}
+std::optional<Value*> Nameable::GetCtaken() {
+    if (!parser_struct)
+        return std::nullopt;
+    std::string fn = parser_struct->fn();
+
+    if (Depth==1) {
+        if (ctakens_var[fn].count(Name)>0)
+            return ctakens_var[fn][Name];
+    }
+    return SolveCtaken(parser_struct->base_name, fn, GetMemId()[0]);
+}
 
 
 
@@ -5813,7 +5900,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Value *appended_val = Args[0]->codegen(scope_struct);
 
-    SetConditionalTake(parser_struct->fn(), Args[0]);
+    SetConditionalTake(parser_struct->base_name, parser_struct->fn(), Args[0]);
 
 
     std::string elem_type = inner_dt.Nested_Data[0].Type;

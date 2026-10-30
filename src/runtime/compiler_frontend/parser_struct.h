@@ -93,7 +93,7 @@ struct Fnname {
 struct Parser_Struct {
   Fnname *fnname=nullptr;
   std::string class_name="";
-  std::string function_name="", base_name="";
+  std::string base_name="";
   std::string prev_function_name="";
   std::string parse_fn="";
   bool can_be_string=false;
@@ -128,7 +128,7 @@ struct Parser_Struct {
   }
 
   std::vector<std::string> get_arg_names() {
-    std::vector<std::string> v = fn_argnames[function_name];
+    std::vector<std::string> v = fn_argnames[fn()];
     if (v.size()==0)
         return v;
     if (v[0]=="scope_struct") {

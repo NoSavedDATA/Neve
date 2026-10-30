@@ -25,11 +25,9 @@ DT_map_node::DT_map_node(int key_size, int value_size) {
 DT_map::DT_map() {}
 
 void DT_map::New(Scope_Struct *ctx, int size, int key_size, int value_size) {
-
     this->size = size;
     this->key_size = key_size;
     this->val_size = value_size;
-
 
     capacity = ((size + 7) / 8) * 8;
     if (capacity<8)
@@ -98,14 +96,8 @@ extern "C" DT_map *map_Create_Taken(Scope_Struct *scope_struct, uint16_t key_ty,
         value_size = 8;
 
     DT_map *map = (DT_map*)malloc(sizeof(DT_map));
-    std::cout << "CREATE MAP TAKEN " << map << "\n";
-    map->New(scope_struct, 0, key_size, value_size); 
-    std::cout << "CREATE MAP TAKEN " << map << "\n";
-    std::cout << "key " << key_type << "\n";
-    std::cout << "val " << value_type << "\n";
-    // map->New(scope_struct, 0, key_size, value_size, key_type, value_type); 
-    map->key_type = key_ty;
-    map->val_type = val_ty;
+    // std::cout << "CREATE MAP TAKEN " << map << "\n";
+    map->New(scope_struct, 0, key_size, value_size, key_ty, val_ty); 
 
     return map;
 }

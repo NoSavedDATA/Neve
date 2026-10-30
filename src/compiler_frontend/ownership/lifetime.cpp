@@ -115,6 +115,19 @@ bool match_cstmt_has_loop(std::string fn_name,
                 cstmt_parents[fn_name][cstmt]);
 }
 
+
+bool match_cstmt_has_if(std::string fn_name,
+                    int cstmt, int tgt_cstmt) {
+    if (cstmt==tgt_cstmt||cstmt==0)
+        return false;
+    if (fn_conditional_stmt[fn_name].count(cstmt)>0
+        &&fn_loop_stmt[fn_name].count(cstmt)==0)
+        return true;
+    return match_cstmt_has_if(fn_name,
+                cstmt_parents[fn_name][cstmt],
+                tgt_cstmt);
+}
+
 bool match_cstmt_parent(std::string fn_name,
                     int tgt_cstmt, int cstmt) {
     if (cstmt==tgt_cstmt)

@@ -952,26 +952,17 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
 
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
 
-    // if (is_partial_take && ctakens[fn].count(memid)!=0) {
-    //     LogBlue("SKIP: " + fn + ": " + std::to_string(memid));
-    // }
 
     if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
-        AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken", boolTy);
+        AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_"+std::to_string(memid), boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
         // if (begins_with(fn, "ResidualModule_forward")||begins_with(fn, "gpu")||begins_with(fn, "eval"))
-        //     std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
-        if (in_vec(memid, fn_conditional_created_memid[base_name])) {
-            // conditionally created memid
-            // std::cout << "\n\t\033[33mAS CONDITINOALLY" << "\033[0m\n\n";
-            AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_maybe", boolTy);
-            ctakens_maybe[fn][memid] = alloca;
-            Builder->CreateStore(const_bool(false),alloca);
-        }
+            // std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
     }
 
 
+    return;
 
     if (size>cap&&cap!=0 || (cap==0&&size>1)) {
         std::cout << "size " << size << "\n";
@@ -1036,13 +1027,13 @@ Function *FunctionAST::codegen() {
 
   int idx = P->CArgs.version;
 
-  std::cout << "Codegen fn: " << function_name << "\n";
   if (function_name == "")
       function_name = P->getName();
   std::string base_name = P->BaseName;
   parser_struct->sfn(function_name);
+  check_branch = ExprBranch();
+  // std::cout << "Codegen fn: " << function_name << "\n";
 
-  std::cout << "Codegen PSTO fn: " << function_name << "\n";
 
 
 
@@ -1091,8 +1082,19 @@ Function *FunctionAST::codegen() {
         fn_stack_offset[function_name] = 0;
     } else if (begins_with(arg_name, "__ctaken_")) {
         int arg_memid = std::stoi(remove_substring(arg_name, "__ctaken_"));
+        if (map_has_val(fn_arg_memid[base_name], arg_memid)) {
+            auto result = get_key_for_val(fn_arg_memid[base_name], arg_memid);
+            ctakens_var[function_name][arg_name] = &Arg;
+            std::cout << "\n\t\033[33mGOTCHA " << result.value() << "\033[0m\n\n";
+            std::exit(0);
+        }
+
+        // arg_name = remove_substring(arg_name, "__ctaken_");
+        // int arg_memid = fn_arg_memid[base_name][arg_name];
+
         // if (begins_with(function_name, "ResNet")||begins_with(function_name, "Conv")||begins_with(function_name, "Batch"))
         //     std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
+
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
@@ -1223,8 +1225,9 @@ Function *FunctionAST::codegen() {
             Builder->CreateRet(nullValue);
         }
     }
-    // if (TheFunction->getName().starts_with("gpu_tensor_gpu_tensor_mma"))
-    //     TheFunction->print(llvm::errs());
+    // if (TheFunction->getName().starts_with("foo"))
+    // if (TheFunction->getName()=="foo")
+        // TheFunction->print(llvm::errs());
 
 
     // print_allBB();

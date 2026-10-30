@@ -27,6 +27,7 @@
 #include "../runtime/data_types/data_tree.h"
 #include "logging.h"
 #include "modules.h"
+#include "ownership/lifetime.h"
 #include "parser.h"
 
 
@@ -47,7 +48,11 @@ std::unordered_map<std::string, std::unordered_map<int, Data_Tree>> fn_memid_to_
 
 std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 
+
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
+
+
+std::unordered_map<std::string, std::unordered_map<int, std::vector<int>>> fn_memid_alias;
 
 std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
 
@@ -74,6 +79,10 @@ std::unordered_map<std::string,
 
 std::unordered_map<std::string,
        std::unordered_map<int,ExprBranch>> fn_memid_to_branch;
+
+std::unordered_map<std::string,
+    std::unordered_map<std::string,
+       std::unordered_map<int,int>>> fn_memid_attr_to_branch;
 
 std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;
 
@@ -407,10 +416,8 @@ void AssignGenericTree(Parser_Struct *parser_struct,
 void DeriveTypedGeneric(Data_Tree templ_dt, Data_Tree &ret_dt,
         std::unordered_map<std::string,Data_Tree> &generics_map) {
 
-    if (generics_map.count(templ_dt.Type)>0) {
-        std::cout << "SKIP " << templ_dt.Type << "\n";
+    if (generics_map.count(templ_dt.Type)>0)
         ret_dt = generics_map[templ_dt.Type].Type;
-    }
     else
         ret_dt.Type = templ_dt.Type;
     
@@ -763,38 +770,38 @@ void TemplateSolveCompiledArgs(std::string Callee, std::string base_callee) {
 //
 //
 
-void ExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void ExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
 }
 
 
 
 
-void FinishExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void FinishExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Bodies) 
         expr->Traverse(fn);
 }
 
-void LockExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void LockExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &body : Bodies)
         body->Traverse(fn);
 }
 
 
-void NewVecExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void NewVecExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Values) 
         expr->Traverse(fn);
 }
 
-void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void IntervalLoopExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Body[0]->Traverse(fn);
 }
 
-void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Start->Traverse(fn);
     End->Traverse(fn);
@@ -803,82 +810,85 @@ void ForExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
         expr->Traverse(fn);
 }
 
-void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void IfExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
+    if (if_cut)
+        return;
     Cond->Traverse(fn);
+    auto prev_check_branch = check_branch;
     check_branch = ExprBranch(0,BranchId.cstmt,0,1);
     for (auto &expr : Then) 
         expr->Traverse(fn);
     check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &expr : Else) 
         expr->Traverse(fn);
-    check_branch=ExprBranch();
+    check_branch=prev_check_branch;
 }
 
 
-void ForEachExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void ForEachExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Vec->Traverse(fn);
     for (auto &expr : Body) 
         expr->Traverse(fn);
 }
 
-void WhileExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void WhileExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Cond->Traverse(fn);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
 
-void AsyncExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void AsyncExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
 
-void AsyncsExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void AsyncsExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
-void SpawnExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void SpawnExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Body)
         expr->Traverse(fn);
 }
 
-void MainExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void MainExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &expr : Bodies)
         expr->Traverse(fn);
 }
 
-void UnkVarExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void UnkVarExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &var : VarNames)
         var.second->Traverse(fn);
 }
-void DataExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void DataExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &var : VarNames)
         var.second->Traverse(fn);
 }
-void BinaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void BinaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     LHS->Traverse(fn);
     RHS->Traverse(fn);
 }
-void UnaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void UnaryExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Operand->Traverse(fn);
 }
-void RetExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void RetExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &var : Vars)
         var->Traverse(fn);
 }
 
-void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
         if (!this->HasInit[i]) { // callee init
@@ -889,24 +899,24 @@ void ObjectExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
     }
 }
 
-void Nameable::Traverse(const std::function<void(ExprAST*)>& fn) {
+void Nameable::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     if (Depth>1)
         Inner->Traverse(fn);
 }
 
-void NameableIdx::Traverse(const std::function<void(ExprAST*)>& fn) {
+void NameableIdx::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     Inner->Traverse(fn);
 }
 
-void NewExprAST::Traverse(const std::function<void(ExprAST*)>& fn) {
+void NewExprAST::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &var : Args)
         var->Traverse(fn);
 }
 
-void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn) {
+void NameableCall::Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut) {
     fn(this);
     for (auto &var : Args)
         var->Traverse(fn);
@@ -925,12 +935,12 @@ void ExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
 
 void NewExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
     for (auto &var : Args)
-        var->Traverse(fn);
+        var->TraversePost(fn);
     fn(this);
 }
 void NewVecExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
     for (auto &var : Values)
-        var->Traverse(fn);
+        var->TraversePost(fn);
     fn(this);
 }
 
@@ -960,6 +970,7 @@ void ForExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
 }
 
 void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
+    auto prev_check_branch = check_branch;
     check_branch = ExprBranch(0,BranchId.cstmt,0,1);
     Cond->TraversePost(fn);
     for (auto &expr : Then) 
@@ -967,7 +978,7 @@ void IfExprAST::TraversePost(const std::function<void(ExprAST*)>& fn) {
     check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &expr : Else) 
         expr->TraversePost(fn);
-    check_branch = ExprBranch();
+    check_branch = prev_check_branch;
     fn(this);
 }
 
@@ -1178,6 +1189,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
     SetDefaultArgs(templ.dts);
 
 
+    std::map<int,std::string> argmemid_to_name;
     int size = CArgs.args.size();
     for (int i=0; i<size; ++i) {
         std::string arg_name = CArgs.args[i];
@@ -1196,6 +1208,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           fn_memid[BaseName][arg_name] = memid;
           fn_memid_to_dt[this->Name][memid] = dt;
           fn_arg_memid[BaseName][arg_name] = memid;
+          argmemid_to_name[memid] = arg_name;
           if (dt.is_view)
               fn_views[fn].push_back(memid);
         }
@@ -1568,6 +1581,8 @@ void ObjectExprAST::Checks() {
             function_owns[parser_struct->fn()][name] = owned_id;
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
+            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+          // std::cout << "attr " << name << " | " << memid << "\n";
             fn_memid_to_dt[parser_struct->fn()][memid] = Data_Tree(ClassName);
         }
 
@@ -1654,7 +1669,6 @@ void UnkVarExprAST::Checks() {
         LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
       dt = dt.Nested_Data[0];
     }
-    std::cout << "UNK SET " << parser_struct->fn() << " | " << VarName << "\n";
     data_typeVars[parser_struct->fn()][VarName] = dt;
   }
 
@@ -1668,6 +1682,8 @@ void UnkVarExprAST::Checks() {
     int memid = expr->GetMemId()[0];
     if (memid != OM_non_obj) {
         fn_memid[parser_struct->base_name][name] = memid; 
+        fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+          // std::cout << "attr " << name << " | " << memid << "\n";
         fn_memid_to_dt[parser_struct->fn()][memid] = data_typeVars[parser_struct->fn()][name];
     }
     Memids.push_back(memid);
@@ -1856,6 +1872,8 @@ void DataExprAST::SetMemId() {
         memid = expr->GetMemId()[0];
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
+            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+          // std::cout << "attr " << name << " | " << memid << "\n";
             fn_memid_to_dt[parser_struct->fn()][memid] = data_type;
         }
     }
@@ -1929,15 +1947,16 @@ void NewExprAST::Checks() {
         }
     }
 
-    if (MemoryType!=newTy)
+    if (MemoryType!=newTy&&OwnedId==OM_non_obj)
         OwnedId = (*parser_struct->owned_id)++;
-    
+
+    // if (MemId==OM_non_obj)
     MemId = (*parser_struct->mem_id)++;
+
     fn_memid_to_expr[parser_struct->base_name][MemId] = this;
     fn_memid_to_dt[parser_struct->fn()][MemId] = dt;
     if (!check_branch.IsNull())
         fn_conditional_created_memid[parser_struct->base_name].push_back(MemId);
-
 
     std::vector<Data_Tree> dts;
     for(auto &arg : this->Args)
@@ -2504,7 +2523,54 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
     return false;
 }
 
-  
+
+
+inline bool AreMemidsSeparatedByIfExpr(std::string fn,
+        std::string name, int cur_memid, int prev_memid) {
+    uint16_t prev_branch = fn_memid_attr_to_branch[fn][name][prev_memid];
+    uint16_t cur_branch = fn_memid_attr_to_branch[fn][name][cur_memid];
+    
+    return match_cstmt_has_if(fn, cur_branch, prev_branch);
+}
+
+void AliasMemid(std::string fn, std::string name, int memid, bool &checked) {
+    if (checked)
+        return;
+    // checked=true;
+
+    bool sep;
+    if (fn_memid[fn].count(name)!=0&&!check_branch.IsNull()) {
+        int prev_id = fn_memid[fn][name];
+        if (prev_id!=memid) {
+            sep = AreMemidsSeparatedByIfExpr(fn, name, memid, prev_id);
+
+            // std::cout << "Check  " << fn << " -> " << memid << "|" << prev_id << ": " << sep << "\n";
+            if (sep&&!in_vec(prev_id,fn_memid_alias[fn][memid])) {
+                fn_memid_alias[fn][memid].push_back(prev_id);
+            }
+
+            for(auto &prev_alias : fn_memid_alias[fn][prev_id]) {
+                sep = AreMemidsSeparatedByIfExpr(fn, name, memid, prev_alias);
+                // std::cout << "check  " << fn << " -> " << memid << "|" << prev_alias << ": " << sep << "\n";
+                if (sep&&!in_vec(prev_alias,fn_memid_alias[fn][memid])) {
+                    fn_memid_alias[fn][memid].push_back(prev_alias);
+                }
+            }
+        }
+    }
+
+    for(auto &alias : fn_memid_alias[fn][memid]) {
+        bool sep = AreMemidsSeparatedByIfExpr(fn, name, memid, alias);
+        if (!sep) {
+            erase(fn_memid_alias[fn][memid], alias);
+        }
+        // else
+        //     std::cout << "alias " << name << ": " << memid << " to " << alias << "\n";
+    }
+
+
+    fn_memid[fn][name] = memid;
+}
 
 
 void BinaryExprAST::Checks() {
@@ -2540,8 +2606,11 @@ void BinaryExprAST::Checks() {
           int owned_id = RHS->GetIsOwned();
           function_owns[parser_struct->fn()][name] = owned_id;
 
-
-          fn_memid[parser_struct->base_name][name] = memid;
+          // std::cout << "attr branch " << name << " | " << memid << ": "  << BranchId.cstmt<< "\n";
+          fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+          // std::cout << "--------- " << Line <<". "<< name << " = " << RHS->GetName() << "\n";
+          
+          AliasMemid(parser_struct->base_name, name, memid, checked_alias);
           fn_memid_to_dt[parser_struct->fn()][memid] = R_dt;
 
           data_typeVars[parser_struct->fn()][name].is_own = R_dt.is_own;
@@ -2768,14 +2837,18 @@ void ForEachExprAST::Checks() {
 }
 
 void IfExprAST::Checks() {
-
+    auto prev_check_branch = check_branch;
     check_branch = ExprBranch(0,BranchId.cstmt,0,1);
+    base_memid = *(parser_struct->mem_id);
+    pre_memid = fn_memid[parser_struct->base_name];
     for (auto &body : Then)
         body->Checks();
+    then_memid = fn_memid[parser_struct->base_name];
     check_branch = ExprBranch(0,BranchId.cstmt,0,2);
     for (auto &body : Else)
         body->Checks();
-    check_branch = ExprBranch();
+    check_branch = prev_check_branch;
+    else_memid = fn_memid[parser_struct->base_name];
 }  
 
 
@@ -3177,6 +3250,7 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
           fn_memid[BaseName][arg_name] = MemId;
           fn_memid_to_dt[this->Name][MemId] = arg;
           fn_arg_memid[BaseName][arg_name] = MemId;
+          // std::cout << "SET- " << BaseName << ": " << arg_name << " - " << MemId << "\n";
           fn_memid_to_branch[BaseName][MemId] = MemId;
         }
     }
@@ -3792,7 +3866,11 @@ void NameableCall::Checks() {
   for(auto &arg : Args)
     arg->Checks();
 
+
+
+  // if (MemId==OM_non_obj)
   MemId = (*parser_struct->mem_id)++;
+
   fn_memid_to_dt[parser_struct->fn()][MemId] = GetDataTree();
   fn_memid_to_expr[parser_struct->base_name][MemId] = this;
 
@@ -3825,11 +3903,9 @@ void FunctionChecks(std::string fn_name) {
            return;
       fn_called.push_back(fn_name);
 
-
-
       FunctionAST *fn = TheJIT->fn_map[fn_name];
-      std::cout << "check " << fn_name << " | " << fn->Body.size() << "\n";
       fn->Body[0]->sfn(fn_name);
+      check_branch = ExprBranch();
 
       for (auto &body : fn->Body) {
         body->Traverse([&fn_name](ExprAST *node) {

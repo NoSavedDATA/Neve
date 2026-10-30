@@ -14,13 +14,35 @@
 
 
 
+std::vector<int> GetAlias(std::string fn, int memid) {
+    // for(auto &alias : fn_memid_alias[fn][memid])
+    //     std::cout << "has alias: " << alias << "\n";
+    auto alias_v = fn_memid_alias[fn][memid];
+    std::vector<int> transfered_memids = {memid};
+    transfered_memids.insert(transfered_memids.end(), alias_v.begin(), alias_v.end());
+
+    return transfered_memids;
+}
+
+void SetLastSeen(std::string fn, int memid, ExprAST *expr) {
+    auto aliases = GetAlias(fn, memid);
+
+    for(auto &alias : aliases) {
+        // if (fn=="foo")
+            // std::cout << "SET LAST SEEN " << fn << "|"<<alias << " - " << expr << "\n";
+        fn_memid_to_lastseen[fn][alias] = expr;
+    }
+    // fn_memid_to_lastseen[fn][memid] = expr;
+}
+
+
 
 TransferChecker::TransferChecker(std::string fn, std::string base_fn)
         : fn(fn), base_fn(base_fn) {}
 
 
 void TransferChecker::CheckBadMove(Parser_Struct *parser_struct, 
-                 ExprAST *parent, ExprAST *nameable) {
+                 ExprAST *parent, ExprAST *nameable, int memid) {
 
     // if (auto *stmt = dynamic_cast<Nameable*>(nameable)) {
     //     if (stmt->Depth>1)  {
@@ -32,7 +54,6 @@ void TransferChecker::CheckBadMove(Parser_Struct *parser_struct,
     // }
 
 
-    int memid = nameable->GetMemId()[0];
     if (memid==OM_non_obj)
         return;
     // std::cout << "check bad_borrow " << parser_struct->fn() << " | " << memid << "\n";
@@ -154,7 +175,11 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
     }
 
 
-    borrow_branches[memid].push_back(callexpr_branch);
+    auto transfered_memids = GetAlias(parser_struct->base_name, memid);
+
+    for(auto &alias : transfered_memids)
+        borrow_branches[alias].push_back(callexpr_branch);
+    // borrow_branches[memid].push_back(callexpr_branch);
 
 
     // transfers, but to something created in the function
@@ -168,7 +193,10 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
 
     ExprBranch first_branch = arg_parents[0];
     int cstmt = first_branch.cstmt;
-    borrow_ids[memid].push_back(first_branch);
+
+    // borrow_ids[memid].push_back(first_branch);
+    for(auto &alias : transfered_memids)
+        borrow_ids[alias].push_back(first_branch);
 
 
     if (begins_with(parser_struct->fn(), "Res"))
@@ -183,15 +211,18 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
     for (int i=1; i<arg_parents.size(); ++i) {
         ExprBranch branch = arg_parents[i];
 
-        borrow_ids[memid].push_back(branch);
-        borrow_branches[memid].push_back(callexpr_branch);
+        for(auto &alias : transfered_memids) {
+            borrow_ids[alias].push_back(branch);
+            borrow_branches[alias].push_back(callexpr_branch);
+        }
 
         int cstmt_i = branch.cstmt;
         if (cstmt_i>cstmt)
             most_restrictive=i;
     }
 
-    CheckBadMove(parser_struct, nullptr, argexpr);
+    for(auto &alias : transfered_memids)
+        CheckBadMove(parser_struct, nullptr, argexpr, alias);
 
     return;
 }
@@ -215,14 +246,23 @@ void TransferChecker::RegisterMove(Parser_Struct *parser_struct,
         fn_borrow_views[parser_struct->base_name].push_back(appended_memid);
     }
     // std::cout << "==========REGISTER " << parser_struct->fn() << " | " << appended_memid << " in branch " << (branch.cstmt) << "\n"; 
-    borrow_ids[appended_memid].push_back(parent_lifetime);
-    borrow_branches[appended_memid].push_back(branch);
-    borrow_c[appended_memid]++;
+
+    auto transfered_memids = GetAlias(parser_struct->base_name, appended_memid);
+
+    for(auto &memid : transfered_memids) {
+        // std::cout << "alias: " << memid << "\n"; 
+        borrow_ids[memid].push_back(parent_lifetime);
+        borrow_branches[memid].push_back(branch);
+        borrow_c[memid]++;
+    }
+    // std::cout << "----------------- " << "\n";
+
     if (auto *nameableparent = dynamic_cast<Nameable*>(parent_expr))
         parent_expr = nameableparent->Inner.get();
     //else: is a [a,b,c] or other expr
 
-    CheckBadMove(parser_struct, parent_expr, expr);
+    for(auto &memid : transfered_memids)
+        CheckBadMove(parser_struct, parent_expr, expr, memid);
 }
 
 
@@ -402,6 +442,8 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
         callee = GetFnVersion(parser_struct, base_callee, CArgs, found, true, true);
         if (!found) {
             Template_FnAST[base_callee][CArgs] = TheJIT->fn_map[base_callee];
+            if(!in_vec(base_callee, fn_called))
+                fn_called.push_back(base_callee);
             callee = GenTemplate(parser_struct, base_callee, CArgs, found);
         }
         argsebasedexpr->Callee = callee;
@@ -443,7 +485,9 @@ void TransferChecker::HandleCall(Parser_Struct* parser_struct, NameableCall *cal
 void TransferChecker::HandleNewVec(Parser_Struct* parser_struct,
         NewVecExprAST *newvecexpr, std::unordered_map<std::string, int> &seen) {
     int memid = newvecexpr->Memids[0];
-    fn_memid_to_lastseen[parser_struct->base_name][memid] = newvecexpr;
+
+    // fn_memid_to_lastseen[parser_struct->base_name][memid] = newvecexpr;
+    SetLastSeen(parser_struct->base_name, memid, newvecexpr);
 
 
     bool is_vec_view = in_vec(memid,fn_borrow_views[parser_struct->base_name]);
@@ -499,9 +543,8 @@ void TransferChecker::HandleBinOp(Parser_Struct* parser_struct, BinaryExprAST *b
     if (auto *lstmt = dynamic_cast<Nameable*>(binop->LHS.get())) {
         if (lstmt->Depth==1) {
             fn_memid[parser_struct->base_name][lstmt->GetName()] = rmemid;
+            // memid_to_branch[rmemid] = FormatLifetime(binop->BranchId, rmemid);
         } else {
-            if (begins_with(parser_struct->base_name,"gpu_tens")) {
-            }
 
             RegisterMove(parser_struct,
                        GetLifetime(parser_struct, lstmt,
@@ -512,19 +555,27 @@ void TransferChecker::HandleBinOp(Parser_Struct* parser_struct, BinaryExprAST *b
 
 }
 
-void TransferChecker::HandleNameable(Parser_Struct* parser_struct, ExprAST *expr, Nameable *nameable,
+void TransferChecker::HandleNameable(Parser_Struct* parser_struct,
+        ExprAST *expr, Nameable *nameable,
         std::unordered_map<std::string, int> &seen) {
 
     int memid = nameable->GetMemId()[0];
+
     if (!nameable->IsAttr&&memid!=OM_non_obj) {
+        // if (parser_struct->base_name=="foo")
+        //     std::cout << nameable->Line << ". Last seen of -> " << nameable->Name << "\n";
+
         ExprBranch branch = nameable->BranchId;
         branch.memid = memid;
-        fn_memid_to_lastseen[parser_struct->base_name][memid] = expr;
+        SetLastSeen(parser_struct->base_name, memid, expr);
 
-        if (borrow_ids.count(memid)!=0) {
-            for(auto &parent_branch : borrow_ids[memid])
-              fn_memid_to_lastseen[parser_struct->base_name]\
-                  [parent_branch.memid] = expr;
+        // Set owners last seen too
+        for(auto &alias : GetAlias(parser_struct->base_name, memid)) {
+            if (borrow_ids.count(alias)!=0) {
+                for(auto &parent_branch : borrow_ids[alias]) {
+                    SetLastSeen(parser_struct->base_name, parent_branch.memid, expr);
+                }
+            }
         }
     }
 
@@ -552,6 +603,29 @@ void TransferChecker::HandleUnkvar(Parser_Struct* parser_struct,
 
 
 
+void TransferChecker::HandleIf(Parser_Struct* parser_struct, IfExprAST *expr,
+        std::unordered_map<std::string, int> &seen) {
+
+    expr->Cond->Traverse([parser_struct, this, &seen](ExprAST *node) {
+      GetTransfers(parser_struct, node, seen);
+    }, true);
+
+    check_branch = ExprBranch(0,expr->BranchId.cstmt,0,1);
+    for (auto &body : expr->Then) {
+      body->Traverse([parser_struct, this, &seen](ExprAST *node) {
+        GetTransfers(parser_struct, node, seen);
+      }, true);
+    }
+
+    check_branch = ExprBranch(0,expr->BranchId.cstmt,0,2);
+    for (auto &body : expr->Else) {
+      body->Traverse([parser_struct, this, &seen](ExprAST *node) {
+        GetTransfers(parser_struct, node, seen);
+      }, true);
+    }
+
+    check_branch=ExprBranch();
+}
 
 
 
@@ -604,6 +678,11 @@ void TransferChecker::GetTransfers(Parser_Struct *parser_struct, ExprAST *expr,
         HandleReturn(parser_struct, ret_expr, seen);
         return;
     }
+
+    // if (auto *stmt = dynamic_cast<IfExprAST*>(expr)) {
+    //     HandleIf(parser_struct, stmt, seen);
+    //     return;
+    // }
 }
 
 
@@ -633,12 +712,16 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     for (auto &body : Body) {
       body->Traverse([parser_struct, &tc, &seen](ExprAST *node) {
         tc.GetTransfers(parser_struct, node, seen);
-      });
+      }, false);
     }
 
     tc.RegisterFn();
 }
 
+bool CheckHasIfParent(int cstmt) {
+
+
+}
 
 void TransferChecker::RegisterFn() {
     if (fn_borrows.count(base_fn)==0) {
@@ -649,6 +732,17 @@ void TransferChecker::RegisterFn() {
 
         for(auto &[memid, branch] : memid_to_branch)
             fn_memid_to_branch[base_fn][memid] = branch;
+
+        // for(auto &[memid, expr] : fn_memid_to_expr[base_fn]) {
+        //     if (auto *newexpr = dynamic_cast<NewExprAST*>(expr)) {
+        //         if (borrow_ids.count(memid)==0
+        //             &&match_cstmt_has_if(fn, newexpr->BranchId.cstmt)) {
+
+        //         }
+        //     }
+        // }
+
+
 
         for(auto &[memid,borrows]: borrow_branches) {
             ExprBranch take_branch = borrows[0];

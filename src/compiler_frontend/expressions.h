@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 #include "llvm/IR/Value.h"
+#include "llvm/IR/Instructions.h"
 
 #include "../runtime/data_types/data_tree.h"
 #include "../runtime/compiler_frontend/parser_struct.h"
@@ -120,7 +121,7 @@ class ExprAST {
     virtual void SetName(std::string Name); 
 
 
-    virtual void Traverse(const std::function<void(ExprAST*)>& fn);
+    virtual void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false);
     virtual void TraversePost(const std::function<void(ExprAST*)>& fn);
 
 
@@ -141,6 +142,7 @@ class ExprAST {
     virtual void SetCValues(Parser_Struct *);
 
     virtual std::vector<int> GetMemId(); 
+    virtual std::optional<Value*> GetCtaken(); 
 
     virtual int GetBranchId();
 
@@ -386,7 +388,7 @@ class UnkVarExprAST : public VarExprAST {
 
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
@@ -440,7 +442,7 @@ class IntervalLoopExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -462,7 +464,7 @@ class NewVecExprAST : public ExprAST {
   Data_Tree GetDataTree(bool from_assignment=false) override;
   void Checks() override;
   std::vector<int> GetMemId() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -500,7 +502,7 @@ public:
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
@@ -528,7 +530,7 @@ class DataExprAST : public VarExprAST {
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 
   void SetMemId();
@@ -563,7 +565,7 @@ class NewExprAST : public ExprAST, public ArgsBasedExpr {
     std::unique_ptr<ExprAST> meminfer_expr=nullptr;
     bool is_high_level_obj=false, checked=false;
     Data_Tree data_type=Data_Tree("");
-    int MemId=OM_start_offset, OwnedPoolOffset=-1, MemoryType=newTy,
+    int MemId=OM_non_obj, OwnedPoolOffset=-1, MemoryType=newTy,
         OwnedId=OM_non_obj, OwnedRetPoolOffset=-1;
     Value *ptr=nullptr;
 
@@ -581,7 +583,7 @@ class NewExprAST : public ExprAST, public ArgsBasedExpr {
   std::vector<int> GetMemId() override;
   void AllocPtr(Value *ptr);
   void Checks();
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -628,7 +630,7 @@ public:
   Value *codegen(Value *scope_struct) override;
   bool GetNeedGCSafePoint() override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
@@ -642,7 +644,7 @@ class BinaryExprAST : public ExprAST, public OwnedHolder {
 
 public:
   std::string Elements, Operation="", BaseOperation;
-  bool is_store_sugar=false, is_fused=false, IsCall=false, IsSpecialization=false;
+  bool is_store_sugar=false, is_fused=false, IsCall=false, IsSpecialization=false, checked_alias=false;
   std::vector<std::tuple<std::string, std::string, Data_Tree>> DynamicArgs;
   std::vector<int> Memids;
   int OwnedId=OM_non_obj;
@@ -659,7 +661,7 @@ public:
   FnCompiledValues GetSubmitedCValues();
   void Checks() override;
   // void SetCValues(Parser_Struct *parser_struct);
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
@@ -724,10 +726,11 @@ class Nameable : public ExprAST {
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
   bool GetIsView() override;
+  std::optional<Value*> GetCtaken() override;  
 
   std::string GetLibCallee();
   std::unique_ptr<ExprAST> Copy();
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks();
 };
@@ -763,7 +766,7 @@ class NameableCall : public Nameable, public OwnedHolder, public ArgsBasedExpr {
   bool FromLib=false, is_nsk_fn=false, has_obj_overwrite, is_first_citizen=false;
   bool is_tile = false;
   int arg_type_check_offset=1, owned_ret_size=0; 
-  int MemId=OM_start_offset, OwnedId=OM_non_obj, OwnedPoolOffset=-1, OwnedPoolCap=0;
+  int MemId=OM_non_obj, OwnedId=OM_non_obj, OwnedPoolOffset=-1, OwnedPoolCap=0;
   size_t hash=0;
   std::string ReturnType="";
   std::vector<Data_Tree> Types;
@@ -781,7 +784,7 @@ class NameableCall : public Nameable, public OwnedHolder, public ArgsBasedExpr {
   int GetIsOwned() override;
   std::vector<int> GetMemId() override;
   bool GetIsView() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -796,7 +799,7 @@ class NameableIdx : public Nameable {
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
   Data_Tree GetLayoutDT(Data_Tree dt, bool from_assignment=false);
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   int GetIsOwned() override;
   bool GetIsView() override;
@@ -914,7 +917,7 @@ class RetExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -952,9 +955,16 @@ class GCSafePointExprAST : public ExprAST {
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST, public OwnedHolder {
-  std::unique_ptr<ExprAST> Cond;
+    std::map<std::string,AllocaInst *> old_allocas;
+    std::map<std::string,Value *> old_values;
+    std::unordered_map<int,Value*> prev_ctakens;
+    std::unordered_map<std::string,Value*> prev_ctakens_vars;
+
 
   public:
+    int base_memid;
+    std::unique_ptr<ExprAST> Cond;
+    std::unordered_map<std::string, int> pre_memid, then_memid, else_memid;
     std::vector<std::unique_ptr<ExprAST>> Then, Else;
     IfExprAST(Parser_Struct *,
               std::unique_ptr<ExprAST> Cond,
@@ -967,7 +977,19 @@ class IfExprAST : public ExprAST, public OwnedHolder {
                 std::map<std::string, Value*> &break_values_snapshot,
                 std::vector<BasicBlock *> &BreakBB,
                 std::vector<BasicBlock *> &ContinueBB);
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void CheckCtakens(Value*,std::string,BasicBlock*,BasicBlock*,
+          std::unordered_map<int,Value*>,std::unordered_map<int,Value*>,
+          std::unordered_map<std::string,Value*>,std::unordered_map<std::string,Value*>);
+  void SetPartialCtaken(std::map<std::string,std::vector<int>> &set_block,
+                    std::string,std::string fn);
+
+  void GetBodyPartials(Value *scope_struct,std::string,
+        std::vector<std::unique_ptr<ExprAST>> &_Body,
+        std::map<std::string,std::vector<int>>&);
+
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
+  void SnapshotEnv(std::string fn);
+  void RestoreEnv(std::string fn);
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks() override;
 };
@@ -989,7 +1011,7 @@ class ForExprAST : public ExprAST, public OwnedHolder {
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1008,7 +1030,7 @@ class ForEachExprAST : public ExprAST, public OwnedHolder {
   Value *codegen(Value *scope_struct) override;
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1026,7 +1048,7 @@ class WhileExprAST : public ExprAST, public OwnedHolder {
   Value* codegen(Value *scope_struct) override;
   void SetCValues(Parser_Struct *) override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
@@ -1080,7 +1102,7 @@ class SpawnExprAST : public ExprAST {
   Value* codegen(Value *scope_struct) override;
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1098,7 +1120,7 @@ class AsyncExprAST : public ExprAST {
   Value* codegen(Value *scope_struct) override;
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1115,7 +1137,7 @@ class FinishExprAST : public ExprAST {
 
 
   Value* codegen(Value *scope_struct) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1130,7 +1152,7 @@ class AsyncsExprAST : public ExprAST {
   Value* codegen(Value *scope_struct) override;
   void Checks() override;
   void SetCValues(Parser_Struct *) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
   
@@ -1154,7 +1176,7 @@ class LockExprAST : public ExprAST {
 
   Value* codegen(Value *scope_struct) override;
   void Checks() override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
 };
 
@@ -1271,7 +1293,7 @@ class MainExprAST : public ExprAST {
 
 
   Value* codegen(Value *scope_struct) override;
-  void Traverse(const std::function<void(ExprAST*)>& fn) override;
+  void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void Checks();
 };
@@ -1428,4 +1450,5 @@ extern std::unordered_map<std::string,int> FnLastVersion;
 extern std::unordered_map<std::string,std::unordered_map<int, int>> memid_to_ownedid;
 extern std::unordered_map<std::string, std::vector<std::string>> ctor_init_vars, ctor_unnitialized;
 
+extern std::unordered_map<std::string, std::unordered_map<int, std::vector<int>>> fn_memid_alias;
 extern std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;

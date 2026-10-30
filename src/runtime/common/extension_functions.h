@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <optional>
 #include <vector>
 
 
@@ -96,6 +97,27 @@ bool map_has_val(std::unordered_map<T, U>& map, U x) {
             return true;
     return false;
 }
+
+
+template<typename T, typename U>
+std::optional<T> get_key_for_val(std::map<T, U>& map, U& x) {
+    for (auto& [key, val] : map) {
+        if (val == x) {
+            return key;
+        }
+    }
+    return std::nullopt; // Return empty optional if no match is found
+}
+template<typename T, typename U>
+std::optional<T> get_key_for_val(std::unordered_map<T, U>& map, U& x) {
+    for (auto& [key, val] : map) {
+        if (val == x) {
+            return key;
+        }
+    }
+    return std::nullopt; // Return empty optional if no match is found
+}
+
 
 
 bool is_number(std::string s); 

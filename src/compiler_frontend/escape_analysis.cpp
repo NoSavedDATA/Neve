@@ -32,15 +32,15 @@ std::unordered_map<std::string,std::vector<std::tuple<int, Data_Tree, Value*, in
 std::unordered_map<std::string,std::vector<Value*>> OwnedsCleared;
 
 
-inline void ClearOne(Value *scope_struct, std::string fn,
+inline void ClearOne(Value *scope_struct, std::string base_fn, std::string fn,
                 int memid, Data_Tree dt, Value *ptr,
                 int owned_type) {
-    // p2t("clear one" + fn + ": " + std::to_string(memid) + ", type: " + std::to_string(owned_type));
-    if (owned_type==3) // borrow
+    if (owned_type==3||fn_borrows[base_fn].count(memid)>0) // transfered
         return;
 
     // bool is_conditional = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
 
+    // p2t("clear one" + fn + ": " + std::to_string(memid) + ", type: " + std::to_string(owned_type));
 
     if (!in_vec(ptr, OwnedsCleared[fn])) {
         Disown(scope_struct, dt, ptr);
@@ -56,19 +56,21 @@ inline void Clear_Fn_Owned_Values(Value *scope_struct,
         Parser_Struct *parser_struct,
         std::vector<Value *> &returned_values) {
     std::string fn = parser_struct->fn();
+    std::string base_fn = parser_struct->base_name;
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
         if (in_vec(ptr, returned_values))
             continue;
-        ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
+        ClearOne(scope_struct, base_fn, fn, memid, dt, ptr, owned_type);
     }
     set_scope_obj(scope_struct, previous_obj);
 }
 void Clear_Fn_Owned_Values(Value *scope_struct, Parser_Struct *parser_struct) {
     std::string fn = parser_struct->fn();
+    std::string base_fn = parser_struct->base_name;
     Value *previous_obj = get_scope_obj(scope_struct);
     for (auto &[memid, dt, ptr, owned_type] : OwnedValues[fn]) {
-        ClearOne(scope_struct, fn, memid, dt, ptr, owned_type);
+        ClearOne(scope_struct, base_fn, fn, memid, dt, ptr, owned_type);
     }
     set_scope_obj(scope_struct, previous_obj);
 }

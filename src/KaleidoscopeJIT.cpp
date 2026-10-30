@@ -118,9 +118,6 @@ void gen_generics() {
             TheJIT->fn_map[base_name]->codegen();   
         }
 
-
-
-        std::cout << "GENERIC " << fn << "\n"; 
         fn_ast->parser_struct->sfn(fn);
         fn_ast->function_name = fn;
         fn_ast->parser_struct->base_name = base_name;

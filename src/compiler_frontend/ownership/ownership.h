@@ -40,12 +40,13 @@ class TransferChecker {
         void HandleNameable(Parser_Struct*,ExprAST*,Nameable*,std::unordered_map<std::string, int> &);
         void HandleUnkvar(Parser_Struct*,UnkVarExprAST*,std::unordered_map<std::string, int> &);
         void HandleReturn(Parser_Struct*,RetExprAST*,std::unordered_map<std::string, int> &);
+        void HandleIf(Parser_Struct*,IfExprAST*,std::unordered_map<std::string, int> &);
 
         void RegisterMove(Parser_Struct *, ExprBranch,
                      ExprAST *, ExprAST *,
                      bool return_on_view=true);
 
-        void CheckBadMove(Parser_Struct *, ExprAST *, ExprAST *);
+        void CheckBadMove(Parser_Struct *, ExprAST *, ExprAST *, int);
 
         void RegisterFn();
 };

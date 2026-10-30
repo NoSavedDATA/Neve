@@ -34,7 +34,8 @@ extern std::unordered_map<std::string,std::unordered_map<int,Value*>> fn_owned_r
 extern std::map<std::string, std::map<int, Value *>> fn_memid_to_val;
 
 extern std::map<BasicBlock*, std::map<std::string, Value *>> block_values;
-extern std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens, ctakens_maybe;
+extern std::unordered_map<std::string, std::unordered_map<int,Value*>> ctakens;
+extern std::unordered_map<std::string, std::unordered_map<std::string,Value*>> ctakens_var;
 
 
 extern bool seen_var_attr;

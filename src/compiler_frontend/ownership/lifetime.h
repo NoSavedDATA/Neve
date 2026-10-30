@@ -26,3 +26,5 @@ bool match_cstmt_parent(std::string fn_name,
                     int tgt_cstmt, int cstmt); 
 
 
+bool match_cstmt_has_if(std::string fn_name,
+                    int cstmt, int tgt_cstmt=0);
