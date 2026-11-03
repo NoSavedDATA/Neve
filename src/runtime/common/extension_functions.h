@@ -82,6 +82,15 @@ bool in_vec(const T& str, const std::vector<std::tuple<T,U,W>>& list) {
 }
 
 
+template<typename T>
+bool in_matrix(const T& str, const std::vector<std::vector<T>>& list) {
+    for(auto &row : list)
+        if(std::find(row.begin(), row.end(), str) != row.end())
+            return true;
+    return false;
+}
+
+
 
 template<typename T, typename U>
 bool map_has_val(std::map<T, U>& map, U x) {

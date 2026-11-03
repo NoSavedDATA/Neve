@@ -1450,5 +1450,5 @@ extern std::unordered_map<std::string,int> FnLastVersion;
 extern std::unordered_map<std::string,std::unordered_map<int, int>> memid_to_ownedid;
 extern std::unordered_map<std::string, std::vector<std::string>> ctor_init_vars, ctor_unnitialized;
 
-extern std::unordered_map<std::string, std::unordered_map<int, std::vector<int>>> fn_memid_alias;
+extern std::unordered_map<std::string, std::unordered_map<int, std::vector<std::vector<int>>>> fn_memid_alias;
 extern std::unordered_map<std::string,std::unordered_map<std::string, int>> fn_global_to_memid, fn_global_to_ownedid;

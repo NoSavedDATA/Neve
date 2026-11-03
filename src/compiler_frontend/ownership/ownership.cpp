@@ -17,10 +17,12 @@
 std::vector<int> GetAlias(std::string fn, int memid) {
     // for(auto &alias : fn_memid_alias[fn][memid])
     //     std::cout << "has alias: " << alias << "\n";
-    auto alias_v = fn_memid_alias[fn][memid];
     std::vector<int> transfered_memids = {memid};
-    transfered_memids.insert(transfered_memids.end(), alias_v.begin(), alias_v.end());
-
+    for(auto &alias_v : fn_memid_alias[fn][memid]) {
+        for(auto &alias : alias_v)
+            if (!in_vec(alias, transfered_memids))
+                transfered_memids.push_back(alias);
+    }
     return transfered_memids;
 }
 
@@ -696,6 +698,12 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
         return; // skip llvm fn
 
 
+    for(auto &[memid, aliases_group] : fn_memid_alias[base_callee])
+       for(auto &aliases : aliases_group) 
+           for(auto &alias : aliases) 
+                std::cout << "alias " << fn_name << "|" << memid << " to " << alias << "\n";
+
+
     seen[fn_name] = 1;
     FunctionAST *fn_ast = TheJIT->fn_map[base_callee];
     std::vector<std::unique_ptr<ExprAST>> &Body = fn_ast->Body;
@@ -718,10 +726,6 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
     tc.RegisterFn();
 }
 
-bool CheckHasIfParent(int cstmt) {
-
-
-}
 
 void TransferChecker::RegisterFn() {
     if (fn_borrows.count(base_fn)==0) {

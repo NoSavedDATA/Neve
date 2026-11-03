@@ -52,7 +52,7 @@ std::unordered_map<std::string, std::vector<CallArgsTy>> FnTemplates;
 std::unordered_map<std::string, std::unordered_map<std::string, int>> function_owns, fn_memid, fn_arg_memid;
 
 
-std::unordered_map<std::string, std::unordered_map<int, std::vector<int>>> fn_memid_alias;
+std::unordered_map<std::string, std::unordered_map<int, std::vector<std::vector<int>>>> fn_memid_alias;
 
 std::unordered_map<std::string,std::vector<int>> fn_borrow_views;
 
@@ -82,7 +82,7 @@ std::unordered_map<std::string,
 
 std::unordered_map<std::string,
     std::unordered_map<std::string,
-       std::unordered_map<int,int>>> fn_memid_attr_to_branch;
+       std::unordered_map<int,ExprBranch>>> fn_memid_attr_to_branch;
 
 std::unordered_map<std::string,std::unordered_map<int,ExprAST*>> fn_memid_to_expr;
 
@@ -1581,7 +1581,8 @@ void ObjectExprAST::Checks() {
             function_owns[parser_struct->fn()][name] = owned_id;
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
-            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] \
+                = ExprBranch(0,BranchId.cstmt,0,check_branch.memid);
           // std::cout << "attr " << name << " | " << memid << "\n";
             fn_memid_to_dt[parser_struct->fn()][memid] = Data_Tree(ClassName);
         }
@@ -1682,7 +1683,8 @@ void UnkVarExprAST::Checks() {
     int memid = expr->GetMemId()[0];
     if (memid != OM_non_obj) {
         fn_memid[parser_struct->base_name][name] = memid; 
-        fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+        fn_memid_attr_to_branch[parser_struct->base_name][name][memid]\ 
+                = ExprBranch(0,BranchId.cstmt,0,check_branch.memid);
           // std::cout << "attr " << name << " | " << memid << "\n";
         fn_memid_to_dt[parser_struct->fn()][memid] = data_typeVars[parser_struct->fn()][name];
     }
@@ -1872,7 +1874,8 @@ void DataExprAST::SetMemId() {
         memid = expr->GetMemId()[0];
         if (memid != OM_non_obj) {
             fn_memid[parser_struct->base_name][name] = memid;
-            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+            fn_memid_attr_to_branch[parser_struct->base_name][name][memid] \
+                = ExprBranch(0,BranchId.cstmt,0,check_branch.memid);
           // std::cout << "attr " << name << " | " << memid << "\n";
             fn_memid_to_dt[parser_struct->fn()][memid] = data_type;
         }
@@ -2527,49 +2530,64 @@ bool IsPositionalArg(Parser_Struct *parser_struct, std::string name) {
 
 inline bool AreMemidsSeparatedByIfExpr(std::string fn,
         std::string name, int cur_memid, int prev_memid) {
-    uint16_t prev_branch = fn_memid_attr_to_branch[fn][name][prev_memid];
-    uint16_t cur_branch = fn_memid_attr_to_branch[fn][name][cur_memid];
+    uint16_t prev_scope = fn_memid_attr_to_branch[fn][name][prev_memid].cstmt;
+    uint16_t cur_scope = fn_memid_attr_to_branch[fn][name][cur_memid].cstmt;
     
-    return match_cstmt_has_if(fn, cur_branch, prev_branch);
+
+    if (prev_scope!=cur_scope)
+        return match_cstmt_has_if(fn, cur_scope, prev_scope);
+
+    uint16_t prev_branch = fn_memid_attr_to_branch[fn][name][prev_memid].memid;
+    uint16_t cur_branch = fn_memid_attr_to_branch[fn][name][cur_memid].memid;
+
+    return prev_branch!=cur_branch;
+}
+
+inline bool SameBranch(std::string fn,
+        std::string name, int cur_memid, int prev_memid) {
+    uint16_t prev_scope = fn_memid_attr_to_branch[fn][name][prev_memid].cstmt;
+    uint16_t cur_scope = fn_memid_attr_to_branch[fn][name][cur_memid].cstmt;
+
+    // If it is an if, match whether both belong to the same then or the else branch
+    // Branch defaults to zero
+    uint16_t prev_branch = fn_memid_attr_to_branch[fn][name][prev_memid].memid;
+    uint16_t cur_branch = fn_memid_attr_to_branch[fn][name][cur_memid].memid;
+
+    return prev_scope==cur_scope&&prev_branch==cur_branch;
 }
 
 void AliasMemid(std::string fn, std::string name, int memid, bool &checked) {
     if (checked)
         return;
-    // checked=true;
+    checked=true;
 
-    bool sep;
+    std::vector<int> aliases;
     if (fn_memid[fn].count(name)!=0&&!check_branch.IsNull()) {
         int prev_id = fn_memid[fn][name];
-        if (prev_id!=memid) {
-            sep = AreMemidsSeparatedByIfExpr(fn, name, memid, prev_id);
+        if (prev_id==memid)
+            return;
 
-            // std::cout << "Check  " << fn << " -> " << memid << "|" << prev_id << ": " << sep << "\n";
-            if (sep&&!in_vec(prev_id,fn_memid_alias[fn][memid])) {
-                fn_memid_alias[fn][memid].push_back(prev_id);
-            }
+        // std::cout << "Check  " << fn << " -> " << memid << "|" << prev_id << ": " << sep << "\n";
+        if (AreMemidsSeparatedByIfExpr(fn, name, memid, prev_id))
+            aliases.push_back(prev_id);
 
-            for(auto &prev_alias : fn_memid_alias[fn][prev_id]) {
-                sep = AreMemidsSeparatedByIfExpr(fn, name, memid, prev_alias);
+        for(auto &prev_alias_group : fn_memid_alias[fn][prev_id]) {
+            for(auto &prev_alias : prev_alias_group) {
+                if (AreMemidsSeparatedByIfExpr(fn, name, memid, prev_alias)
+                    &&(prev_alias!=memid)
+                    ) {
                 // std::cout << "check  " << fn << " -> " << memid << "|" << prev_alias << ": " << sep << "\n";
-                if (sep&&!in_vec(prev_alias,fn_memid_alias[fn][memid])) {
-                    fn_memid_alias[fn][memid].push_back(prev_alias);
+                    aliases.push_back(prev_alias);
                 }
             }
         }
+        // Substitution
+        if (SameBranch(fn, name, memid, prev_id))
+            fn_memid_alias[fn][prev_id].pop_back();
     }
 
-    for(auto &alias : fn_memid_alias[fn][memid]) {
-        bool sep = AreMemidsSeparatedByIfExpr(fn, name, memid, alias);
-        if (!sep) {
-            erase(fn_memid_alias[fn][memid], alias);
-        }
-        // else
-        //     std::cout << "alias " << name << ": " << memid << " to " << alias << "\n";
-    }
-
-
-    fn_memid[fn][name] = memid;
+    if (aliases.size()>0)
+        fn_memid_alias[fn][memid].push_back(aliases);
 }
 
 
@@ -2607,10 +2625,12 @@ void BinaryExprAST::Checks() {
           function_owns[parser_struct->fn()][name] = owned_id;
 
           // std::cout << "attr branch " << name << " | " << memid << ": "  << BranchId.cstmt<< "\n";
-          fn_memid_attr_to_branch[parser_struct->base_name][name][memid] = BranchId.cstmt;
+          fn_memid_attr_to_branch[parser_struct->base_name][name][memid]\
+                = ExprBranch(0,BranchId.cstmt,0,check_branch.memid);
           // std::cout << "--------- " << Line <<". "<< name << " = " << RHS->GetName() << "\n";
           
           AliasMemid(parser_struct->base_name, name, memid, checked_alias);
+          fn_memid[parser_struct->base_name][name] = memid;
           fn_memid_to_dt[parser_struct->fn()][memid] = R_dt;
 
           data_typeVars[parser_struct->fn()][name].is_own = R_dt.is_own;
