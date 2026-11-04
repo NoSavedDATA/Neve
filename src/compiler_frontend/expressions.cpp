@@ -182,6 +182,18 @@ bool ExprAST::GetSolverIncludeScope() {
   return SolverIncludeScope;
 }
 
+
+bool ExprAST::IsSimpleVar() {
+    if (dynamic_cast<NameableCall*>(this))
+        return false;
+    if (dynamic_cast<NameableIdx*>(this))
+        return false;
+    if (auto *stmt = dynamic_cast<Nameable*>(this))
+        if (stmt->Depth==1)
+            return true;
+    return false;
+}
+
 void ExprAST::SetIsAttribute(bool Attribute) {
   this->isAttribute=Attribute;
 }
@@ -510,10 +522,10 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CallArgsTy t_templ = tpair.first;
         CallArgsTy templ = t_templ;
 
-        // if (begins_with(fn, "gpu_tensor")) {
-            // std::cout << "compare "  << "\n";
-            // print_dt_vec(CArgs.dts);
-            // print_dt_vec(templ.dts);
+        // if (ends_with(fn, "register")||begins_with(fn, "bar")) {
+        //     std::cout << "compare " << fn << ": " << Template_FnAST[fn].size() << "\n";
+        //     print_dt_vec(CArgs.dts);
+        //     print_dt_vec(templ.dts);
         // }
 
         if (!CompareDTs(CArgs, templ, true, true))
@@ -540,6 +552,8 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         fn = (idx==0) ? fn : fn+"_"+std::to_string(idx); 
         CArgs.version = idx;
         CArgs.version_str = fn;
+
+
 
         // std::cout << "\n\nassign for " << fn << "\n";
         // print_dt_vec(CArgs.dts);
@@ -684,6 +698,7 @@ bool MatchOwned(Parser_Struct *parser_struct,
         std::string Callee, CallArgsTy &CArgs) {
 
     bool has_owned=obj_owned;
+
 
     if (fn_arg_memid.count(Callee)==0&&!has_owned)
         return false;
@@ -1218,8 +1233,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         this->Types.push_back(dt);
         data_typeVars[this->Name][name] = dt;
     }
-    for (auto &[memid, argmemid] : CArgs.partialtakes) {
-        this->Args.push_back("__ctaken_" + std::to_string(argmemid));
+    for (auto &[memid, param_memid, argname] : CArgs.partialtakes) {
+        this->Args.push_back("__ctaken_" + std::to_string(param_memid));
         this->Types.push_back(Data_Tree("any"));
     }
 
@@ -1560,18 +1575,24 @@ NewDictExprAST::NewDictExprAST(
 void ObjectExprAST::Checks() {
     for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
         std::string name = this->VarNames[i].first;
-        data_typeVars[parser_struct->fn()][name] = Data_Tree(ClassName);
+
+        Data_Tree dt;
+        if(this->VarNames[i].second) {
+            dt = this->VarNames[i].second->GetDataTree();
+        } else
+            dt = Data_Tree(ClassName);
+        data_typeVars[parser_struct->fn()][name] = dt;
+
         if (this->HasInit[i]) { // callee init
           std::string create_fn = ClassName+"___init__";
           Semantic_Arguments_Check(this->parser_struct, Line, this->Args[i], create_fn, false, this->Args[i].size(), 1);
           FunctionChecks(create_fn);
         }  
-    }
 
-    for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
-        std::string name = this->VarNames[i].first;
+
+        // Memid
         int memid=OM_non_obj, owned_id=OM_non_obj;
-        if(this->VarNames[i].second)  {
+        if(this->VarNames[i].second) {
             this->VarNames[i].second->Checks();
             owned_id = this->VarNames[i].second->GetIsOwned();
             memid = this->VarNames[i].second->GetMemId()[0];
@@ -1586,7 +1607,6 @@ void ObjectExprAST::Checks() {
           // std::cout << "attr " << name << " | " << memid << "\n";
             fn_memid_to_dt[parser_struct->fn()][memid] = Data_Tree(ClassName);
         }
-
 
         Memids.push_back(memid);
         Ownedids.push_back(owned_id);

@@ -30,11 +30,9 @@ void SetLastSeen(std::string fn, int memid, ExprAST *expr) {
     auto aliases = GetAlias(fn, memid);
 
     for(auto &alias : aliases) {
-        // if (fn=="foo")
-            // std::cout << "SET LAST SEEN " << fn << "|"<<alias << " - " << expr << "\n";
+        // std::cout << "SET LAST SEEN " << fn << "|"<<alias << " - " << expr << "\n";
         fn_memid_to_lastseen[fn][alias] = expr;
     }
-    // fn_memid_to_lastseen[fn][memid] = expr;
 }
 
 
@@ -159,7 +157,7 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
             std::vector<ExprBranch> &arg_parents,
             int arg_memid, ExprBranch callexpr_branch,
             int memid,
-            std::vector<std::tuple<int,int>> &partialtakes) {
+            std::vector<std::tuple<int,int,std::string>> &partialtakes) {
 
     // Try borrow to most restrict caller owner.
     // Else, use call expr as the lifetime.
@@ -168,12 +166,19 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
 
     // std::cout << "-------__>cap: " << callee << "->" << fn_borrows_c[callee][arg_memid] << "|" << cap << "\n";
 
-
     bool has_incomplete = fn_borrows_c[callee][arg_memid]<cap
                     ||in_vec(arg_memid,fn_borrows_incomplete[callee]);
     if (has_incomplete) {
         fn_borrows_incomplete[parser_struct->base_name].push_back(memid);
-        partialtakes.push_back({memid,arg_memid});
+
+        if (argexpr->IsSimpleVar()) {
+            std::cout << "\n\t\033[33mSEND " << parser_struct->fn() << "|" << callee << ": " << argexpr->GetName() << "\033[0m\n\n";
+        }
+
+        std::string argname = (argexpr->IsSimpleVar())
+                        ? argexpr->GetName()
+                        : "__skip__";
+        partialtakes.push_back({memid,arg_memid,argname});
     }
 
 
@@ -279,6 +284,54 @@ void TransferChecker::HandleAppend(Parser_Struct* parser_struct, NameableCall *c
 }
 
 
+bool IsValidParam1(ExprAST *argexpr) {
+    if (!argexpr->IsOwnableExpr())
+        return false;
+    if (auto *nameableexpr = dynamic_cast<Nameable*>(argexpr))
+        if (nameableexpr->Depth!=1) 
+            return false;
+    if (argexpr->GetMemId()[0]==OM_non_obj)
+        return false;
+    return true;
+}
+
+bool IsValidParam2(ExprAST *callexpr, ExprAST *argexpr, int memid, bool is_transfer) {
+    if (!argexpr->IsOwnableExpr())
+        return false;
+    if (auto *arg_stmt = dynamic_cast<Nameable*>(argexpr)) {
+        bool isCall = (dynamic_cast<NameableCall*>(arg_stmt) != nullptr);
+        bool isIdx = (dynamic_cast<NameableIdx*>(arg_stmt) != nullptr);
+
+        bool is_attr = (arg_stmt->Depth>1&&!isCall&&!isIdx)||isIdx;
+        if (is_attr&&is_transfer&&argexpr->GetIsOwned()!=OM_non_obj) {
+            LogError(callexpr->Line, "Trying to transfer ownership of a transfered object");
+            return false;
+        }
+
+        if (arg_stmt->Depth!=1)
+            return false;
+    }
+
+    if (memid==OM_non_obj)
+        return false;
+    return true;
+}
+
+std::vector<ExprBranch> Route_Param_Parents_Memid(std::string base_callee, 
+                    int arg_memid,
+                    std::unordered_map<int,ExprBranch> &arg_to_param_memid) {
+    std::vector<ExprBranch> caller_parents;
+    for (auto &borrow : fn_borrows[base_callee][arg_memid]) {
+        int owner_memid = borrow.memid;
+        if (arg_to_param_memid.count(owner_memid)) {
+            caller_parents.push_back(
+                arg_to_param_memid[owner_memid]
+            );
+        }
+    }
+    return caller_parents;
+}
+
 
 
 void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *callexpr,std::string callee) {
@@ -291,65 +344,47 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
     std::string base_callee = argsebasedexpr->BaseCallee;
     if (in_vec(callee,native_methods))
         return; // skip llvm defined
-
-
+    if (fn_argnames.count(callee)==0)
+        return;
 
     CallArgsTy &CArgs = argsebasedexpr->CArgs;
-
-    std::vector<std::string> argnames;
     bool has_borrow = false;
-
-    std::unordered_map<int, ExprBranch> arg_to_caller_memid;
-    std::vector<std::tuple<int,int>> partialtakes;
+    std::vector<std::string> param_names;
+    std::unordered_map<int, ExprBranch> arg_to_param_memid;
+    std::vector<std::tuple<int,int,std::string>> partialtakes;
 
 
 
 
     if (auto *callstmt = dynamic_cast<NameableCall*>(callexpr)) {
         if (callstmt->Depth>1) {
-            arg_to_caller_memid[OM_self_obj] = GetLifetime(parser_struct,
+            arg_to_param_memid[OM_self_obj] = GetLifetime(parser_struct,
                             callexpr, memid_to_branch);
         }
     }
     if (auto *newstmt = dynamic_cast<NewExprAST*>(callexpr)) {
-        arg_to_caller_memid[OM_self_obj] = newstmt->GetMemId()[0];
+        arg_to_param_memid[OM_self_obj] = newstmt->GetMemId()[0];
     }
-
-
-
 
     int i=0,j=0;
     for (auto &argexpr : argsebasedexpr->Args) {
         i++;
         j++;
+        std::string param_name = fn_argnames[callee][i-1];
+        if (param_name=="scope_struct")
+            param_name = fn_argnames[callee][i++];
+        param_names.push_back(param_name);
 
-        if (fn_argnames.count(callee)==0)
-            return;
-        std::string argname = fn_argnames[callee][i-1];
-        if (argname=="scope_struct")
-            argname = fn_argnames[callee][i++];
-        argnames.push_back(argname);
-
-
-        if (!argexpr->IsOwnableExpr())
+        if (!IsValidParam1(argexpr.get()))
             continue;
-
-        if (auto *nameableexpr = dynamic_cast<Nameable*>(argexpr.get()))
-            if (nameableexpr->Depth!=1) 
-                continue;
-        if (argexpr->GetMemId()[0]==OM_non_obj)
-            continue;
-
-
 
         ExprBranch parent_memid = GetLifetime(parser_struct,
                 argexpr.get(), memid_to_branch);
 
-
-        int arg_memid = fn_arg_memid[base_callee][argname];
-        arg_to_caller_memid[arg_memid] = parent_memid;
-
+        int arg_memid = fn_arg_memid[base_callee][param_name];
+        arg_to_param_memid[arg_memid] = parent_memid;
     }
+
 
 
     i=0;
@@ -357,65 +392,33 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
     for (auto &argexpr : argsebasedexpr->Args) {
         i++;
         j++;
+        std::string argname = (argexpr->IsSimpleVar())
+                                ? argexpr->GetName()
+                                : "__skip__";
+        std::string param_name = fn_argnames[callee][i-1];
+        if (param_name=="scope_struct")
+            param_name = fn_argnames[callee][i++];
 
-
-        if (fn_argnames.count(callee)==0)
-            return;
-        std::string argname = fn_argnames[callee][i-1];
-        if (argname=="scope_struct")
-            argname = fn_argnames[callee][i++];
-
-        if (!argexpr->IsOwnableExpr())
-            continue;
-
-        int arg_memid = fn_arg_memid[base_callee][argname];
-
-        bool is_transfer = fn_borrows[base_callee].count(arg_memid)>0; 
-
-        if (auto *arg_stmt = dynamic_cast<Nameable*>(argexpr.get())) {
-            bool isCall = (dynamic_cast<NameableCall*>(arg_stmt) != nullptr);
-            bool isIdx = (dynamic_cast<NameableIdx*>(arg_stmt) != nullptr);
-
-            bool is_attr = (arg_stmt->Depth>1&&!isCall&&!isIdx)||isIdx;
-            if (is_attr&&is_transfer&&argexpr->GetIsOwned()!=OM_non_obj) {
-                LogError(callexpr->Line, "Trying to transfer ownership of a transfered object");
-            }
-
-            if (arg_stmt->Depth!=1)
-                continue;
-        }
-
-
-
+        int param_memid = fn_arg_memid[base_callee][param_name];
+        bool is_transfer = fn_borrows[base_callee].count(param_memid)>0; 
         int memid = argexpr->GetMemId()[0];
-        if (memid==OM_non_obj)
+
+        if (!IsValidParam2(callexpr, argexpr.get(), memid, is_transfer))
             continue;
 
-
-        if (in_vec(arg_memid, fn_borrow_views[base_callee])) {
+        if (in_vec(param_memid, fn_borrow_views[base_callee]))
             fn_borrow_views[parser_struct->base_name].push_back(memid);
-        }
-
-
-
 
         if (is_transfer) {
             // Route param parent to arg parent
-            std::vector<ExprBranch> caller_parents;
-            for (auto &borrow : fn_borrows[base_callee][arg_memid]) {
-                int owner_memid = borrow.memid;
-                if (arg_to_caller_memid.count(owner_memid)) {
-                    caller_parents.push_back(
-                        arg_to_caller_memid[owner_memid]
-                    );
-                }
-            }
+            auto arg_parents = Route_Param_Parents_Memid(base_callee, 
+                                        param_memid, arg_to_param_memid);
 
             GetCallMostRestrictive(parser_struct,
                         base_callee,
                         callexpr, argexpr.get(),
-                        caller_parents,
-                        arg_memid, callexpr->BranchId,
+                        arg_parents,
+                        param_memid, callexpr->BranchId,
                         memid, partialtakes);
             borrow_c[memid]++;
 
@@ -423,30 +426,39 @@ void TransferChecker::HandleCallParams(Parser_Struct* parser_struct, ExprAST *ca
             int ownid = argexpr->GetIsOwned();
 
             bool is_owned = ownid!=OM_non_obj||dt.is_borrow||dt.is_own;
+
             if (is_owned) {
                 has_borrow=true;
                 dt.is_own=false;
                 dt.is_borrow=true;
                 CArgs.borrows.push_back({
-                        dt, argname, arg_memid, memid
+                        dt, argname, param_name, memid, param_memid
                     });
             }
         }
     }
 
 
+
+
+
     if (has_borrow) {
-        CArgs.args = argnames;
+        CArgs.args = param_names;
         CArgs.template_ret = fn_ret_dt[callee];
         CArgs.partialtakes = partialtakes;
         bool found = false;
 
         callee = GetFnVersion(parser_struct, base_callee, CArgs, found, true, true);
+
         if (!found) {
             Template_FnAST[base_callee][CArgs] = TheJIT->fn_map[base_callee];
             if(!in_vec(base_callee, fn_called))
                 fn_called.push_back(base_callee);
+
             callee = GenTemplate(parser_struct, base_callee, CArgs, found);
+            if (!found)
+                LogError(-1,"Not found " + base_callee + " instance bug");
+
         }
         argsebasedexpr->Callee = callee;
         argsebasedexpr->partialtakes = partialtakes;
@@ -465,7 +477,6 @@ void TransferChecker::HandleNew(Parser_Struct* parser_struct, NewExprAST *newexp
 }
 void TransferChecker::HandleCall(Parser_Struct* parser_struct, NameableCall *callexpr,
         std::unordered_map<std::string, int> &seen) {
-
 
     std::string callee = callexpr->Callee;
     std::string base_callee = callexpr->BaseCallee;
@@ -564,6 +575,7 @@ void TransferChecker::HandleNameable(Parser_Struct* parser_struct,
     int memid = nameable->GetMemId()[0];
 
     if (!nameable->IsAttr&&memid!=OM_non_obj) {
+
         // if (parser_struct->base_name=="foo")
         //     std::cout << nameable->Line << ". Last seen of -> " << nameable->Name << "\n";
 

@@ -129,6 +129,9 @@ class ExprAST {
 
     virtual void Checks(); 
 
+
+    virtual bool IsSimpleVar(); 
+
     virtual bool IsOwnableExpr(); 
     
     virtual void SetIsVec(bool); 
@@ -167,14 +170,14 @@ struct CallArgsTy {
     std::vector<std::string> strings;
     std::vector<std::string> args;
     std::string version_str = "";
-    std::vector<std::tuple<int,int>> partialtakes;
+    std::vector<std::tuple<int,int,std::string>> partialtakes;
     int version = -1;
     TemplateAST *template_ast=nullptr;
     Data_Tree template_ret;
     FnCompiledValues cvalues;
     std::vector<std::tuple<std::string, std::string, Data_Tree>> dyn_args;
     std::unordered_map<std::string, int> dyn_args_dict;
-    std::vector<std::tuple<Data_Tree, std::string, int, int>> borrows;
+    std::vector<std::tuple<Data_Tree, std::string, std::string, int, int>> borrows;
 
     CallArgsTy(std::vector<Data_Tree> dts);
     CallArgsTy(std::vector<std::unique_ptr<ExprAST>> *stmt=nullptr);
@@ -206,6 +209,8 @@ struct ArgsEqual {
             if (a.dts[i].Compare(b.dts[i])>0)
                 return false;
             if(a.dts[i].is_own!=b.dts[i].is_own)
+                return false;
+            if(a.dts[i].is_borrow!=b.dts[i].is_borrow)
                 return false;
             if(a.dts[i].is_view!=b.dts[i].is_view)
                 return false;
@@ -556,7 +561,7 @@ class ArgsBasedExpr {
       std::vector<std::unique_ptr<ExprAST>> Args;
       CallArgsTy CompiledArgsVec, CArgs;
       std::string BaseCallee, Callee;
-      std::vector<std::tuple<int,int>> partialtakes;
+      std::vector<std::tuple<int,int,std::string>> partialtakes;
 };
 
 class NewExprAST : public ExprAST, public ArgsBasedExpr {
@@ -651,7 +656,7 @@ public:
   std::unique_ptr<ExprAST> LHS, RHS;
   CallArgsTy CArgs;
   char Op;
-  std::unordered_map<std::string,std::vector<std::tuple<int,int>>> partialtakes;
+  std::unordered_map<std::string,std::vector<std::tuple<int,int,std::string>>> partialtakes;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct *);
 
@@ -732,6 +737,7 @@ class Nameable : public ExprAST {
   std::unique_ptr<ExprAST> Copy();
   void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
+  void DispatchLastSeen(std::string);
   void Checks();
 };
 

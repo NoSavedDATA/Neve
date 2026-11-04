@@ -267,7 +267,7 @@ void SetFnOwn(Parser_Struct *parser_struct, Value *scope_struct,
 
 void SetToBorrowedRet(Parser_Struct *parser_struct, 
          NameableCall *callexpr,
-         std::vector<std::tuple<int,int>> &partialtakes) {
+         std::vector<std::tuple<int,int,std::string>> &partialtakes) {
     std::string callee = callexpr->Callee;
     std::string base_callee = callexpr->BaseCallee;
     CallArgsTy CArgs = callexpr->CArgs;
@@ -313,7 +313,7 @@ void SetToBorrowedRet(Parser_Struct *parser_struct,
 
 void SetToBorrowedRet(Parser_Struct *parser_struct, 
          BinaryExprAST *callexpr,
-         std::vector<std::tuple<int,int>> &partialtakes) {
+         std::vector<std::tuple<int,int,std::string>> &partialtakes) {
     std::string callee = callexpr->Operation;
     std::string base_callee = callexpr->BaseOperation;
     CallArgsTy CArgs = callexpr->CArgs;
@@ -396,7 +396,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
         bool caller_transfers = fn_borrows[base_fn].count(callexpr->MemId)>0;
 
         int memid = callexpr->GetMemId()[0];
-        std::vector<std::tuple<int,int>> partialtakes;
+        std::vector<std::tuple<int,int,std::string>> partialtakes;
 
         bool fn_transfers=false, is_incomplete_transfer=false;
         for(auto &retid : function_escapes[callee]) {
@@ -407,7 +407,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 fn_transfers=true;
                 is_incomplete_transfer = in_vec(ret_memid,
                                     fn_borrows_incomplete[basecallee]);
-                partialtakes.push_back({memid, ret_memid});
+                partialtakes.push_back({memid, ret_memid, "__skip__"});
                 // std::cout << "\n\t\033[33mcallee ret partial " << basecallee << " | " << ret_memid << " (transfer to:) " << (fn_borrows[basecallee][ret_memid][0]&MASK_16) << "\033[0m\n\n";
                 break;
             }
@@ -447,7 +447,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
 
         bool caller_transfers = fn_borrows[base_fn].count(memid)>0;
 
-        std::vector<std::tuple<int,int>> partialtakes;
+        std::vector<std::tuple<int,int,std::string>> partialtakes;
 
         bool fn_transfers=false, is_incomplete_transfer=false;
         for(auto &retid : function_escapes[callee]) {
@@ -458,7 +458,7 @@ void GetOwnedRet(Parser_Struct *parser_struct,
                 is_incomplete_transfer = in_vec(ret_memid,
                                     fn_borrows_incomplete[basecallee]);
                 // std::cout << "\n\t\033[33mbinop ret partial " << basecallee << " | " << memid << "\033[0m\n\n";
-                partialtakes.push_back({memid, ret_memid});
+                partialtakes.push_back({memid, ret_memid, "__skip__"});
                 break;
             }
         }

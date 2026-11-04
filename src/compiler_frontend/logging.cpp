@@ -237,9 +237,8 @@ void p2t(std::string msg)
       shall_log = false;
   }
 
-  if (shall_log)
-  {
-    std::cout << msg << ".\n";
+  if (shall_log) {
+    // std::cout << msg << ".\n";
     call("print_codegen", {Builder->CreateGlobalString(msg)});
   }
 }

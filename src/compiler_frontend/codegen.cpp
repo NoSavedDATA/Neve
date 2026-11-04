@@ -1187,12 +1187,20 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct *parser_struct, 
 }
 
 
-std::optional<Value*> SolveCtaken(std::string base_fn, std::string fn, int memid) {
-    // if (map_has_val(fn_memid[base_fn],memid)) {
-    //     auto result = get_key_for_val(fn_memid[base_fn],memid);
-// // std::cout << "\n\t\033[33mFOUND " << result.value() << " - " << memid << "\033[0m\n\n";
-    //     return ctakens_var[fn][result.value()];
-    // } 
+std::optional<Value*> SolveCtaken(std::string fn, int memid) {
+    if(ctakens[fn].count(memid)!=0)
+        return ctakens[fn][memid];
+
+    return std::nullopt;
+}
+std::optional<Value*> SolveCtaken(std::string fn, int memid, std::string identifier) {
+    if (ctakens_var[fn].count(identifier)>0) {
+        LogBlue("as identifier " + identifier);
+        p2t("arg param");
+        call("print_void_ptr", {ctakens_var[fn][identifier]}); 
+        return ctakens_var[fn][identifier];
+    }
+
     if(ctakens[fn].count(memid)!=0)
         return ctakens[fn][memid];
 
@@ -1200,60 +1208,47 @@ std::optional<Value*> SolveCtaken(std::string base_fn, std::string fn, int memid
 }
 
 
-inline void SetConditionalTake(std::string base_fn, std::string fn, int memid) {
-    auto result = SolveCtaken(base_fn, fn, memid);
+
+inline void SetConditionalTake(std::string fn, int memid, std::string identifier="__skip__") {
+    auto result = SolveCtaken(fn, memid, identifier);
     if (!result) return;
     Value *ctaken = result.value();
-
-    // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
-    //     p2t("-----------SET COND " + fn + " - " + std::to_string(memid));
-
     Builder->CreateStore(const_bool(1), ctaken);
-
-
-    // Value *v = Builder->CreateLoad(boolTy, ctaken);
-    // if (begins_with(fn, "gpu_tensor_gpu_tensor_mm"))
-    //     call("print_bool", {v}); 
-
 }
-void SetConditionalTake(std::string base_fn,
-        std::string fn, std::unique_ptr<ExprAST> &taken) {
+void SetConditionalTake(std::string fn, std::unique_ptr<ExprAST> &taken) {
     auto result = taken->GetCtaken();
     if(!result) return;
     Value *ctaken = result.value();
+
+    // p2t("&&&&&&&&&&&&&&& set conditional take " + fn);
+    // call("print_void_ptr", {ctaken});
     Builder->CreateStore(const_bool(1), ctaken);
 }
 
 
 inline void Codegen_Partialtakes(Parser_Struct *parser_struct,
+        ExprAST *expr,
         CallArgsTy &CArgs,
         std::string callee,
-        std::vector<std::tuple<int,int>> &partialtakes,
+        std::vector<std::tuple<int,int,std::string>> &partialtakes,
         std::vector<Value*> &ArgsV) {
     std::string fn = parser_struct->fn();
     std::string base_fn = parser_struct->base_name;
 
-    // When they are partial in caller, but not in callee
-    // TODO: still needed?
-    for(auto &[_,_,arg_memid,taken_id] : CArgs.borrows) {
-        if (!in_vec(arg_memid,fn_borrows_incomplete[callee])) {
-            SetConditionalTake(parser_struct->base_name, parser_struct->fn(), taken_id);
+    // When the callee transfers inconditionally -- deterministic
+    for(auto &[_,argname,_,arg_memid,param_memid] : CArgs.borrows) {
+        if (!in_vec(param_memid,fn_borrows_incomplete[callee])) {
+            SetConditionalTake(parser_struct->fn(), arg_memid, argname);
         }
     }
 
-    // Partials in the callee only
-    for(auto &[memid, argmemid] : partialtakes) {
-        auto result = SolveCtaken(base_fn, fn, memid);
+    // When the callee transfers conditionally -- send ctaken
+    for(auto &[memid, param_memid, argname] : partialtakes) {
+        auto result = SolveCtaken(fn, memid, argname);
         if (!result) continue;
+            // LogErrorC(expr->Line,
+            //         "Failed to get partialtake memid " + std::to_string(memid));
         Value *ctaken = result.value();
-
-        // if (!ctakens.count(fn))
-        //     continue; // fix for when partial registered for the wrong generic
-        // if (!ctakens[fn].count(memid))
-        //     continue; // fix for when partial registered for the wrong generic
-                    //
-        // p2t("&&&&&&&&&&&&&&&& partialtake " + parser_struct->fn() + "|"+ callee + ": " + std::to_string(memid));
-
         ArgsV.push_back(ctaken);
     }
 }
@@ -1547,13 +1542,13 @@ void IfExprAST::GetBodyPartials(Value *scope_struct,
     }
 }
 
-void IfExprAST::SetPartialCtaken(std::map<std::string,std::vector<int>> &set_block, std::string base_fn, std::string fn) {
+void IfExprAST::SetPartialCtaken(std::map<std::string,std::vector<int>> &set_block,
+        std::string base_fn, std::string fn) {
     // when a value is conditionally created and transfered, 
     // set its ctaken flag to true in the complementary branch
     for(auto &[name, memid_vec] : set_block) {
-        for(auto &memid : memid_vec) {
-            SetConditionalTake("__ignored__",fn,memid);
-        }
+        for(auto &memid : memid_vec)
+            SetConditionalTake(fn,memid);
     }
 }
 
@@ -3247,7 +3242,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         if (partialtakes.count(Operation)>0) {
             // std::cout << "\n\t\033[33mPARTIALLLLLL " << parser_struct->fn() << " | "<< Operation << "\033[0m\n\n";
-            Codegen_Partialtakes(parser_struct, CArgs,
+            Codegen_Partialtakes(parser_struct, this,
+                    CArgs,
                     BaseOperation,
                     partialtakes[Operation],
                     Args);
@@ -4109,7 +4105,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         value = Values[i]->codegen(scope_struct);
 
 
-        SetConditionalTake(parser_struct->base_name,parser_struct->fn(),Values[i]);
+        SetConditionalTake(parser_struct->fn(),Values[i]);
 
         if(!in_vec(type, primary_data_tokens)) {
             std::string copy_fn = type + "_Copy";
@@ -5125,34 +5121,23 @@ Value *RecoverUniqueGlobal(Value *scope_struct, std::string name) {
     return  ret;
 }
 
-Value *Nameable::codegen(Value *scope_struct) {
-    if (!ShallCodegen)
-        return const_float(0.0f);
-    Data_Tree dt = GetDataTree();
-    std::string type = dt.Type;
-    std::string fn = parser_struct->fn();
+void Nameable::DispatchLastSeen(std::string fn) {
     std::string base_fn = parser_struct->base_name;
-
-    // std::cout << "\ncheck " << fn << " | " << base_fn << "\n";
-    // std::cout << "has fn? "  << fn_memid_to_lastseen.count(base_fn) << "\n"; 
-    // std::cout << "has val? " << map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this) << "\n"; 
-
-
     if (map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this)) {
         for(auto &[memid, expr] : fn_memid_to_lastseen[base_fn]) {
-            if (expr!=this)
-                continue;
-            if (!fn_memid_to_dt[fn].count(memid))
-                continue;
-            Data_Tree cleared_dt = fn_memid_to_dt[fn][memid];
 
-            // if (begins_with(fn, "Res"))
-            // p2t("check " + fn + " -> " + std::to_string(memid));
+            if (expr!=this||!fn_memid_to_dt[fn].count(memid))
+                continue;
+
+            Data_Tree cleared_dt = fn_memid_to_dt[fn][memid];
 
             bool is_owned = cleared_dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
 
 
+            // std::cout << "dispatch " << fn << "|" << memid << ": " << expr << "\n";
+
             if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
+                // std::cout << "\t\tpassed " << "\n";
                 ExprAST *outermost = this;
                 GetOutermostConditionalExpr(BranchId.cstmt,
                         fn, outermost,
@@ -5166,32 +5151,47 @@ Value *Nameable::codegen(Value *scope_struct) {
             }
         }
     }
+}
+
+Value *Nameable::codegen(Value *scope_struct) {
+    if (!ShallCodegen)
+        return const_float(0.0f);
+    Data_Tree dt = GetDataTree();
+    std::string type = dt.Type;
+    std::string fn = parser_struct->fn();
+
+    // std::cout << "\ncheck " << fn << " | " << base_fn << "\n";
+    // std::cout << "has fn? "  << fn_memid_to_lastseen.count(base_fn) << "\n"; 
+    // std::cout << "has val? " << map_has_val(fn_memid_to_lastseen[base_fn], (ExprAST*)this) << "\n"; 
+
+
+    DispatchLastSeen(fn);
+
+
 
     if(Depth==1) {
-        if(IsUnique) {
+        if(IsUnique)
             return RecoverUniqueGlobal(scope_struct, Name);
-        }
-        if(IsOwnedUnique) {
+        if(IsOwnedUnique)
             return Builder->CreateLoad(int8PtrTy, global_values[Name]); 
-        }
-        if(Name=="self") {
+        if(Name=="self")
             return get_scope_obj(scope_struct);
-        }
         // buffers
         if (function_allocas[fn].count(Name)>0)
             return function_allocas[fn][Name]; 
-        if (function_values[fn].count(Name)>0) {
-
+        if (function_values[fn].count(Name)>0)
             return function_values[fn][Name];
-        }
         if (Name=="tid") {
-            Value *tid_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 1);
-            Value *tid = Builder->CreateSub(Builder->CreateLoad(intTy, tid_gep), const_int(1));
+            Value *tid_gep = Builder->CreateStructGEP(struct_types["scope_struct"],
+                                scope_struct, 1);
+            Value *tid = Builder->CreateSub(Builder->CreateLoad(intTy, tid_gep),
+                                const_int(1));
             function_values[fn]["tid"] = tid;
             return tid;
         }
         if (Name=="tN") {
-            Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 7);
+            Value *tN_gep = Builder->CreateStructGEP(struct_types["scope_struct"],
+                                scope_struct, 7);
             Value *tN = Builder->CreateLoad(intTy, tN_gep);
             function_values[fn]["tN"] = tN;
             return tN;
@@ -5241,7 +5241,7 @@ std::optional<Value*> ExprAST::GetCtaken() {
     if (!parser_struct)
         return std::nullopt;
     std::string fn = parser_struct->fn();
-    return SolveCtaken(parser_struct->base_name, fn, GetMemId()[0]);
+    return SolveCtaken(fn, GetMemId()[0]);
 }
 std::optional<Value*> Nameable::GetCtaken() {
     if (!parser_struct)
@@ -5252,7 +5252,7 @@ std::optional<Value*> Nameable::GetCtaken() {
         if (ctakens_var[fn].count(Name)>0)
             return ctakens_var[fn][Name];
     }
-    return SolveCtaken(parser_struct->base_name, fn, GetMemId()[0]);
+    return SolveCtaken(fn, GetMemId()[0]);
 }
 
 
@@ -5900,7 +5900,7 @@ Value *NameableCall::codegen_append(Value *scope_struct) {
 
     Value *appended_val = Args[0]->codegen(scope_struct);
 
-    SetConditionalTake(parser_struct->base_name, parser_struct->fn(), Args[0]);
+    SetConditionalTake(parser_struct->fn(), Args[0]);
 
 
     std::string elem_type = inner_dt.Nested_Data[0].Type;
@@ -6082,7 +6082,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     if (shall_swap)
         previous_obj = swap_scope_obj(scope_struct, obj_ptr); 
 
-  Codegen_Partialtakes(parser_struct, CArgs, BaseCallee, partialtakes, ArgsV);
+  Codegen_Partialtakes(parser_struct, this, CArgs, BaseCallee, partialtakes, ArgsV);
 
 
 

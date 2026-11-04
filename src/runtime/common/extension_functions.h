@@ -128,6 +128,27 @@ std::optional<T> get_key_for_val(std::unordered_map<T, U>& map, U& x) {
 }
 
 
+template<typename T>
+bool in_composite(T query,
+            std::unordered_map<T, std::vector<std::vector<T>>>& composite) {
+
+    for (const auto& [inner_key, vec_of_vecs] : composite) {
+        
+        if (inner_key == query) {
+            return true;
+        }
+
+        for (const auto& inner_vec : vec_of_vecs) {
+            if (std::find(inner_vec.begin(), inner_vec.end(), query) != inner_vec.end()) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+
 
 bool is_number(std::string s); 
 

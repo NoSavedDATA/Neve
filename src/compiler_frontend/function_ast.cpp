@@ -951,14 +951,14 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
 
 
     bool is_partial_take = in_vec(memid, fn_borrows_incomplete[base_name]);
+    bool has_alias = in_composite(memid, fn_memid_alias[base_name]);
 
 
-    if (is_partial_take && ctakens[fn].count(memid)==0) { // ignore args ctakens
+    if (ctakens[fn].count(memid)==0&&
+            (has_alias||is_partial_take)) { // ignore args ctakens
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_"+std::to_string(memid), boolTy);
         ctakens[fn][memid] = alloca;
         Builder->CreateStore(const_bool(false),alloca);
-        // if (begins_with(fn, "ResidualModule_forward")||begins_with(fn, "gpu")||begins_with(fn, "eval"))
-            // std::cout << "\n\t\033[31mSET Ctaken " << fn << " | " << memid << "\033[0m\n\n";
     }
 
 
@@ -1085,8 +1085,10 @@ Function *FunctionAST::codegen() {
         if (map_has_val(fn_arg_memid[base_name], arg_memid)) {
             auto result = get_key_for_val(fn_arg_memid[base_name], arg_memid);
             ctakens_var[function_name][arg_name] = &Arg;
+            p2t("param ctaken: " + arg_name);
+            call("print_void_ptr", {&Arg});
             std::cout << "\n\t\033[33mGOTCHA " << result.value() << "\033[0m\n\n";
-            std::exit(0);
+            // std::exit(0);
         }
 
         // arg_name = remove_substring(arg_name, "__ctaken_");
@@ -1132,6 +1134,8 @@ Function *FunctionAST::codegen() {
 
   // Solve templates
   std::unordered_map<int, int> ownid_to_memid;
+
+
   for (auto &body : Body) {
 
     body->SetCValues(parser_struct);
@@ -1192,7 +1196,7 @@ Function *FunctionAST::codegen() {
       EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   }
   
-  for (auto &[dt, name, memid, _] : P->CArgs.borrows) {
+  for (auto &[dt, _, name, _, memid] : P->CArgs.borrows) {
     // std::cout << "handle borrow " << function_name << " | " << name << " | " << memid << "\n";
     EvaluateBorrow(TheFunction, parser_struct, P->Line, P->BaseName, function_name, memid);
   }
