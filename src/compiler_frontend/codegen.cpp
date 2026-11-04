@@ -1195,12 +1195,8 @@ std::optional<Value*> SolveCtaken(std::string fn, int memid) {
 }
 std::optional<Value*> SolveCtaken(std::string fn, int memid, std::string identifier) {
     if (ctakens_var[fn].count(identifier)>0) {
-        LogBlue("as identifier " + identifier);
-        p2t("arg param");
-        call("print_void_ptr", {ctakens_var[fn][identifier]}); 
         return ctakens_var[fn][identifier];
     }
-
     if(ctakens[fn].count(memid)!=0)
         return ctakens[fn][memid];
 
@@ -5131,12 +5127,14 @@ void Nameable::DispatchLastSeen(std::string fn) {
 
             Data_Tree cleared_dt = fn_memid_to_dt[fn][memid];
 
-            bool is_owned = cleared_dt.is_own&&!(fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0);
+            bool is_transfered = fn_borrows.count(base_fn)>0&&fn_borrows[base_fn].count(memid)>0;
+            bool is_owned = cleared_dt.is_own&&!is_transfered;
+            bool has_ctaken = ctakens.count(fn)>0&&ctakens[fn].count(memid)>0; 
 
 
             // std::cout << "dispatch " << fn << "|" << memid << ": " << expr << "\n";
 
-            if ((ctakens.count(fn)>0&&ctakens[fn].count(memid)>0)||is_owned) {
+            if (has_ctaken||is_owned) {
                 // std::cout << "\t\tpassed " << "\n";
                 ExprAST *outermost = this;
                 GetOutermostConditionalExpr(BranchId.cstmt,
@@ -5146,7 +5144,7 @@ void Nameable::DispatchLastSeen(std::string fn) {
                     LogErrorS(Line, "Cannot track memid Value*: " + std::to_string(memid) + " in function " + fn);
                 }
 
-                // p2t("-->dispatch " + fn + " -> " + std::to_string(memid));
+                // p2t("-->dispatch " + fn + " -> " + std::to_string(memid) + ", transfered: " + std::to_string(is_transfered) + ", has ctaken: " + std::to_string(has_ctaken));
                 DispatchOwnedFree(base_fn, fn, fn_memid_to_val[fn][memid], memid, cleared_dt, outermost);
             }
         }

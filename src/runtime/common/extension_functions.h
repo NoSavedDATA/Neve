@@ -133,11 +133,12 @@ bool in_composite(T query,
             std::unordered_map<T, std::vector<std::vector<T>>>& composite) {
 
     for (const auto& [inner_key, vec_of_vecs] : composite) {
+        if (vec_of_vecs.size()==0)
+            continue;
         
-        if (inner_key == query) {
+        if (inner_key == query)
             return true;
-        }
-
+        
         for (const auto& inner_vec : vec_of_vecs) {
             if (std::find(inner_vec.begin(), inner_vec.end(), query) != inner_vec.end()) {
                 return true;

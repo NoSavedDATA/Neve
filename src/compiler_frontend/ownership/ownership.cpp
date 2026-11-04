@@ -15,8 +15,6 @@
 
 
 std::vector<int> GetAlias(std::string fn, int memid) {
-    // for(auto &alias : fn_memid_alias[fn][memid])
-    //     std::cout << "has alias: " << alias << "\n";
     std::vector<int> transfered_memids = {memid};
     for(auto &alias_v : fn_memid_alias[fn][memid]) {
         for(auto &alias : alias_v)
@@ -171,9 +169,9 @@ void TransferChecker::GetCallMostRestrictive(Parser_Struct *parser_struct,
     if (has_incomplete) {
         fn_borrows_incomplete[parser_struct->base_name].push_back(memid);
 
-        if (argexpr->IsSimpleVar()) {
-            std::cout << "\n\t\033[33mSEND " << parser_struct->fn() << "|" << callee << ": " << argexpr->GetName() << "\033[0m\n\n";
-        }
+        // if (argexpr->IsSimpleVar()) {
+        //     std::cout << "\n\t\033[33mSEND " << parser_struct->fn() << "|" << callee << ": " << argexpr->GetName() << "\033[0m\n\n";
+        // }
 
         std::string argname = (argexpr->IsSimpleVar())
                         ? argexpr->GetName()
@@ -710,10 +708,10 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
         return; // skip llvm fn
 
 
-    for(auto &[memid, aliases_group] : fn_memid_alias[base_callee])
-       for(auto &aliases : aliases_group) 
-           for(auto &alias : aliases) 
-                std::cout << "alias " << fn_name << "|" << memid << " to " << alias << "\n";
+    // for(auto &[memid, aliases_group] : fn_memid_alias[base_callee])
+    //    for(auto &aliases : aliases_group) 
+    //        for(auto &alias : aliases) 
+    //             std::cout << "alias " << fn_name << "|" << memid << " to " << alias << "\n";
 
 
     seen[fn_name] = 1;

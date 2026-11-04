@@ -956,9 +956,12 @@ void EvaluateBorrow(Function *TheFunction, Parser_Struct *parser_struct,
 
     if (ctakens[fn].count(memid)==0&&
             (has_alias||is_partial_take)) { // ignore args ctakens
+        // p2t("fn ctaken " + fn + ": " + std::to_string(memid) + ", is partial: "\
+        //         + std::to_string(is_partial_take) + " is alias: " \
+        //         + std::to_string(has_alias));
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, "ctaken_"+std::to_string(memid), boolTy);
         ctakens[fn][memid] = alloca;
-        Builder->CreateStore(const_bool(false),alloca);
+        Builder->CreateStore(const_bool(false), alloca);
     }
 
 
@@ -1085,18 +1088,11 @@ Function *FunctionAST::codegen() {
         if (map_has_val(fn_arg_memid[base_name], arg_memid)) {
             auto result = get_key_for_val(fn_arg_memid[base_name], arg_memid);
             ctakens_var[function_name][arg_name] = &Arg;
-            p2t("param ctaken: " + arg_name);
-            call("print_void_ptr", {&Arg});
-            std::cout << "\n\t\033[33mGOTCHA " << result.value() << "\033[0m\n\n";
-            // std::exit(0);
+            // p2t("param ctaken: " + arg_name);
+            // call("print_void_ptr", {&Arg});
+            // std::cout << "\n\t\033[33mGOTCHA " << result.value() << "\033[0m\n\n";
         }
-
-        // arg_name = remove_substring(arg_name, "__ctaken_");
-        // int arg_memid = fn_arg_memid[base_name][arg_name];
-
-        // if (begins_with(function_name, "ResNet")||begins_with(function_name, "Conv")||begins_with(function_name, "Batch"))
-        //     std::cout << "\n\t\033[32mARG CTaken " << function_name << " | " << arg_memid << "\033[0m\n\n";
-
+        // p2t("Param ctaken " + function_name + ": " + std::to_string(arg_memid));
         ctakens[function_name][arg_memid] = &Arg;
     } else {
         function_values[function_name][arg_name] = &Arg;
