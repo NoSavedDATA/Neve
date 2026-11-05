@@ -2957,10 +2957,12 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
   
 
   int last_offset=0, last_attr_idx=0;
-  while (in_vec(CurTok, {tok_data, tok_view, tok_identifier, tok_struct, tok_channel})) {
+  while (in_vec(CurTok,
+               {tok_data, tok_view, tok_identifier, tok_struct, tok_channel})) {
+
     std::string data_type = IdentifierStr;
-    bool is_object = Classes.count(data_type)>0;
-    bool is_channel=CurTok==tok_channel;
+    bool is_object  = Classes.count(data_type)>0;
+    bool is_channel = CurTok==tok_channel;
 
     bool is_owned=false,is_view=false;
     bool is_struct = in_vec(data_type,compound_tokens)||data_type=="channel"; 
@@ -2977,7 +2979,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct *parser_struct) {
       
       if (is_object)
         Object_toClass[Name][IdentifierStr] = Data_Tree(data_type);
-      
 
 
       typeVars[Name][IdentifierStr] = data_type; 

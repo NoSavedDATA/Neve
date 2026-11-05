@@ -523,9 +523,9 @@ std::string GenTemplate(Parser_Struct *parser_struct, std::string fn,
         CallArgsTy templ = t_templ;
 
         // if (ends_with(fn, "register")||begins_with(fn, "bar")) {
-        //     std::cout << "compare " << fn << ": " << Template_FnAST[fn].size() << "\n";
-        //     print_dt_vec(CArgs.dts);
-        //     print_dt_vec(templ.dts);
+            // std::cout << "compare " << fn << ": " << Template_FnAST[fn].size() << "\n";
+            // print_dt_vec(CArgs.dts);
+            // print_dt_vec(templ.dts);
         // }
 
         if (!CompareDTs(CArgs, templ, true, true))
@@ -1217,6 +1217,9 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         if (dt.is_own==ownTy)
           function_owns[fn][arg_name] = (*parser_struct->owned_id)++;
 
+
+        // std::cout << "mini fn " << fn << " -- " << arg_name << "\n"; 
+        // dt.Print();
 
         if (dt.IsFromArena()) {
           int memid = (*parser_struct->mem_id)++; 
@@ -2382,6 +2385,14 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
       }
   }
 
+  if (LType=="char"&&Op==tok_offby) {
+    Data_Tree ret_dt = Data_Tree("char");
+    ret_dt.is_buffer=true;
+    Elements = "buffer_i8_" + RType;    
+    Operation = Elements + "_" + operation;
+    return ret_dt;
+  }
+
 
 
   if (LType=="char")
@@ -2454,10 +2465,7 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
           &&!in_str(RType, primary_data_tokens)&&RType!="str")
     Operation = "channel_void_message";
 
-  // std::cout << "\n";
-  //   std::cout << "op" << "\n";
-  //   L_dt.Print();
-  //   std::cout << Operation << "\n";
+
 
   BaseOperation = Operation;
   FunctionChecks(Operation);
@@ -3285,6 +3293,8 @@ PrototypeAST::PrototypeAST(Parser_Struct *parser_struct,
         typeVars[this->Name][arg_name] = arg.Type;
         CArgs.args.push_back(arg_name);
 
+
+
         if (arg.IsFromArena()) {
           int MemId = (*parser_struct->mem_id)++;
           fn_memid[BaseName][arg_name] = MemId;
@@ -3435,8 +3445,6 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
       LogErrorS(Line, "Can only index tuple with a constant integer.");
   } 
 
-  if(compound_type=="list" && inner_dt.Nested_Data.size()==0)
-      return Data_Tree("any");
 
   if(compound_type=="map")
     return inner_dt.Nested_Data[1];

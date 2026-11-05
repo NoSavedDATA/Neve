@@ -213,6 +213,12 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
         return 0;
 
 
+    if(Type=="str"||(other_type=="char"&&other_tree.IsBuffered()))
+        return 0;
+    if((Type=="char"&&IsBuffered())||other_type=="str")
+        return 0;
+
+
     if((is_array||is_buffer)!=(other_tree.is_array||other_tree.is_buffer)&&
         Type!="any"&&other_type!="any")
         return 1;
@@ -241,8 +247,6 @@ int Data_Tree::Compare(Data_Tree other_tree) const {
 
 
 
-    if(Type=="charv"||other_type=="charv")
-        return 0;
 
     if(Type=="array"&&other_type=="array")
         return CompareArrays(this, other_tree);
