@@ -839,14 +839,17 @@ Value *print(Parser_Struct * parser_struct, Function *TheFunction,
             size = Builder->CreateExtractValue(print_val, {1});
             call("memcpy", {print_gep, str_v, Builder->CreateIntCast(size,int64Ty,true)});
         } else if (arg_type=="char") {
-            size = const_int(1);
-            Builder->CreateStore(print_val, print_gep);
+            if (args_type[i].IsBuffered()) {
+                Value *max_len = const_int64(1024);
+                size = callret("strnlen", {print_val, max_len});
+                Value *memcpy_size = Builder->CreateIntCast(size, int64Ty, true);
+                call("memcpy", {print_gep, print_val, memcpy_size});
+            } else {
+                size = const_int(1);
+                Builder->CreateStore(print_val, print_gep);
+            }
         } else {
             std::string callee = arg_type + "_to_str_buffer";
-            // if (arg_type=="bool") {
-            //     printTy(print_val);
-            //     call("print_bool", {print_val});
-            // }
             size = callret(callee, {scope_struct, print_val, print_gep});
         }
 
