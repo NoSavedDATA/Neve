@@ -8,7 +8,6 @@ samples/
 src_reference/
 sys_lib/
 temp/
-Dockerfile
 Makefile_*
 foo.nk
 foo_backup.nk
