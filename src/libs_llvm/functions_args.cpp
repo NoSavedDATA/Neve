@@ -239,6 +239,15 @@ void set_functions_args_type() {
 		fn_argnames["scope_struct_Save_for_Async"].push_back("0");
 		fn_argnames["scope_struct_Save_for_Async"].push_back("1");
 		
+		Function_Arg_Types["scope_struct_Load_for_Async"]["0"] = "Scope_Struct";
+		Function_Arg_Types["scope_struct_Load_for_Async"]["1"] = "int";
+		
+		Function_Arg_DataTypes["scope_struct_Load_for_Async"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["scope_struct_Load_for_Async"]["1"] = Data_Tree("int");
+		
+		fn_argnames["scope_struct_Load_for_Async"].push_back("0");
+		fn_argnames["scope_struct_Load_for_Async"].push_back("1");
+		
 		Function_Arg_Types["scope_struct_Store_Asyncs_Count"]["0"] = "Scope_Struct";
 		Function_Arg_Types["scope_struct_Store_Asyncs_Count"]["1"] = "int";
 		

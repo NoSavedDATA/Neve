@@ -155,11 +155,14 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
         assigned_ids.insert(thread_id);
         has_id = true;
     }
-    
+
     scope_struct->thread_id = thread_id;
+
+    // std::cout << "INC THREAD: " << scope_struct->thread_id << "\n";
+
     auto state = new Thread_State(scope_struct);
     scope_struct->spans = state;
-    scope_struct->gc->states[thread_id] = state;
+    scope_struct->gc->states[scope_struct->thread_id] = state;
     return 0;
 }
 
@@ -175,9 +178,20 @@ extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn
     NamedScopeStructs[fn_name] = scope_struct;
 }
 
-extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
-    Scope_Struct *scope_struct = NamedScopeStructs[fn_name];
+// extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
+//     Scope_Struct *scope_struct = NamedScopeStructs[fn_name];
+//
+//     Scope_Struct *scope_struct_copy = new Scope_Struct();
+//     scope_struct_copy->Copy(scope_struct);
+//
+//     for(int i=0; i<uniques_count; ++i)
+//         scope_struct_copy->pointers_stack[i] = scope_struct->pointers_stack[i];
+//     scope_struct_copy->stack_top = uniques_count;
+//
+//     return scope_struct_copy;
+// }
 
+extern "C" void *scope_struct_Load_for_Async(Scope_Struct *scope_struct, int uniques_count) {
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
 
@@ -187,6 +201,7 @@ extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
 
     return scope_struct_copy;
 }
+
 
 extern "C" void scope_struct_Store_Asyncs_Count(Scope_Struct *scope_struct, int asyncs_count) {
     scope_struct->asyncs_count = asyncs_count;

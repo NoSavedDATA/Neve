@@ -1090,6 +1090,23 @@ class ChannelExprAST : public ExprAST {
 
 
 
+
+class AsyncImpl {
+    public:
+        virtual ~AsyncImpl() = default;
+         
+        virtual void GetInnerVars(Value *scope_struct,
+                    Parser_Struct *parser_struct,
+                    int tid,
+                    std::vector<std::unique_ptr<ExprAST>> &Body);
+
+        std::vector<std::tuple<std::string,llvm::Type*,Value*>> Vars;
+        StructType *async_st;
+        Value *async_ctx;
+        int async_st_size=0;
+};
+
+
 class AsyncFnPriorExprAST : public ExprAST {
 
   public:
@@ -1099,7 +1116,7 @@ class AsyncFnPriorExprAST : public ExprAST {
   void SetCValues(Parser_Struct *) override;
 };
 
-class SpawnExprAST : public ExprAST {
+class SpawnExprAST : public ExprAST, public AsyncImpl {
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
@@ -1117,7 +1134,7 @@ class SpawnExprAST : public ExprAST {
 
   
 /// AsyncExprAST - Expression class for async.
-class AsyncExprAST : public ExprAST {
+class AsyncExprAST : public ExprAST, public AsyncImpl {
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
@@ -1148,7 +1165,7 @@ class FinishExprAST : public ExprAST {
 };
 
 
-class AsyncsExprAST : public ExprAST {
+class AsyncsExprAST : public ExprAST, AsyncImpl {
   std::vector<std::unique_ptr<ExprAST>> Body;
   std::unique_ptr<ExprAST> Count;
 

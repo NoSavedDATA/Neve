@@ -1808,7 +1808,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *scope_struct_Load_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);

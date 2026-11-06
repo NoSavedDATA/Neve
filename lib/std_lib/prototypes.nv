@@ -16,6 +16,8 @@ proto int simd_store(any,any)
 proto int str_size(str)
 proto int dsize(int)
 proto void c_free(any)
+# proto i64 sys read(int,any,int)
+# proto i64 c_read(int,any,int)
 proto any c_malloc(int)
 proto any c_malloc32(i64)
 proto any c_malloc64(i64)
@@ -39,6 +41,10 @@ proto bool map_has_str(map<str,any>, str)
 proto bool map_has_void_ptr(map<any,any>, any)
 
 proto int map_clear(any)
+
+
+
+
 
 
 operation float[] buffer_float_int_offby

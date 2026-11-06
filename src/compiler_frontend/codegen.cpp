@@ -3,6 +3,7 @@
 #include "llvm/IR/Verifier.h"
 
 #include <execution>
+#include <future>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -3437,9 +3438,12 @@ Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
 
 
 Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, \
-        Value *scope_struct, \
-        Parser_Struct *parser_struct, std::string async_suffix,\
-        Value *AsyncsCount) {
+            Value *scope_struct,
+            Parser_Struct *parser_struct, std::string async_suffix,
+            Value *AsyncsCount,
+            std::vector<std::tuple<std::string,llvm::Type*,Value*>> &Vars,
+            StructType *async_st
+        ) {
 
 
     // find existing unique function name (_async_1, _async_2, _async_3 etc)
@@ -3464,40 +3468,50 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
                 TheModule.get());
 
 
-    std::vector<std::string> previous_scope_value_types;
-    std::vector<std::string> previous_scope_value_names;
-    for (auto &pair : function_values[parser_struct->fn()]) {
-        if(pair.first=="QQ_stack_top"||in_vec(pair.first, int_fn_values))
-            continue;
 
-        std::string type;
-        if (Object_toClass[parser_struct->fn()].count(pair.first)>0)
-            type = "void";
-        else {   
-            Data_Tree dt = data_typeVars[parser_struct->fn()][pair.first];
-            type = UnmangleVec(dt);
-            if(!in_vec(type, primary_data_tokens)||dt.is_array||dt.is_buffer)
-                type="void";
-        }
-
-        call("dive_"+type, {global_str(functionName), pair.second, global_str(pair.first)});
-
-        previous_scope_value_types.push_back(type);
-        previous_scope_value_names.push_back(pair.first);
-    }
-
+    std::string async_scope = parser_struct->fn() + async_suffix;
     int uniques_size = Global_Uniques_Idx.size(); 
 
-    //Dive scope_struct
-    call("scope_struct_Save_for_Async", {scope_struct, global_str(functionName)}); 
 
     // emit EntryBB value
     BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
     Builder->SetInsertPoint(BB);
 
-    // Recover scope_struct Value * on the new function
-    Value *scope_struct_copy = callret("scope_struct_Load_for_Async", {const_int(uniques_size), global_str(functionName)}); 
 
+    
+    Value *async_ctx = asyncFun->arg_begin();
+
+    Value *prev_scope_struct = Builder->CreateLoad(int8PtrTy,
+                Builder->CreateStructGEP(async_st, async_ctx, 0)
+            );
+    Value *scope_struct_copy = callret("scope_struct_Load_for_Async",
+            {prev_scope_struct,const_int(uniques_size)}); 
+
+
+
+    Value *tid = Builder->CreateLoad(intTy,
+                Builder->CreateStructGEP(async_st, async_ctx, 1)
+            );
+
+
+
+    Builder->CreateStore(tid, Builder->CreateStructGEP(
+                struct_types["scope_struct"],
+                scope_struct_copy, 1 
+            ));
+    Value *tid_load = Builder->CreateLoad(intTy, Builder->CreateStructGEP(
+                struct_types["scope_struct"],
+                scope_struct_copy, 1 
+            ));
+
+
+   for(int i=2; i<Vars.size(); ++i)  {
+       auto &[identifier, ty, _] = Vars[i];
+       Value *val = Builder->CreateLoad(ty, Builder->CreateStructGEP(
+                async_st, async_ctx, i
+           ));
+        function_values[async_scope][identifier] = val;
+   }
 
 
 
@@ -3511,19 +3525,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
-    std::string async_scope = parser_struct->fn() + async_suffix;
-    for(int i=0; i<previous_scope_value_names.size(); ++i) {
-        std::string type = previous_scope_value_types[i];
-        std::string var_name = previous_scope_value_names[i];
 
-        Value *v = callret("emerge_"+type, {global_str(functionName), global_str(var_name)});
-
-        llvm::Type *llvm_type = get_type_from_str(type);
-        function_values[async_scope][var_name] = v;
-    }
     function_values[async_scope]["QQ_stack_top"] = const_int(uniques_size);
-
-
 
 
     block_values[BB] = function_values[parser_struct->fn()];
@@ -3537,6 +3540,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
     if (V) { 
+        call("free", {async_ctx});
         Builder->CreateRet(Constant::getNullValue(int8PtrTy));  
 
 
@@ -3561,10 +3565,81 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
 
 
 
+
+void AsyncImpl::GetInnerVars(Value *scope_struct,
+        Parser_Struct *parser_struct,
+        int tid,
+        std::vector<std::unique_ptr<ExprAST>> &Body) {
+
+    auto fn_val = function_values[parser_struct->fn()];
+
+    Vars.push_back({"scope_struct", int8PtrTy, scope_struct});
+    Vars.push_back({"tid", intTy, const_int(tid)});
+
+    for(auto &body : Body) {
+        body->Traverse([&fn_val, &parser_struct, this](ExprAST *node) {
+
+            // First-class functions
+            if (auto *stmt = dynamic_cast<NameableCall*>(node)) {
+                std::string name = stmt->Callee;
+
+                if(function_values[parser_struct->fn()].count(name)) {
+                    Vars.push_back({name,
+                            int8PtrTy,
+                            function_values[parser_struct->fn()][name]});
+                }
+            }
+
+            // Pass objects and stack vars
+            if (auto *stmt = dynamic_cast<Nameable*>(node)) {
+                while (stmt->Depth>1&&stmt->Inner) {
+                    std::string name = stmt->GetName();
+                    stmt = stmt->Inner.get();
+                }
+
+                std::string name = stmt->GetName();
+                if (fn_val.count(name)>0) {
+                    Data_Tree dt = stmt->GetDataTree();
+                    Vars.push_back({name,
+                            get_type_from_data(parser_struct, dt),
+                            fn_val[name]});
+                } 
+            }
+        });
+    }
+
+
+    std::vector<llvm::Type*> Ty;
+    for(auto &[_,ty,_] : Vars)
+        Ty.push_back(ty);
+    async_st = StructType::create(
+        *TheContext, Ty,
+        "st.async_payload"
+    );
+    const DataLayout &DL = TheModule->getDataLayout();
+    async_st_size = DL.getTypeAllocSize(async_st);
+
+    async_ctx = callret("malloc", {const_int(async_st_size)});
+
+
+
+    int i=0;
+    for(auto &[_,ty,val] : Vars) {
+        Value *gep = Builder->CreateStructGEP(
+                       async_st,async_ctx,i++);
+        Builder->CreateStore(val, gep);
+    }
+}
+
+
 Value *SpawnExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0));
+
+    GetInnerVars(scope_struct, parser_struct, 0, Body);
+
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn", const_int(0),Vars,async_st);
+
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct->fn()];
 
@@ -3579,7 +3654,7 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
             {pthreadPtr,
             voidPtrNull,
             asyncFun,
-            voidPtrNull}
+            async_ctx}
         );
 
     return const_float(0);
@@ -3603,8 +3678,10 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
 
     // Value *barrier = callret("get_barrier", {const_int(1)});
 
+    GetInnerVars(scope_struct, parser_struct, 0, Body);
+
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", const_int(0));
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async", const_int(0), Vars, async_st);
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct->fn()];
 
@@ -3624,7 +3701,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
             {pthreadPtr,
             voidPtrNull,
             asyncFun,
-            voidPtrNull}
+            async_ctx}
             );
 
     p2t("AsyncExpr Created join call");
@@ -3640,6 +3717,8 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
     // Create/Spawn Threads
+    
+    GetInnerVars(scope_struct, parser_struct, 0, Body);
 
     Value *count = Count->codegen(scope_struct);
     call("scope_struct_Store_Asyncs_Count", {scope_struct, count});
@@ -3647,7 +3726,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", count);
+    Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs", count, Vars, async_st);
 
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct->fn()];
@@ -3677,15 +3756,24 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
     PHINode *idx = Builder->CreatePHI(intTy, 2);
     idx->addIncoming(const_int(0), CurrentBB);
 
+
+    Value *async_ctx_cpy = callret("malloc", {const_int(async_st_size)});
+    call("memcpy", {async_ctx_cpy, async_ctx, const_int(async_st_size)});
+
+    Builder->CreateStore(idx, Builder->CreateStructGEP(
+                    async_st, async_ctx_cpy, 1
+                ));
+
+
     Value *pthreadPtr = Builder->CreateAlloca(int8PtrTy, nullptr);
     Value *voidPtrNull = Constant::getNullValue(int8PtrTy);
     call("pthread_create_aux",
             {pthreadPtr,
             voidPtrNull,
             asyncFun,
-            voidPtrNull}
+            async_ctx_cpy}
         );
-    
+
     Value *handle = Builder->CreateLoad(int64Ty, pthreadPtr);
     Value *thread_ptr_gep = Builder->CreateGEP(int64Ty, thread_ptrs, idx);
     Builder->CreateStore(handle, thread_ptr_gep);
@@ -3698,13 +3786,15 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
 
     Builder->SetInsertPoint(AfterBB);
+
+    call("free", {async_ctx});
     return st_thread_ptrs;
 }
 
 
 Value *IncThreadIdExprAST::codegen(Value *scope_struct) {
     call("scope_struct_Increment_Thread", {scope_struct});
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_int(0);
 }
 
 

@@ -322,52 +322,60 @@ static int get_token(bool block) {
   }
 
   if (LastChar=='\'') {
-    LastChar = tokenizer->get();
-
-    if (LastChar == '\\') {              // escape sequence
         LastChar = tokenizer->get();
-        switch (LastChar) {
-            case 'n': NumVal = '\n'; break;
-            case 't': NumVal = '\t'; break;
-            case '0': NumVal = '\0'; break;
-            case 'r': NumVal = '\r'; break;
-            case '\\': NumVal = '\\'; break;
-            case '\'': NumVal = '\''; break;
-            default:
-                LogErrorC(tokenizer->Line, "Unknown escape sequence");
+
+        if (LastChar == '\\') {              // escape sequence
+            LastChar = tokenizer->get();
+            switch (LastChar) {
+                case 'n': NumVal = '\n'; break;
+                case 't': NumVal = '\t'; break;
+                case '0': NumVal = '\0'; break;
+                case 'r': NumVal = '\r'; break;
+                case '\\': NumVal = '\\'; break;
+                case '\'': NumVal = '\''; break;
+                default:
+                    LogErrorC(tokenizer->Line, "Unknown escape sequence");
+            }
+        } else
+            NumVal = LastChar;               // normal char
+        
+
+        LastChar = tokenizer->get();
+
+        if (LastChar!='\'')
+            LogErrorC(tokenizer->Line, "Could not find matching '");
+
+        LastChar = tokenizer->get();
+        return tok_char;
+    }
+
+    if (LastChar == '"') {
+        IdentifierStr = ""; // Initialize empty string
+        LastChar = tokenizer->get(); // Get first character inside the string
+
+        while (LastChar != '"') {
+          if (LastChar == '\\') {              // Escape sequence detected
+            LastChar = tokenizer->get();
+            switch (LastChar) {
+              case 'n': IdentifierStr += '\n'; break;
+              case 't': IdentifierStr += '\t'; break;
+              case '0': IdentifierStr += '\0'; break;
+              case 'r': IdentifierStr += '\r'; break;
+              case '\\': IdentifierStr += '\\'; break;
+              case '"': IdentifierStr += '"'; break;   // Handle escaped double quotes inside strings
+              case '\'': IdentifierStr += '\''; break;
+              default:
+                LogErrorC(tokenizer->Line, "Unknown escape sequence in string");
+            }
+          } else {
+            IdentifierStr += LastChar;         // Normal character
+          }
+          
+          LastChar = tokenizer->get();
         }
-    } else
-        NumVal = LastChar;               // normal char
-    
-
-    LastChar = tokenizer->get();
-
-    if (LastChar!='\'')
-        LogErrorC(tokenizer->Line, "Could not find matching '");
-
-    LastChar = tokenizer->get();
-    return tok_char;
-}
-
-  if (LastChar=='"') {
-
-    LastChar = tokenizer->get();
-    if (LastChar=='"') {
-      IdentifierStr = "";
-      LastChar = tokenizer->get();
-      return tok_str;
-    }
-    IdentifierStr = LastChar;
-
-    while (true) {
-      LastChar = tokenizer->get();
-      if(LastChar=='"')
-        break;
-      IdentifierStr += LastChar;
-    }
-    LastChar = tokenizer->get();
-    
-    return tok_str;
+        
+        LastChar = tokenizer->get(); // Consume the closing '"'
+        return tok_str;
   }
 
 
