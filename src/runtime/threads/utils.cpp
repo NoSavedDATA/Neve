@@ -102,10 +102,21 @@ extern "C" void pthread_join_aux(pthread_t thread)
 #else
 
 
+extern "C" void spawn_create_aux(pthread_t *thread,
+        void *attr, void *(*start_routine)(void *), void *arg) {
+    pthread_attr_t detached_attr;
+    pthread_attr_init(&detached_attr);
+    pthread_attr_setdetachstate(&detached_attr, PTHREAD_CREATE_DETACHED);
+    
+    pthread_create(thread, &detached_attr, start_routine, arg);
+    
+    pthread_attr_destroy(&detached_attr);
+}
+
+
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*function_ptr) (void *arg), void *arg) {
   pthread_create(thread, attr, function_ptr, arg);
-  uint64_t thread_id = *(uint64_t*)thread;
 }
 
 

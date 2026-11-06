@@ -3437,7 +3437,8 @@ Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, \
+Function *codegenAsyncFunction(
+            std::vector<std::unique_ptr<ExprAST>> asyncBody,
             Value *scope_struct,
             Parser_Struct *parser_struct, std::string async_suffix,
             Value *AsyncsCount,
@@ -3650,7 +3651,13 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
     Value *voidPtrNull = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
 
 
-    call("pthread_create_aux",
+    // call("pthread_create_aux",
+    //         {pthreadPtr,
+    //         voidPtrNull,
+    //         asyncFun,
+    //         async_ctx}
+    //     );
+    call("spawn_create_aux",
             {pthreadPtr,
             voidPtrNull,
             asyncFun,

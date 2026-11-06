@@ -264,6 +264,13 @@ void Generate_LLVM_Functions() {
 
 
 
+	FunctionType *spawn_create_auxTy= FunctionType::get(
+		Type::getVoidTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("spawn_create_aux", spawn_create_auxTy);
+
 
 
 	FunctionType *map_CreateTy= FunctionType::get(
