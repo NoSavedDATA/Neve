@@ -90,18 +90,16 @@ WorkList::WorkList(GC_Node node) : node(node) {};
 
 
 void GC::stw() {
-    for (int i=0; i<MAX_THREADS; ++i) {
-        auto state = states[i];
-        if (state)
-            __atomic_store_n(&state->stw, true, __ATOMIC_RELEASE);
+    for (auto* state : states) {
+        if (state == nullptr) continue; 
+        __atomic_store_n(&state->stw, true, __ATOMIC_RELEASE);
     }
 }
 
 void GC::un_stw() {
-    for (int i=0; i<MAX_THREADS; ++i) {
-        auto state = states[i];
-        if (state)
-            __atomic_store_n(&state->stw, false, __ATOMIC_RELEASE);
+    for (auto* state : states) {
+        if (state == nullptr) continue; 
+        __atomic_store_n(&state->stw, false, __ATOMIC_RELEASE);
     }
 }
 
@@ -187,11 +185,18 @@ extern "C" void scope_struct_Alloc_GC(Scope_Struct *scope_struct) {
     // Only in main thread main expr
     GC *gc = new GC(scope_struct->thread_id);
     scope_struct->gc = gc;
-    scope_struct->spans = new Thread_State(scope_struct);
+    auto state = new Thread_State(scope_struct);
+    scope_struct->spans = state;
+
     if(concurrent)
         scope_struct->gc_thread = std::thread(GC_Observer, scope_struct);
 
-    scope_struct->gc->states[0] = scope_struct->spans;
+    {
+        std::lock_guard<std::mutex> lock(scope_struct->gc->states_mutex);
+        scope_struct->gc->states.push_back(state);
+    }
+
+    // scope_struct->gc->states[0] = scope_struct->spans;
 }
 
 

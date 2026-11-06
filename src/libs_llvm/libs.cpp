@@ -1806,13 +1806,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
 
-	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
-		Type::getVoidTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
-
 	FunctionType *scope_struct_Load_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},

@@ -410,15 +410,13 @@ void GC::Sweep(Scope_Struct *scope_struct) {
     int tid = scope_struct->thread_id;
     __atomic_store_n(&marking, true, __ATOMIC_RELEASE);
 
-    // std::cout << "<>>>>>>>>>>>sweep" << "\n";
     // std::exit(0);
     arena->gen += 2;
 
     stw();
-    for (int i=0; i<MAX_THREADS; ++i) {
-        auto state = states[i];
-        if (state)
-            arena->check_roots_worklist(state->ctx, mark_bit);
+    for (auto* state : states) {
+        if (state == nullptr) continue; 
+        arena->check_roots_worklist(state->ctx, mark_bit);
     }
     un_stw();
     arena->mark_worklist_pointers(states[0]->ctx, mark_bit);

@@ -162,7 +162,21 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
 
     auto state = new Thread_State(scope_struct);
     scope_struct->spans = state;
-    scope_struct->gc->states[scope_struct->thread_id] = state;
+    // scope_struct->gc->states[scope_struct->thread_id] = state;
+
+    std::lock_guard<std::mutex> lock(scope_struct->gc->states_mutex);
+
+    if (!scope_struct->gc->free_states.empty()) {
+        // Reuse a dead thread's ID
+        scope_struct->thread_id = scope_struct->gc->free_states.back();
+        scope_struct->gc->free_states.pop_back();
+        scope_struct->gc->states[scope_struct->thread_id] = state;
+    } else {
+        // Grow the array and grab the new ID
+        scope_struct->thread_id = scope_struct->gc->states.size();
+        scope_struct->gc->states.push_back(state);
+    }
+
     return 0;
 }
 
@@ -174,22 +188,7 @@ extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
 
 
 
-extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn_name) {
-    NamedScopeStructs[fn_name] = scope_struct;
-}
 
-// extern "C" void *scope_struct_Load_for_Async(int uniques_count, char *fn_name) {
-//     Scope_Struct *scope_struct = NamedScopeStructs[fn_name];
-//
-//     Scope_Struct *scope_struct_copy = new Scope_Struct();
-//     scope_struct_copy->Copy(scope_struct);
-//
-//     for(int i=0; i<uniques_count; ++i)
-//         scope_struct_copy->pointers_stack[i] = scope_struct->pointers_stack[i];
-//     scope_struct_copy->stack_top = uniques_count;
-//
-//     return scope_struct_copy;
-// }
 
 extern "C" void *scope_struct_Load_for_Async(Scope_Struct *scope_struct, int uniques_count) {
     Scope_Struct *scope_struct_copy = new Scope_Struct();
@@ -245,6 +244,7 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     // std::cout << "sweep: " << scope_struct << " - / - " << gc << ".\n";
     // scope_struct->Print_Stack();
     // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
+    //
     gc->Sweep(scope_struct);
 }
 
@@ -255,5 +255,15 @@ extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
     // scope_struct->gc->states[tid] = nullptr;
     // free(scope_struct->spans);
     // free(scope_struct);
+    //
+    if (scope_struct->spans) {
+        {
+            std::lock_guard<std::mutex> lock(scope_struct->gc->states_mutex);
+            scope_struct->gc->states[scope_struct->thread_id] = nullptr;
+            scope_struct->gc->free_states.push_back(scope_struct->thread_id);
+        }
+        
+        delete (Thread_State*)scope_struct->spans;
+    }
 }
 

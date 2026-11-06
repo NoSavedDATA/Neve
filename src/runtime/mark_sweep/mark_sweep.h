@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <unordered_set>
 
 #include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging_v.h"
@@ -253,7 +254,10 @@ struct GC {
     DT_array_retire *retired_arr=nullptr;
     DT_node_retire *retired_nodes=nullptr;
 
-    std::array<Thread_State*, MAX_THREADS> states{};
+    // std::array<Thread_State*, MAX_THREADS> states{};
+    std::mutex states_mutex;
+    std::vector<Thread_State*> states;
+    std::vector<int> free_states;
     
     GC(int);
     void DoubleSize(Scope_Struct*);
