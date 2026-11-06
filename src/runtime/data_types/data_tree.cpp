@@ -191,6 +191,11 @@ bool CheckChannel(const Data_Tree *L_ptr, Data_Tree R) {
 
 
 
+bool Data_Tree::IsFunction() const {    
+    return Type=="function"||Type=="Function";
+}
+
+
 int Data_Tree::Compare(Data_Tree other_tree) const {    
     int comparisons = 0;
 

@@ -34,6 +34,7 @@ struct Data_Tree {
     bool IsBuffered() const;
     bool HasGeneric() const;
     bool IsLayoutUnpack(Data_Tree R) const;
+    bool IsFunction() const;
     bool Has(std::string type) const;
     std::vector<Data_Tree> FilterLayoutDims() const;
 };

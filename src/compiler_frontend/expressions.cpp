@@ -1302,6 +1302,8 @@ inline void Semantic_Arguments_Check(Parser_Struct *parser_struct, int Line,
         break;
     Args[i]->Checks();
     Data_Tree data_type = Args[i]->GetDataTree();
+
+    
     
     int tgt_arg = i + arg_offset;
 
@@ -1694,6 +1696,8 @@ void UnkVarExprAST::Checks() {
       dt = dt.Nested_Data[0];
     }
     data_typeVars[parser_struct->fn()][VarName] = dt;
+
+
   }
 
 
@@ -1817,6 +1821,7 @@ void DataExprAST::Checks() {
 
     data_typeVars[parser_struct->fn()][VarName] = data_type;
     typeVars[parser_struct->fn()][IdentifierStr] = data_type.Type;
+
 
 
     create_fn = this->Type;
@@ -2357,9 +2362,6 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   R_dt = RHS->GetDataTree();
 
 
-  if (R_dt.Type=="function") {
-      FunctionChecks(RHS->GetName());
-  }
 
   std::string LType = UnmangleVec(L_dt), RType = UnmangleVec(R_dt);
   if(ends_with(LType, "channel"))
@@ -3709,6 +3711,10 @@ bool NameableCall::GetNeedGCSafePoint() {
 void Nameable::Checks() {
   if (checked)
     return;
+  if (Depth==1&&fn_ret_dt.count(Name)>0) // first-class function
+    FunctionChecks(Name);
+  
+
   checked=true;
   if (IsUnique||IsOwnedUnique) {
     int memid;
@@ -3945,7 +3951,6 @@ Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
 
 
 void FunctionChecks(std::string fn_name) {
-
     if (TheJIT->fn_map.count(fn_name)>0) {
       if (in_vec(fn_name, fn_called))
            return;
