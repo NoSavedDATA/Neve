@@ -3634,6 +3634,7 @@ void AsyncImpl::GetInnerVars(Value *scope_struct,
 
 
 Value *SpawnExprAST::codegen(Value *scope_struct) {
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
     BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
@@ -3644,8 +3645,8 @@ Value *SpawnExprAST::codegen(Value *scope_struct) {
     Builder->SetInsertPoint(CurrentBB);
     block_values[CurrentBB] = function_values[parser_struct->fn()];
 
-    PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-    Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
+
+    Value *pthreadPtr = CreateEntryBlockAlloca(TheFunction, "spawn", int8PtrTy);
 
 
     Value *voidPtrNull = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
@@ -3683,6 +3684,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
         return ConstantFP::get(*TheContext, APFloat(0.0f));
     // Create/Spawn Threads
 
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
     // Value *barrier = callret("get_barrier", {const_int(1)});
 
     GetInnerVars(scope_struct, parser_struct, 0, Body);
@@ -3695,9 +3697,8 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
     Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
 
-    PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-    Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
 
+    Value *pthreadPtr = CreateEntryBlockAlloca(TheFunction, "async", int8PtrTy);
 
 
     Value *voidPtrNull = Constant::getNullValue(
@@ -3772,7 +3773,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
                 ));
 
 
-    Value *pthreadPtr = Builder->CreateAlloca(int8PtrTy, nullptr);
+    Value *pthreadPtr = CreateEntryBlockAlloca(TheFunction, "async", int8PtrTy);
     Value *voidPtrNull = Constant::getNullValue(int8PtrTy);
     call("pthread_create_aux",
             {pthreadPtr,
