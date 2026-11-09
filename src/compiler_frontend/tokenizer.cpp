@@ -433,16 +433,6 @@ static int get_token(bool block) {
       IdentifierStr = "_tanh";
     return tok_identifier;
   }
-  // if (LastChar=='@') {
-  //   LastChar = tokenizer->get();
-  //   std::string NumStr;
-  //   do {
-  //     NumStr += LastChar;
-  //     LastChar = tokenizer.get();
-  //   } while(isdigit(LastChar));
-  //   NumVal = strtod(NumStr.c_str(), nullptr);
-  //   return tok_int;
-  // }
   
   if (isdigit(LastChar)) { // Number: [-.]+[0-9.]+
     int is_float=0;
@@ -490,10 +480,8 @@ static int get_token(bool block) {
 
   if (LastChar == '#') {
     // Comment until end of line.
-    tokenizer->Line++;
-    do {
+    do
       LastChar = tokenizer->get();
-    }
     while (LastChar != EOF && LastChar != '\n' && LastChar != 10 && LastChar != '\r');
 
     if (LastChar != EOF)
@@ -539,7 +527,8 @@ static int get_token(bool block) {
       ThisChar = (int)LastChar;
       LastChar = tokenizer->get(); 
     }
-    if (ThisChar==10&&isalpha(LastChar))
+    // if (ThisChar==10&&isalpha(LastChar))
+    if (ThisChar==10)
         SeenTabs = 0;
 
     return tok_space;
@@ -610,7 +599,6 @@ static int get_token(bool block) {
     return tok_ceil_div;
   }
 
-  //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";
 
   // else: return ascii number of the character.
   return ThisChar;

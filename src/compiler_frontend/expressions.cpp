@@ -1884,6 +1884,9 @@ DataExprAST::DataExprAST(
 }
 
 void DataExprAST::SetMemId() {
+  if (has_memid)
+      return;
+  has_memid=true;
 
   for(auto &[name, expr] : this->VarNames) {
     int memid;
@@ -1897,6 +1900,8 @@ void DataExprAST::SetMemId() {
         fn_memid[parser_struct->base_name][name] = memid;
         fn_memid_to_dt[parser_struct->fn()][memid] = data_type;
         Memids.push_back(memid);
+
+        std::cout << "data: " << parser_struct->base_name << ": " <<  name << "|" << memid << "\n"; 
     } else {
         expr->Checks();
         memid = expr->GetMemId()[0];
@@ -3708,9 +3713,31 @@ bool NameableCall::GetNeedGCSafePoint() {
     return true;
 }
 
+void Nameable::SetAlias() {
+  if (Depth>1||isSelf)
+      return;
+
+  std::string fn = parser_struct->base_name;
+
+  int memid = Memids[0];
+  Aliases.clear();
+  Aliases = {memid};
+  if (memid==OM_non_obj)
+      return;
+  // std::cout << "got memid: " << fn << ": " << Name << "|" << memid << "\n";
+
+  for(auto &alias_v : fn_memid_alias[fn][memid]) {
+    for(auto &alias : alias_v) {
+      // std::cout << "alias: " << alias << "\n";
+      Aliases.push_back(alias);
+    }
+  }
+}
+
 void Nameable::Checks() {
   if (checked)
     return;
+
   if (Depth==1&&fn_ret_dt.count(Name)>0) // first-class function
     FunctionChecks(Name);
   
@@ -3741,6 +3768,11 @@ void Nameable::Checks() {
     Memids[0] = GetMemId()[0];
     Ownedids[0] = GetIsOwned();
   }
+
+
+
+
+  SetAlias();
 }
 
 

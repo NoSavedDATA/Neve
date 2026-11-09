@@ -28,10 +28,17 @@ void SetLastSeen(std::string fn, int memid, ExprAST *expr) {
     auto aliases = GetAlias(fn, memid);
 
     for(auto &alias : aliases) {
-        // std::cout << "SET LAST SEEN " << fn << "|"<<alias << " - " << expr << "\n";
         fn_memid_to_lastseen[fn][alias] = expr;
     }
 }
+
+void SetLastSeen(std::string fn, std::vector<int> aliases, ExprAST *expr) {
+    for(auto &alias : aliases) {
+        fn_memid_to_lastseen[fn][alias] = expr;
+    }
+}
+
+
 
 
 
@@ -579,10 +586,10 @@ void TransferChecker::HandleNameable(Parser_Struct* parser_struct,
 
         ExprBranch branch = nameable->BranchId;
         branch.memid = memid;
-        SetLastSeen(parser_struct->base_name, memid, expr);
+        SetLastSeen(parser_struct->base_name, nameable->Aliases, expr);
 
         // Set owners last seen too
-        for(auto &alias : GetAlias(parser_struct->base_name, memid)) {
+        for(auto &alias : nameable->Aliases) {
             if (borrow_ids.count(alias)!=0) {
                 for(auto &parent_branch : borrow_ids[alias]) {
                     SetLastSeen(parser_struct->base_name, parent_branch.memid, expr);
@@ -590,7 +597,6 @@ void TransferChecker::HandleNameable(Parser_Struct* parser_struct,
             }
         }
     }
-
 }
 
 
@@ -707,6 +713,9 @@ void BorrowChecker(std::string base_callee, std::string fn_name,
             ||!TheJIT->fn_map.count(base_callee))
         return; // skip llvm fn
 
+
+    // for(auto &[name, val] : fn_memid[base_callee])
+    //     std::cout << "got " << base_callee << ": " << name << "|" << val << "\n";
 
     // for(auto &[memid, aliases_group] : fn_memid_alias[base_callee])
     //    for(auto &aliases : aliases_group) 

@@ -67,6 +67,7 @@ class ExprAST {
     std::string _pre_dot = "";
     bool isVec = false;
     bool isList = false;
+    bool has_memid = false;
     bool isVarLoad = false;
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
@@ -710,6 +711,7 @@ public:
 class Nameable : public ExprAST {
   public:
   std::vector<std::string> Expr_String = {};
+  std::vector<int> Aliases;
   std::unique_ptr<Nameable> Inner=nullptr;
   int Depth=1;
   std::vector<int> Memids={OM_non_obj}, Ownedids={OM_non_obj};
@@ -738,6 +740,7 @@ class Nameable : public ExprAST {
   void Traverse(const std::function<void(ExprAST*)>& fn, bool if_cut=false) override;
   void TraversePost(const std::function<void(ExprAST*)>& fn) override;
   void DispatchLastSeen(std::string);
+  void SetAlias();
   void Checks();
 };
 

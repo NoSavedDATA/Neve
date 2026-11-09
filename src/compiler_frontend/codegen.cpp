@@ -520,6 +520,48 @@ void SetPHIs(std::string fn, std::vector<std::string> &changed_vars,
     }
 }
 
+
+void GetExprUnusedOwns(std::string base_fn, std::string fn,
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> &VarNames,
+        std::vector<std::tuple<Data_Tree, Value*>> &unused
+      ) {
+
+   for(auto &[name, expr] : VarNames) {
+       if (!expr) continue;
+       int memid = expr->GetMemId()[0];
+       int ownid = expr->GetIsOwned();
+       bool is_own = (ownid!=OM_non_obj)||memid_to_ownedid[fn].count(memid)!=0;
+       if (memid!=OM_non_obj
+               &&is_own
+               &&!fn_memid_to_lastseen[base_fn].count(memid)) {
+           unused.push_back(
+                   {data_typeVars[fn][name],
+                    fn_memid_to_val[fn][memid]}
+                );
+       }
+   }
+}
+
+
+void Clear_Unused_Owns(Value *scope_struct, std::string base_fn, std::string fn,
+        std::vector<std::unique_ptr<ExprAST>> &Body) {
+    std::vector<std::tuple<Data_Tree, Value*>> now_vars;
+
+    for(auto &expr : Body) {
+       if (auto *stmt = dynamic_cast<ObjectExprAST*>(expr.get()))
+           GetExprUnusedOwns(base_fn, fn, stmt->VarNames, now_vars);
+       if (auto *stmt = dynamic_cast<DataExprAST*>(expr.get()))
+           GetExprUnusedOwns(base_fn, fn, stmt->VarNames, now_vars);
+       if (auto *stmt = dynamic_cast<UnkVarExprAST*>(expr.get()))
+           GetExprUnusedOwns(base_fn, fn, stmt->VarNames, now_vars);
+    }
+
+    for(auto &[dt, elem] : now_vars) {
+        OwnedsCleared[fn].push_back(elem);
+        Disown(scope_struct, dt, elem);
+    }
+}
+
 Value *NumberExprAST::codegen(Value *scope_struct) {
   if (!ShallCodegen)
     return const_float(0.0f);
@@ -1368,7 +1410,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
                     }
 
-                    create_fn += postfix;
                     // p2t("create " + create_fn);
 
                     if(struct_create_fn.count(dt_type)>0) {
@@ -1384,7 +1425,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
                                 ArgsV_slice);
                     }
                     else {
-                        initial_value = callret(create_fn, ArgsV);
+                        initial_value = callret(create_fn+postfix, ArgsV);
                     }
                 }
             }
@@ -1630,6 +1671,7 @@ Value *IfExprAST::codegen_from_loop(Value *scope_struct,
     auto then_ctakens = ctakens[fn];
     auto then_ctakens_var = ctakens_var[fn];
 
+
     // Emit else block.
     Builder->SetInsertPoint(ElseBB);
 
@@ -1792,7 +1834,14 @@ void SetBreakPHIS(Parser_Struct *parser_struct, std::vector<std::string> &assign
 
 
 
-void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>> &Body,
+
+
+
+
+
+void Codegen_Loop_Body(Value *scope_struct,
+        Parser_Struct *parser_struct,
+        std::vector<std::unique_ptr<ExprAST>> &Body,
         BasicBlock *LoopBB, BasicBlock *IncBB, BasicBlock *AfterBB,
         std::map<std::string, Value*> &break_values_snapshot,
         std::vector<BasicBlock *> &BreakBB, std::vector<BasicBlock *> &ContinueBB) {  
@@ -1805,6 +1854,7 @@ void Codegen_Loop_Body(Value *scope_struct, std::vector<std::unique_ptr<ExprAST>
             body->codegen(scope_struct);
     }
 
+    Clear_Unused_Owns(scope_struct, parser_struct->base_name, parser_struct->fn(), Body);
 }
 
 
@@ -1932,8 +1982,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
 
-    Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    Codegen_Loop_Body(scope_struct, parser_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
     block_values[Builder->GetInsertBlock()] = function_values[fn];
+
 
     Builder->CreateBr(IncBB);
     TheFunction->insert(TheFunction->end(), IncBB);
@@ -2090,7 +2141,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
-    Codegen_Loop_Body(scope_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
+    Codegen_Loop_Body(scope_struct,parser_struct, Body, LoopBB, IncBB, AfterBB, break_values_snapshot, BreakBB, ContinueBB);
     block_values[Builder->GetInsertBlock()] = function_values[fn];
 
 
@@ -2172,7 +2223,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
     std::map<std::string, Value*> break_values_snapshot;
     std::vector<BasicBlock *> BreakBB, ContinueBB;
-    Codegen_Loop_Body(scope_struct, Body,
+    Codegen_Loop_Body(scope_struct, parser_struct, Body,
             LoopBB, CondBB, AfterBB,
             break_values_snapshot,
             BreakBB, ContinueBB);
