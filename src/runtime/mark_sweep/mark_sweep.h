@@ -29,7 +29,8 @@ const int GC_page_size=8192;
 
 constexpr size_t sweep_after_alloc = 32 << 20;
 //constexpr size_t GC_arena_size = 1024 << 20;
-constexpr size_t GC_arena_size = 256 << 20;
+// constexpr size_t GC_arena_size = 256 << 20;
+constexpr size_t GC_arena_size = 512 << 20;
 // constexpr size_t GC_arena_size = 64 << 20;
 
 constexpr size_t pages_per_arena = GC_arena_size / GC_page_size;
