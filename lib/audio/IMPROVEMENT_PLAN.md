@@ -6,21 +6,27 @@ Open problems are listed in `KNOWN_ISSUES.md`; full benchmark tables are in `aud
 
 ## 1. Current state
 
-Benchmark of 2026-11-10 (Docker, clang-21, one core, median of 3 runs, 10 s mono 16 kHz), Neve vs the fastest of librosa and torchaudio:
+Benchmark of 2026-11-10 (Docker, clang-21, one core, median of 3 runs, mean milliseconds per call, 10 s mono 16 kHz unless stated). librosa 0.11 and torchaudio 2.5.1 (CPU) run on the same core with one thread. Bold = fastest. The last column is the fastest Python time ÷ Neve's time; above 1, Neve is faster.
 
-| operation | Neve (ms) | fastest Python (ms) | Neve vs fastest |
-|---|---:|---:|---:|
-| load PCM16 | 0.316 | 0.511 | 1.62× |
-| load f32 | 0.238 | 0.155 | 0.65× |
-| load f32, stereo 22 kHz | 0.916 | 0.236 | 0.26× |
-| save PCM16 | 1.616 | 11.736 | ~4–7× (noisy) |
-| spectrogram | 2.307 | 3.494 | 1.51× |
-| mel | 1.736 | 4.165 | 2.40× |
-| MFCC | 1.992 | 4.379 | 2.20× |
-| resample sinc 16→8 kHz | 0.649 | 0.569 | 0.88× |
-| resample sinc 16→24 kHz | 1.748 | 1.267 | 0.72× |
-| μ-law encode | 0.458 | 0.607 | 1.32× |
-| time stretch 1.5× | 3.331 | 17.955 | 5.39× |
+| operation | Neve | librosa | torchaudio | Neve vs fastest Python |
+|---|---:|---:|---:|---:|
+| load PCM16, 1 s | **0.053** | 0.141 | 0.149 | 2.64× |
+| load PCM16 | **0.316** | 0.511 | 0.512 | 1.62× |
+| load PCM16, 60 s | **1.836** | 2.881 | 2.534 | 1.38× |
+| load f32 | 0.238 | 0.184 | **0.155** | 0.65× |
+| load f32, stereo 22 kHz | 0.916 | **0.236** | 0.255 | 0.26× |
+| save PCM16 | **1.616** | 12.744 | 11.736 | 7.26×\* |
+| spectrogram | **2.307** | 4.231 | 3.494 | 1.51× |
+| spectrogram, 60 s | **13.220** | 24.289 | 26.121 | 1.84× |
+| mel | **1.736** | 6.087 | 4.165 | 2.40× |
+| mel, 60 s | **10.524** | 30.907 | 24.817 | 2.36× |
+| MFCC | **1.992** | 7.517 | 4.379 | 2.20× |
+| resample sinc 16→8 kHz | 0.649 | **0.569** | 1.339 | 0.88× |
+| resample sinc 16→24 kHz | 1.748 | 1.627 | **1.267** | 0.72× |
+| μ-law encode | **0.458** | 4.425 | 0.607 | 1.32× |
+| time stretch 1.5× | **3.331** | 32.483 | 17.955 | 5.39× |
+
+\* Save timings include the disk write and were noisy in this run (Python per-run means 5.8–13.8 ms; an earlier run measured librosa 5.5 ms and torchaudio 6.2 ms), so read this ratio as about 4–7×.
 
 - **Neve leads** on PCM16 load/save, spectrogram, mel, MFCC, μ-law and time stretch.
 - **Neve is behind** on f32 loads (tensor allocation, §5.1) and on sinc resample (filter length, §5.3).
