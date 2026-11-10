@@ -1,0 +1,191 @@
+import audio
+
+def tensor make_sine3(int sr, float freq, float amp, int T)
+	tensor wf = new tensor(float_t, [1, T])
+	float[] d = wf.data
+	for t=0, t<T
+		d[t] = audio_sin(6.2831853 * freq * t / sr) * amp
+	return wf
+
+def int argmax_bins(tensor x, int frame)
+	float[] v = x.data
+	int bins = x.shape[0]
+	int frames = x.shape[1]
+	float best = 0.0
+	int arg = 0
+	for b=0, b<bins
+		float m = v[b*frames + frame]
+		if m < 0.0
+			m = 0.0 - m
+		if m > best
+			best = m
+			arg = b
+	return arg
+
+def float max_abs_diff3(tensor a, tensor b)
+	float[] x = a.data
+	float[] y = b.data
+	float m = 0.0
+	for k=0, k<a.dims_prod
+		float df = x[k] - y[k]
+		float adf = audio_fabs(df)
+		if adf > m
+			m = adf
+	return m
+
+def int test_resample_down()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor rs = audio_resample(wf, 16000, 8000, "sinc")
+	int T_out = rs.shape[1]
+	tensor sp = audio_spectrogram(rs, 512, 128, 512, 2.0)
+	int peak = argmax_bins(sp, 6)
+	printl("resample 16k->8k: T_out=", T_out, " (esp 800) peak=", peak, " (esp 27-28)")
+	if T_out == 800 and peak >= 27 and peak <= 28
+		printl("PASS resample_down")
+	else
+		printl("FAIL resample_down")
+	return 0
+
+def int test_resample_up_linear()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor rs = audio_resample(wf, 16000, 24000, "linear")
+	int T_out = rs.shape[1]
+	printl("resample 16k->24k linear: T_out=", T_out, " (esp 2400)")
+	if T_out == 2400
+		printl("PASS resample_up_linear")
+	else
+		printl("FAIL resample_up_linear")
+	return 0
+
+def int test_mel()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor mel = audio_melspectrogram(wf, 16000, 512, 128, 64, 0.0, 0.0)
+	int peak = argmax_bins(mel, 6)
+	printl("mel: shape0=", mel.shape[0], " shape1=", mel.shape[1], " peak=", peak, " (esp 12-13)")
+	if mel.shape[0] == 64 and mel.shape[1] == 13 and peak >= 11 and peak <= 14
+		printl("PASS mel")
+	else
+		printl("FAIL mel")
+	return 0
+
+def int test_mfcc()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor mf = audio_mfcc(wf, 16000, 13, 512, 128, 64)
+	float[] v = mf.data
+	float mx = 0.0
+	for k=0, k<mf.dims_prod
+		float a = v[k]
+		if a < 0.0
+			a = 0.0 - a
+		if a > mx
+			mx = a
+	printl("mfcc: shape0=", mf.shape[0], " shape1=", mf.shape[1], " max=", mx)
+	if mf.shape[0] == 13 and mf.shape[1] == 13 and mx < 1000000.0
+		printl("PASS mfcc")
+	else
+		printl("FAIL mfcc")
+	return 0
+
+def int test_mulaw()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor code = audio_mulaw_encode(wf)
+	tensor dec = audio_mulaw_decode(code)
+	float err = max_abs_diff3(wf, dec)
+	printl("mulaw err=", err, " (expected < 0.05)")
+	if err < 0.05
+		printl("PASS mulaw")
+	else
+		printl("FAIL mulaw")
+	return 0
+
+def int test_fade_vol()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor f = audio_fade(wf, 400, 400)
+	float[] fd = f.data
+	tensor w2 = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor v = audio_vol(w2, 2.0, "amplitude")
+	float[] vd = v.data
+	printl("fade d[0]=", fd[0], " d[904]=", fd[904], " vol d[904]=", vd[904])
+	if fd[0] == 0.0 and audio_fabs(vd[904]) > 1.2
+		printl("PASS fade_vol")
+	else
+		printl("FAIL fade_vol")
+	return 0
+
+def int test_masks()
+	tensor sp = audio_spectrogram(make_sine3(16000, 440.0, 0.8, 1600), 512, 128, 512, 2.0)
+	tensor tm = audio_time_mask(sp, 3, 5)
+	tensor fm = audio_freq_mask(tm, 3, 10)
+	float[] v = fm.data
+	int frames = fm.shape[1]
+	float s_masked_t = v[20*frames + 6]
+	float s_ok_t = v[20*frames + 9]
+	float s_masked_f = v[11*frames + 9]
+	float s_ok_f = v[30*frames + 9]
+	printl("mask t6=", s_masked_t, " t9=", s_ok_t, " f11=", s_masked_f, " f30=", s_ok_f)
+	if s_masked_t == 0.0 and s_ok_t > 0.0 and s_masked_f == 0.0 and s_ok_f > 0.0
+		printl("PASS masks")
+	else
+		printl("FAIL masks")
+	return 0
+
+def int test_time_stretch()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor ts = audio_time_stretch(wf, 2.0)
+	int T_out = ts.shape[1]
+	tensor sp = audio_spectrogram(ts, 512, 128, 512, 2.0)
+	int peak = argmax_bins(sp, 3)
+	printl("stretch 2x: T_out=", T_out, " (esp 800) peak=", peak, " (esp 14)")
+	if T_out == 800 and peak >= 13 and peak <= 15
+		printl("PASS time_stretch")
+	else
+		printl("FAIL time_stretch")
+	return 0
+
+def float max_abs3(tensor a)
+	float[] x = a.data
+	float m = 0.0
+	for k=0, k<a.dims_prod
+		float v0 = x[k]
+		float v = audio_fabs(v0)
+		if v > m
+			m = v
+	return m
+
+# Rejected arguments: an error message and a zero-filled (or empty) tensor, never garbage.
+def int test_invalid_args()
+	tensor wf = make_sine3(16000, 440.0, 0.8, 1600)
+	tensor mel = audio_melspectrogram(wf, 16000, 400, 160, 40, 0.0, 0.0)
+	float mel_max = max_abs3(mel)
+	tensor sp = audio_spectrogram(wf, 512, 128, 0, 2.0)
+	float sp_max = max_abs3(sp)
+	tensor rs = audio_resample(wf, 16000, 8000, "Sinc")
+	float rs_max = max_abs3(rs)
+	tensor w2 = make_sine3(16000, 440.0, 0.8, 1600)
+	float[] before = w2.data
+	float b904 = before[904]
+	tensor v = audio_vol(w2, 2.0, "dB")
+	float[] after = v.data
+	float a904 = after[904]
+	tensor ts = audio_time_stretch(wf, 0.0)
+	int ts_len = ts.shape[1]
+	printl("invalid args: mel max=", mel_max, " spec max=", sp_max)
+	printl(" resample max=", rs_max, " stretch len=", ts_len)
+	printl(" vol before=", b904, " after=", a904)
+	if mel_max == 0.0 and sp_max == 0.0 and rs_max == 0.0 and a904 == b904 and ts_len == 0
+		printl("PASS invalid_args")
+	else
+		printl("FAIL invalid_args")
+	return 0
+
+main
+	test_resample_down()
+	test_resample_up_linear()
+	test_mel()
+	test_mfcc()
+	test_mulaw()
+	test_fade_vol()
+	test_masks()
+	test_time_stretch()
+	test_invalid_args()
+	printl("== test_dsp3 end ==")

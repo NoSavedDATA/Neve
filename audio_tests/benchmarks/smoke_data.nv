@@ -1,0 +1,27 @@
+import audio
+
+def int check(str path, int exp_sr, int exp_ch, int exp_frames, float exp_peak)
+	AudioData a = audio_load(path)
+	AudioInfo i = audio_info(path)
+	float[] d = a.wf.data
+	float peak = 0.0
+	for k=0, k<a.wf.dims_prod
+		float v = d[k]
+		if v < 0.0
+			v = 0.0 - v
+		if v > peak
+			peak = v
+	printl(path, ": sr=", a.sample_rate, " ch=", i.channels, " frames=", i.frames, " peak=", peak)
+	if a.sample_rate == exp_sr and i.channels == exp_ch and i.frames == exp_frames
+		printl("  dims OK")
+	else
+		printl("  WRONG DIMS")
+	return 0
+
+main
+	check("audio_tests/benchmarks/data/sig_1s_16k_s16.wav", 16000, 1, 16000, 0.9)
+	check("audio_tests/benchmarks/data/sig_10s_16k_s16.wav", 16000, 1, 160000, 0.9)
+	check("audio_tests/benchmarks/data/sig_10s_16k_f32.wav", 16000, 1, 160000, 0.9)
+	check("audio_tests/benchmarks/data/sig_60s_16k_s16.wav", 16000, 1, 960000, 0.9)
+	check("audio_tests/benchmarks/data/sig_10s_22k_stereo_f32.wav", 22050, 2, 220500, 0.9)
+	printl("== smoke_data done ==")

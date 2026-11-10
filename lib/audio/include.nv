@@ -1,0 +1,99 @@
+# audio lib — audio file support for the Neve language (torchaudio-style).
+# Usage:  import audio
+#
+# Follows the official Neve lib pattern (see neve-lang.dev/cpp_docs and the
+# example repo NoSavedDATA/example_lib):
+#   - this folder is installed/loaded as $NEVE_LIBS/audio/
+#   - `make` in $NEVE_LIBS/audio builds src/audio.cpp into lib.so (FFI/dlopen)
+#   - no need to rebuild the neve compiler; works with the release binary
+#   - (install.sh)
+#
+# WAV I/O (wav.nv):
+#   audio_load(str path)                 -> AudioData {wf=tensor[C,T] float,
+#                                          sample_rate}
+#   audio_save(str path, tensor, int sr, str fmt="s16"|"f32")
+#   audio_wav_info(str path) / audio_info(str path)
+#                                          -> AudioInfo {sample_rate, channels,
+#                                          bits_per_sample, audio_format,
+#                                          block_align, frames, data_bytes,
+#                                          data_offset}
+# Math: audio_sin/cos/exp/log/log10/fabs/atan(float)
+
+proto any nsk_audio_fopen(str, str)
+proto i64 nsk_audio_fread(str, i64, i64, any)
+proto i64 nsk_audio_fwrite(str, i64, i64, any)
+proto int nsk_audio_fseek(any, i64, int)
+proto i64 nsk_audio_ftell(any)
+proto int nsk_audio_fclose(any)
+proto float nsk_audio_sin(float)
+proto float nsk_audio_cos(float)
+proto float nsk_audio_exp(float)
+proto float nsk_audio_log(float)
+proto float nsk_audio_log10(float)
+proto float nsk_audio_fabs(float)
+proto float nsk_audio_atan(float)
+proto int nsk_audio_f2i(float)
+proto int nsk_audio_tic()
+proto float nsk_audio_toc()
+proto bool nsk_audio_isnull(any)
+proto void nsk_audio_free(any)
+proto int nsk_audio_zero(any, int)
+proto int nsk_audio_read_decode(str, any, int, int, i64, int, int)
+proto int nsk_audio_save_wav(str, any, int, int, int, str)
+proto int nsk_audio_wav_info_c(str, int[])
+proto int nsk_audio_fft(any, any, int, int)
+proto int nsk_audio_hann(any, int)
+proto int nsk_audio_stft_bins(int)
+proto int nsk_audio_stft_frames(int, int)
+proto int nsk_audio_stft(any, int, int, int, int, any, any, int, int)
+proto int nsk_audio_spectrogram(any, int, int, int, int, float, any, int, int)
+proto int nsk_audio_amplitude_to_db(any, any, int)
+proto int nsk_audio_db_to_amplitude(any, any, int)
+proto int nsk_audio_resample_len(int, int, int)
+proto int nsk_audio_resample_linear(any, int, int, int, int, any, int)
+proto int nsk_audio_resample_sinc(any, int, int, int, int, any, int)
+proto int nsk_audio_melspectrogram(any, int, int, int, int, int, float, float, any, int, int)
+proto int nsk_audio_mfcc(any, int, int, int, int, int, int, any, int)
+proto int nsk_audio_mulaw_encode(any, any, int)
+proto int nsk_audio_mulaw_decode(any, any, int)
+proto int nsk_audio_fade(any, int, int, int, int)
+proto int nsk_audio_vol(any, int, float, int)
+proto int nsk_audio_time_mask(any, int, int, int, int)
+proto int nsk_audio_freq_mask(any, int, int, int, int)
+proto int nsk_audio_time_stretch(any, int, float, any, int)
+
+import wav
+import dsp
+
+
+def AudioInfo audio_info(str path)
+	return audio_wav_info(path)
+
+
+def float audio_sin(float x)
+	return nsk_audio_sin(x)
+
+def float audio_cos(float x)
+	return nsk_audio_cos(x)
+
+def float audio_exp(float x)
+	return nsk_audio_exp(x)
+
+def float audio_log(float x)
+	return nsk_audio_log(x)
+
+def float audio_log10(float x)
+	return nsk_audio_log10(x)
+
+def float audio_fabs(float x)
+	return nsk_audio_fabs(x)
+
+def float audio_atan(float x)
+	return nsk_audio_atan(x)
+
+# Interval timer: audio_tic() starts, audio_toc() returns ms since the last audio_tic().
+def int audio_tic()
+	return nsk_audio_tic()
+
+def float audio_toc()
+	return nsk_audio_toc()

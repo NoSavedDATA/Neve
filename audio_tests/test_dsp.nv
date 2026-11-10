@@ -1,0 +1,128 @@
+import audio
+
+def tensor make_sine(int sr, float freq, float amp, int T)
+	tensor wf = new tensor(float_t, [1, T])
+	float[] d = wf.data
+	for t=0, t<T
+		d[t] = audio_sin(6.2831853 * freq * t / sr) * amp
+	return wf
+
+def int argmax_mag(tensor re, tensor im, int frame, int bins, int frames)
+	float[] r = re.data
+	float[] imv = im.data
+	float best = 0.0
+	int arg = 0
+	for b=0, b<bins
+		float m = r[b*frames + frame]*r[b*frames + frame] + imv[b*frames + frame]*imv[b*frames + frame]
+		if m > best
+			best = m
+			arg = b
+	return arg
+
+def float max_abs_diff_t(tensor a, tensor b)
+	float[] x = a.data
+	float[] y = b.data
+	float m = 0.0
+	for k=0, k<a.dims_prod
+		float df = x[k] - y[k]
+		float adf = audio_fabs(df)
+		if adf > m
+			m = adf
+	return m
+
+def int test_fft_impulse()
+	int n = 64
+	tensor re = zeros_tensor(float_t, [1, n])
+	tensor im = zeros_tensor(float_t, [1, n])
+	tensor ref = zeros_tensor(float_t, [1, n])
+	float[] r = re.data
+	float[] imv = im.data
+	r[0] = 1.0
+	audio_fft(re, im, 0)
+	float[] rf = ref.data
+	for b=0, b<n
+		rf[b] = 1.0
+	float m = max_abs_diff_t(re, ref)
+	float s = 0.0
+	for b=0, b<n
+		s = s + imv[b]
+	printl("fft impulse: re_maxdiff=", m, " im_sum=", s)
+	if m < 0.0001 and s < 0.0001
+		printl("PASS fft_impulse")
+	else
+		printl("FAIL fft_impulse")
+	return 0
+
+def int test_fft_sine_peak()
+	int n = 64
+	tensor re = new tensor(float_t, [1, n])
+	tensor im = zeros_tensor(float_t, [1, n])
+	float[] r = re.data
+	for t=0, t<n
+		r[t] = audio_sin(6.2831853 * 4.0 * t / n)
+	audio_fft(re, im, 0)
+	int peak = argmax_mag(re, im, 0, n, 1)
+	printl("fft sine peak bin=", peak, " (expected 4)")
+	if peak == 4
+		printl("PASS fft_sine_peak")
+	else
+		printl("FAIL fft_sine_peak")
+	return 0
+
+def int test_fft_inverse()
+	int n = 128
+	tensor re = new tensor(float_t, [1, n])
+	tensor im = zeros_tensor(float_t, [1, n])
+	tensor ref = new tensor(float_t, [1, n])
+	float[] r = re.data
+	float[] rf = ref.data
+	for t=0, t<n
+		r[t] = audio_sin(6.2831853 * 3.0 * t / n) * 0.7 + audio_cos(6.2831853 * 11.0 * t / n) * 0.2
+		rf[t] = r[t]
+	audio_fft(re, im, 0)
+	audio_fft(re, im, 1)
+	float err = max_abs_diff_t(re, ref)
+	printl("fft inverse err=", err)
+	if err < 0.0001
+		printl("PASS fft_inverse")
+	else
+		printl("FAIL fft_inverse")
+	return 0
+
+def int test_stft_peak()
+	tensor wf = make_sine(16000, 440.0, 0.8, 1600)
+	AudioSTFT s = audio_stft(wf, 512, 128, 512)
+	printl("stft bins=", s.bins, " frames=", s.frames, " (expected 257, 13)")
+	int peak = argmax_mag(s.re, s.im, 6, s.bins, s.frames)
+	printl("stft peak bin=", peak, " (expected 14)")
+	if s.bins == 257 and s.frames == 13 and peak == 14
+		printl("PASS stft_peak")
+	else
+		printl("FAIL stft_peak")
+	return 0
+
+def int test_db_roundtrip()
+	tensor x = new tensor(float_t, [1, 64])
+	float[] d = x.data
+	for i=0, i<64
+		d[i] = 0.001 + 0.999 * i / 64
+	tensor db = audio_amplitude_to_db(x)
+	tensor y = audio_db_to_amplitude(db)
+	float[] dbd = db.data
+	float[] yd = y.data
+	printl("db[0]=", dbd[0], " y[0]=", yd[0], " x[0]=", d[0])
+	float err = max_abs_diff_t(x, y)
+	printl("db roundtrip err=", err)
+	if err < 0.0001
+		printl("PASS db_roundtrip")
+	else
+		printl("FAIL db_roundtrip")
+	return 0
+
+main
+	test_fft_impulse()
+	test_fft_sine_peak()
+	test_fft_inverse()
+	test_stft_peak()
+	test_db_roundtrip()
+	printl("== test_dsp end ==")

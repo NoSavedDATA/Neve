@@ -1,0 +1,88 @@
+# wav.nv — RIFF/WAVE (PCM) file reading/writing.
+# Supported formats: unsigned 8-bit PCM, signed 16/24/32-bit, IEEE float 32.
+# Tensor layout: channels-first [C, T] float, like torchaudio.load.
+#
+# Audio format: 1 = integer PCM, 3 = IEEE float.
+#
+# Neve implementation rules applied here (learned during the ABI spike):
+# - no nested calls inside expressions (bind to locals first);
+# - char -> int via to_int() (zero-extend);
+# - no negative float literals (use 0.0 - x);
+# - no >> / << shifts (no codegen);
+# - any -> typed buffer casts only inside def;
+# - no offby on unsized char[] buffers (stoi crash in codegen);
+# - heavy binary parsing lives in the C runtime (nsk_audio_*);
+# - lib files must not contain a main block.
+
+class AudioInfo
+	int sample_rate, channels, bits_per_sample, audio_format, block_align
+	i64 frames, data_bytes, data_offset
+
+	ctor()
+		0
+
+	def int print()
+		printl("AudioInfo: sr=", self.sample_rate, " ch=", self.channels,
+			" bits=", self.bits_per_sample, " fmt=", self.audio_format,
+			" frames=", self.frames)
+		return 0
+
+
+class AudioData
+	tensor wf
+	int sample_rate
+
+	ctor(tensor w, int s)
+		self.wf = w
+		self.sample_rate = s
+
+
+def AudioInfo audio_wav_info(str path)
+	AudioInfo info = new AudioInfo()
+	any buf = c_malloc64(32)
+	int[] o = buf
+	int rc = nsk_audio_wav_info_c(path, o)
+	if rc != 0
+		nsk_audio_free(buf)
+		printl("audio_wav_info: cannot open ", path)
+		return info
+	info.sample_rate = o[0]
+	info.channels = o[1]
+	info.bits_per_sample = o[2]
+	info.audio_format = o[3]
+	info.block_align = o[4]
+	info.frames = o[5]
+	info.data_bytes = o[6]
+	info.data_offset = o[7]
+	nsk_audio_free(buf)
+	return info
+
+
+def AudioData audio_load(str path)
+	AudioInfo info = audio_wav_info(path)
+	array<int> dims
+	dims.append(info.channels)
+	int frames = info.frames
+	dims.append(frames)
+	tensor wf = new tensor(float_t, dims)
+	AudioData data = new AudioData(wf, info.sample_rate)
+
+	if info.frames == 0 or info.channels == 0
+		return data
+
+	float[] out = wf.data
+	int rc = nsk_audio_read_decode(path, out, info.channels, frames,
+		info.data_offset, info.audio_format, info.bits_per_sample)
+	if rc != 0
+		printl("audio_load: cannot open ", path)
+	return data
+
+
+def int audio_save(str path, tensor wf, int sr, str fmt)
+	int C = wf.shape[0]
+	int T = wf.shape[1]
+	float[] d = wf.data
+	int rc = nsk_audio_save_wav(path, d, C, T, sr, fmt)
+	if rc != 0
+		printl("audio_save: cannot write ", path)
+	return rc

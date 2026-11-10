@@ -1,0 +1,209 @@
+# dsp.nv — DSP in the style of torchaudio.transforms.
+# FFT/STFT/spectrogram/dB. Kernels in C (nsk_audio_*), API in Neve.
+#
+# Conventions:
+# - wf_mono: tensor [1, T] float.
+# - STFT: bins = n_fft/2+1, frames = 1 + T/hop (reflection center padding).
+# - audio_fft works in-place on tensors [1, n] (n a power of 2).
+# - FFT/STFT use the numpy/torch sign convention (forward = e^{-i...}); audio_fft inverse divides by n.
+# - Invalid arguments (e.g. n_fft not a power of 2, fmin >= sr/2): the function prints an
+#   error and returns a zero-filled tensor (empty when the shape itself is invalid).
+# - audio_fade, audio_vol, audio_time_mask and audio_freq_mask modify their input in place
+#   and return it; every other function returns a new tensor.
+#
+# Note: integer division // between parameters is not typed by the checker
+# (yields None); that is why bins/frames come from nsk_audio_stft_bins/stft_frames.
+
+
+class AudioSTFT
+	tensor re, im
+	int bins, frames
+
+	ctor(tensor r, tensor i, int b, int f)
+		self.re = r
+		self.im = i
+		self.bins = b
+		self.frames = f
+
+
+def AudioSTFT audio_stft(tensor wf_mono, int n_fft, int hop, int win)
+	int T = wf_mono.shape[1]
+	int bins = nsk_audio_stft_bins(n_fft)
+	int frames = nsk_audio_stft_frames(T, hop)
+	tensor re = new tensor(float_t, [bins, frames])
+	tensor im = new tensor(float_t, [bins, frames])
+	float[] d = wf_mono.data
+	float[] r = re.data
+	float[] i = im.data
+	int rc = nsk_audio_stft(d, T, n_fft, hop, win, r, i, bins, frames)
+	if rc != 0
+		printl("audio_stft: invalid arguments (n_fft must be a power of 2, 0 < win <= n_fft, hop > 0)")
+		nsk_audio_zero(r, re.dims_prod)
+		nsk_audio_zero(i, im.dims_prod)
+	AudioSTFT s = new AudioSTFT(re, im, bins, frames)
+	return s
+
+
+def tensor audio_fft(tensor re, tensor im, int inverse)
+	int n = re.shape[1]
+	float[] r = re.data
+	float[] i = im.data
+	int rc = nsk_audio_fft(r, i, n, inverse)
+	if rc != 0
+		printl("audio_fft: length must be a power of 2, got ", n)
+	return re
+
+
+def tensor audio_spectrogram(tensor wf_mono, int n_fft, int hop, int win, float power)
+	int T = wf_mono.shape[1]
+	int bins = nsk_audio_stft_bins(n_fft)
+	int frames = nsk_audio_stft_frames(T, hop)
+	tensor out = new tensor(float_t, [bins, frames])
+	float[] d = wf_mono.data
+	float[] o = out.data
+	int rc = nsk_audio_spectrogram(d, T, n_fft, hop, win, power, o, bins, frames)
+	if rc != 0
+		printl("audio_spectrogram: invalid arguments (n_fft must be a power of 2, 0 < win <= n_fft, hop > 0, power >= 0)")
+		nsk_audio_zero(o, out.dims_prod)
+	return out
+
+
+def tensor audio_amplitude_to_db(tensor x)
+	tensor out = new tensor(float_t, x.shape)
+	float[] i = x.data
+	float[] o = out.data
+	nsk_audio_amplitude_to_db(i, o, x.dims_prod)
+	return out
+
+
+def tensor audio_db_to_amplitude(tensor x)
+	tensor out = new tensor(float_t, x.shape)
+	float[] i = x.data
+	float[] o = out.data
+	nsk_audio_db_to_amplitude(i, o, x.dims_prod)
+	return out
+
+
+# ---------------- Fase 3: resample / mel / mfcc / fx ----------------
+
+def tensor audio_resample(tensor wf, int orig_sr, int new_sr, str method)
+	int C = wf.shape[0]
+	int T = wf.shape[1]
+	int T_out = nsk_audio_resample_len(T, orig_sr, new_sr)
+	tensor out = new tensor(float_t, [C, T_out])
+	float[] i = wf.data
+	float[] o = out.data
+	int rc = 1
+	if method == "sinc"
+		rc = nsk_audio_resample_sinc(i, C, T, orig_sr, new_sr, o, T_out)
+	else
+		if method == "linear"
+			rc = nsk_audio_resample_linear(i, C, T, orig_sr, new_sr, o, T_out)
+		else
+			printl("audio_resample: method must be sinc or linear, got ", method)
+	if rc != 0
+		printl("audio_resample: cannot resample (sample rates must be positive, T > 0)")
+		nsk_audio_zero(o, out.dims_prod)
+	return out
+
+
+def tensor audio_melspectrogram(tensor wf_mono, int sr, int n_fft, int hop, int n_mels, float fmin, float fmax)
+	int T = wf_mono.shape[1]
+	int bins = nsk_audio_stft_bins(n_fft)
+	int frames = nsk_audio_stft_frames(T, hop)
+	tensor out = new tensor(float_t, [n_mels, frames])
+	float[] d = wf_mono.data
+	float[] o = out.data
+	int rc = nsk_audio_melspectrogram(d, T, sr, n_fft, hop, n_mels, fmin, fmax, o, bins, frames)
+	if rc != 0
+		printl("audio_melspectrogram: invalid arguments (n_fft must be a power of 2, 0 <= fmin < sr/2, fmin < fmax)")
+		nsk_audio_zero(o, out.dims_prod)
+	return out
+
+
+def tensor audio_mfcc(tensor wf_mono, int sr, int n_mfcc, int n_fft, int hop, int n_mels)
+	int T = wf_mono.shape[1]
+	int frames = nsk_audio_stft_frames(T, hop)
+	tensor out = new tensor(float_t, [n_mfcc, frames])
+	float[] d = wf_mono.data
+	float[] o = out.data
+	int rc = nsk_audio_mfcc(d, T, sr, n_mfcc, n_fft, hop, n_mels, o, frames)
+	if rc != 0
+		printl("audio_mfcc: invalid arguments (n_fft must be a power of 2, 0 < n_mfcc <= n_mels)")
+		nsk_audio_zero(o, out.dims_prod)
+	return out
+
+
+def tensor audio_mulaw_encode(tensor x)
+	tensor out = new tensor(float_t, x.shape)
+	float[] i = x.data
+	float[] o = out.data
+	nsk_audio_mulaw_encode(i, o, x.dims_prod)
+	return out
+
+
+def tensor audio_mulaw_decode(tensor x)
+	tensor out = new tensor(float_t, x.shape)
+	float[] i = x.data
+	float[] o = out.data
+	nsk_audio_mulaw_decode(i, o, x.dims_prod)
+	return out
+
+
+def tensor audio_fade(tensor wf, int fade_in, int fade_out)
+	int C = wf.shape[0]
+	int T = wf.shape[1]
+	float[] d = wf.data
+	int rc = nsk_audio_fade(d, C, T, fade_in, fade_out)
+	if rc != 0
+		printl("audio_fade: fade lengths must be >= 0")
+	return wf
+
+
+def tensor audio_vol(tensor wf, float gain, str gain_type)
+	float[] d = wf.data
+	int gt = 3
+	if gain_type == "amplitude"
+		gt = 0
+	if gain_type == "db"
+		gt = 1
+	if gain_type == "power"
+		gt = 2
+	int rc = nsk_audio_vol(d, wf.dims_prod, gain, gt)
+	if rc != 0
+		printl("audio_vol: gain_type must be amplitude, db or power (power needs gain >= 0), got ", gain_type)
+	return wf
+
+
+def tensor audio_time_mask(tensor spec, int width, int t0)
+	int bins = spec.shape[0]
+	int frames = spec.shape[1]
+	float[] d = spec.data
+	nsk_audio_time_mask(d, bins, frames, width, t0)
+	return spec
+
+
+def tensor audio_freq_mask(tensor spec, int width, int f0)
+	int bins = spec.shape[0]
+	int frames = spec.shape[1]
+	float[] d = spec.data
+	nsk_audio_freq_mask(d, bins, frames, width, f0)
+	return spec
+
+
+def tensor audio_time_stretch(tensor wf_mono, float rate)
+	if rate <= 0.0
+		printl("audio_time_stretch: rate must be positive")
+		tensor empty = new tensor(float_t, [1, 0])
+		return empty
+	int T = wf_mono.shape[1]
+	float ratio = 1.0 / rate
+	int T_out = nsk_audio_f2i(T * ratio)
+	tensor out = new tensor(float_t, [1, T_out])
+	float[] d = wf_mono.data
+	float[] o = out.data
+	int rc = nsk_audio_time_stretch(d, T, rate, o, T_out)
+	if rc != 0
+		printl("audio_time_stretch: cannot stretch (needs T > 1 and a rate that keeps the output size in range)")
+		nsk_audio_zero(o, out.dims_prod)
+	return out

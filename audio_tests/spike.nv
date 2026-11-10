@@ -1,0 +1,42 @@
+import audio
+
+def i64 write_bytes(any f)
+	char[32] buf
+	buf[0] = 82
+	buf[1] = 73
+	buf[2] = 70
+	buf[3] = 70
+	i64 w = nsk_audio_fwrite(buf offby 0, 1, 4, f)
+	return w
+
+def i64 read_bytes(any f)
+	char[32] rb
+	i64 r = nsk_audio_fread(rb offby 0, 1, 4, f)
+	i64 r2 = nsk_audio_fread(rb offby 2, 1, 2, f)
+	printl("read=", r, " b=", rb[0], rb[1], rb[2], rb[3])
+	return r
+
+main
+	printl("== ABI spike final ==")
+	printl("sin(1.0)=", nsk_audio_sin(1.0), " cos(0.0)=", nsk_audio_cos(0.0))
+	printl("log10(1000)=", nsk_audio_log10(1000.0), " fabs(-3.5)=", nsk_audio_fabs(-3.5))
+
+	any f = nsk_audio_fopen("/tmp/spike_final.bin", "wb")
+	i64 w = write_bytes(f)
+	nsk_audio_fclose(f)
+	printl("wrote=", w)
+
+	any g = nsk_audio_fopen("/tmp/spike_final.bin", "rb")
+	nsk_audio_fseek(g, 0, 2)
+	i64 sz = nsk_audio_ftell(g)
+	nsk_audio_fseek(g, 0, 0)
+	i64 r = read_bytes(g)
+	nsk_audio_fclose(g)
+	printl("size=", sz, " (expected 4)")
+
+	int x = 300
+	float xf = x
+	i64 big = 123456789
+	int bi = big
+	printl("casts: ", xf/300.0, " ", bi)
+	printl("== end ==")

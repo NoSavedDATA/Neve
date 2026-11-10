@@ -30,3 +30,23 @@ lib/**
 !lib/std_lib/**
 !lib/std_lib/**/*.nv
 !lib/std_lib/Makefile_*
+
+# Audio library and its source-level tests/benchmarks.
+!lib/audio/
+!lib/audio/src/
+!lib/audio/Makefile
+!lib/audio/*.h
+!lib/audio/*.nv
+!lib/audio/*.md
+!lib/audio/src/*.cpp
+!audio_tests/*.nv
+!audio_tests/benchmarks/*.nv
+!audio_tests/benchmarks/*.py
+!audio_tests/benchmarks/*.sh
+!audio_tests/benchmarks/*.md
+!audio_tests/benchmarks/requirements.txt
+!audio_tests/benchmarks/Dockerfile.bench
+audio_tests/benchmarks/data/
+audio_tests/benchmarks/results/
+audio_tests/benchmarks/results_current/
+audio_tests/benchmarks/__pycache__/

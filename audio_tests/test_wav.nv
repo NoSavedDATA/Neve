@@ -1,0 +1,91 @@
+import audio
+
+def float max_abs_diff(tensor a, tensor b)
+	float[] x = a.data
+	float[] y = b.data
+	float m = 0.0
+	for i=0, i<a.dims_prod
+		float df = x[i] - y[i]
+		if df < 0.0
+			df = 0.0 - df
+		if df > m
+			m = df
+	return m
+
+def int test_roundtrip_s16()
+	int sr = 16000
+	int T = 1600
+	tensor wf = new tensor(float_t, [1, T])
+	float[] d = wf.data
+	for t=0, t<T
+		d[t] = audio_sin(6.2831853 * 440.0 * t / sr) * 0.8
+
+	audio_save("/neve/rt_s16.wav", wf, sr, "s16")
+
+	AudioData a = audio_load("/neve/rt_s16.wav")
+
+	AudioInfo info = audio_info("/neve/rt_s16.wav")
+	info.print()
+
+	float err = max_abs_diff(wf, a.wf)
+	printl("roundtrip s16: sr=", a.sample_rate, " err_max=", err)
+	if a.sample_rate == sr and err < 0.001
+		printl("PASS roundtrip_s16")
+	else
+		printl("FAIL roundtrip_s16")
+	return 0
+
+def int test_roundtrip_f32()
+	int sr = 22050
+	int T = 1000
+	tensor wf = new tensor(float_t, [2, T])
+	float[] d = wf.data
+	for t=0, t<T
+		d[t] = audio_sin(6.2831853 * 220.0 * t / sr)
+		d[T + t] = 0.0 - audio_sin(6.2831853 * 330.0 * t / sr)
+
+	audio_save("/neve/rt_f32.wav", wf, sr, "f32")
+
+	AudioData a = audio_load("/neve/rt_f32.wav")
+
+	AudioInfo info = audio_info("/neve/rt_f32.wav")
+	info.print()
+
+	float err = max_abs_diff(wf, a.wf)
+	printl("roundtrip f32: sr=", a.sample_rate, " err_max=", err)
+	if a.sample_rate == sr and err < 0.000001
+		printl("PASS roundtrip_f32")
+	else
+		printl("FAIL roundtrip_f32")
+	return 0
+
+def int test_sox_ground_truth()
+	tensor wf
+	int sr
+	AudioData a = audio_load("/neve/sox_ref.wav")
+	AudioInfo info = audio_info("/neve/sox_ref.wav")
+	info.print()
+
+	float[] d = a.wf.data
+	float peak = 0.0
+	int i = 0
+	while i < info.frames
+		float v = d[i]
+		if v < 0.0
+			v = 0.0 - v
+		if v > peak
+			peak = v
+		i = i + 1
+
+	printl("sox file: sr=", a.sample_rate, " peak=", peak)
+	if a.sample_rate == 16000 and info.channels == 1 and peak > 0.5 and peak <= 1.0
+		printl("PASS sox_ground_truth")
+	else
+		printl("FAIL sox_ground_truth")
+	return 0
+
+main
+	test_roundtrip_s16()
+	test_roundtrip_f32()
+	test_sox_ground_truth()
+	printl("== test_wav end ==")
