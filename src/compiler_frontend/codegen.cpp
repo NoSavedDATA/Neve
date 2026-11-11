@@ -6037,12 +6037,31 @@ Value *MapClear(Value *scope_struct, Value *loaded_var,
 }
 
 
+Value *NameableCall::codegen_reserve(Value *scope_struct) {  
+
+    Data_Tree inner_dt = Inner->GetDataTree();
+    Value *loaded_var = Inner->codegen(scope_struct);
+    int is_owned = Inner->GetIsOwned();
+    std::string postfix = (is_owned==OM_non_obj)
+                ? "" : "_Owned";
+
+    Value *size = Args[0]->codegen(scope_struct);
+
+    StructType *st = struct_types["array"];
+    llvm::Type *elemTy;
+    // Value *vec = Load_Array(parser_struct->fn(), loaded_var);
+
+    call("array_reserve", {scope_struct, loaded_var, size});
+    return const_int(0);
+}
+
+
 Value *NameableCall::codegen_append(Value *scope_struct) {  
 
     Data_Tree inner_dt = Inner->GetDataTree();
     Value *loaded_var = Inner->codegen(scope_struct);
-    bool is_owned = Inner->GetIsOwned();
-    std::string postfix = (is_owned!=OM_non_obj)
+    int is_owned = Inner->GetIsOwned();
+    std::string postfix = (is_owned==OM_non_obj)
                 ? "" : "_Owned";
 
     Value *appended_val = Args[0]->codegen(scope_struct);
@@ -6147,6 +6166,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
     if (Callee=="array_append")
         return codegen_append(scope_struct);
+    if (Callee=="array_reserve")
+        return codegen_reserve(scope_struct);
     if (is_tile)
         return codegen_tile(scope_struct); 
     

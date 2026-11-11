@@ -1051,6 +1051,20 @@ void set_functions_args_type() {
 		fn_argnames["array_clear"].push_back("0");
 		fn_argnames["array_clear"].push_back("1");
 		
+		Function_Arg_Types["array_reserve"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_reserve"]["1"] = "array";
+		Function_Arg_Types["array_reserve"]["2"] = "int";
+		
+		Function_Arg_DataTypes["array_reserve"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_reserve_1 = Data_Tree("array");
+		array_reserve_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_reserve"]["1"] = array_reserve_1;
+		Function_Arg_DataTypes["array_reserve"]["2"] = Data_Tree("int");
+		
+		fn_argnames["array_reserve"].push_back("0");
+		fn_argnames["array_reserve"].push_back("1");
+		fn_argnames["array_reserve"].push_back("2");
+		
 		Function_Arg_Types["array_int_NewVec"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_int_NewVec"]["1"] = "int";
 		Function_Arg_Types["array_int_NewVec"]["2"] = "int";

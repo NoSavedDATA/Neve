@@ -186,11 +186,35 @@ extern "C" DT_array *array_slice(Scope_Struct *scope_struct, DT_array *vec,\
   return new_vec;
 }
 
-extern "C" void *array_pop(Scope_Struct *scope_struct, DT_array *v) { 
-    int virtual_size = v->virtual_size;
 
-    void *ret = ((void**)v->data)[virtual_size-1];
-    __atomic_store_n(&v->virtual_size, virtual_size-1, __ATOMIC_RELEASE);
+extern "C" void *array_pop(Scope_Struct *scope_struct, DT_array *v) { 
+    int virtual_size = __atomic_load_n(&v->virtual_size, __ATOMIC_ACQUIRE);
+    
+    if (virtual_size <= 0) {
+        return nullptr;
+    }
+
+    void *data = __atomic_load_n(&v->data, __ATOMIC_ACQUIRE);
+    int elem_size = __atomic_load_n(&v->elem_size, __ATOMIC_ACQUIRE);
+    uint16_t type = __atomic_load_n(&v->type, __ATOMIC_ACQUIRE);
+
+    char *base = (char*)data;
+    char *slot = base + (virtual_size - 1) * elem_size;
+
+    void *ret = nullptr;
+    int read_size = (elem_size < 8) ? elem_size : 8;
+    memcpy(&ret, slot, read_size);
+
+    memset(slot, 0, elem_size);
+
+    __atomic_store_n(&v->virtual_size, virtual_size - 1, __ATOMIC_RELEASE);
+
+    if (type >= 100 && ret != nullptr) {
+        GC *gc = scope_struct->gc;
+        if (gc->arena->get_is_marked(v, gc->mark_bit)) {
+            gc->arena->mutator_push(ret, type);
+        }
+    }
 
     return ret;
 }
@@ -231,6 +255,8 @@ DT_array_retire::DT_array_retire(void *data, int size, int tid)
 
 
 extern "C" void array_double_size_Owned(Scope_Struct *scope_struct, DT_array *vec) {
+    // std::cout << "double owned " << vec << "\n";
+
     int tid = scope_struct->thread_id;
     void *data = vec->data;
     int vsize = vec->virtual_size;
@@ -247,47 +273,110 @@ extern "C" void array_double_size_Owned(Scope_Struct *scope_struct, DT_array *ve
     vec->size*=4;
 }
 
+
 extern "C" void array_double_size(Scope_Struct *scope_struct, DT_array *vec) {
+    // std::cout << "double " << vec << "\n";
     int tid = scope_struct->thread_id;
-    void *data = __atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+    
+    void *old_data = __atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+    int current_capacity = __atomic_load_n(&vec->size, __ATOMIC_ACQUIRE);
     int vsize = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
     int elem_size = __atomic_load_n(&vec->elem_size, __ATOMIC_ACQUIRE);
-    int old_size = vsize*elem_size;
-    int vec_size = old_size*4;
-
-    void *new_data = cache_pop(vec_size, tid);
-    memcpy(new_data, data, old_size);
-
-    {
-        scope_struct->stw_wait();
-        scope_struct->gc->retire_arr(data, old_size, tid);
-    }
-
+    
+    int target_capacity = current_capacity * 4;
+    if (target_capacity < 4)
+        target_capacity = 4;
+    
+    int new_bytes = target_capacity * elem_size;
+    int old_bytes = current_capacity * elem_size;
+    int copy_bytes = vsize * elem_size;
+    
+    // 3. Allocate new memory
+    void *new_data = cache_pop(new_bytes, tid);
+    
+    memset(new_data, 0, new_bytes);
+    if (old_data && copy_bytes > 0)
+        memcpy(new_data, old_data, copy_bytes);
+    
     __atomic_store_n(&vec->data, new_data, __ATOMIC_RELEASE);
-    int size = __atomic_load_n(&vec->size, __ATOMIC_ACQUIRE);
-    __atomic_store_n(&vec->size, size*4, __ATOMIC_RELEASE);
-
-    // std::cout << "double size " << scope_struct << ", " << vec << "\n";
-    // int tid = scope_struct->thread_id;
-    // int old_size = vec->size*vec->elem_size;
-    // int vec_size = old_size*2;
-    // std::cout << "size " << old_size << ", " << vec_size << ", elem " << vec->elem_size << ", size " << vec->size << "\n";
-
-    // // void *new_data = (void*)malloc(vec_size);
-    // void *new_data = cache_pop(vec_size, tid);
-    // memcpy(new_data, vec->data, old_size);
-
-    // vec->data = new_data;
-    // vec->size *= 2;
-    // cache_push(vec->data, old_size, tid);
-    // // free(vec->data);
+    __atomic_store_n(&vec->size, target_capacity, __ATOMIC_RELEASE);
+    
+    // 7. Retire the old data safely
+    if (old_data) {
+        scope_struct->stw_wait();
+        // Retire the exact byte footprint that was originally allocated
+        scope_struct->gc->retire_arr(old_data, old_bytes, tid);
+    }
 }
+
 
 extern "C" float array_clear(Scope_Struct *scope_struct, DT_array *vec) {
     scope_struct->stw_wait();
     __atomic_store_n(&vec->virtual_size, 0, __ATOMIC_RELEASE);
     return 0;
 }
+
+
+
+extern "C" int array_reserve(Scope_Struct *scope_struct, DT_array *vec, int size) {
+    // std::cout << "reserve " << vec << ", size " << size << "\n";
+    int tid = scope_struct->thread_id;
+    int target_size = ((size + 31) / 32) * 32;
+
+    void *new_data = nullptr;
+    void *old_data = nullptr;
+    int old_capacity = 0; 
+
+    while (true) {
+        old_data = __atomic_load_n(&vec->data, __ATOMIC_ACQUIRE);
+        int current_capacity = __atomic_load_n(&vec->size, __ATOMIC_ACQUIRE);
+        
+        if (current_capacity >= target_size) {
+            if (new_data) {
+                free(new_data); 
+            }
+            return 0;
+        }
+
+        int vsize = __atomic_load_n(&vec->virtual_size, __ATOMIC_ACQUIRE);
+        int elem_size = __atomic_load_n(&vec->elem_size, __ATOMIC_ACQUIRE);
+        
+        // Prevent buffer overflow if another thread aggressively increased vsize
+        int elements_to_copy = std::min(vsize, target_size);
+        int copy_size = elements_to_copy * elem_size;
+        
+        if (!new_data) {
+            new_data = cache_pop(target_size * elem_size, tid);
+            
+            // CRITICAL: Zero out the memory so the GC reads safe nullptrs
+            // instead of uninitialized garbage during an append race.
+            memset(new_data, 0, target_size * elem_size);
+        }
+
+        if (old_data && copy_size > 0) {
+            memcpy(new_data, old_data, copy_size);
+        }
+
+        // PUBLISH
+        if (__atomic_compare_exchange_n(&vec->data, &old_data, new_data, 
+                                        false, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+            __atomic_store_n(&vec->size, target_size, __ATOMIC_RELEASE);
+            old_capacity = current_capacity; 
+            break; 
+        }
+    }
+
+    // RETIRE
+    if (old_data) {
+        scope_struct->stw_wait();
+        int elem_size = __atomic_load_n(&vec->elem_size, __ATOMIC_ACQUIRE);
+        scope_struct->gc->retire_arr(old_data, old_capacity * elem_size, tid);
+    }
+
+    return 0;
+}
+
+
 
 
 extern "C" DT_array *array_int_NewVec(Scope_Struct *scope_struct, int first, ...) { 

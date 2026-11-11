@@ -164,22 +164,20 @@ void GC_Arena::gc_list(void *ptr, uint16_t root_type, uint64_t mark_bit) {
     }
     if (root_type==uint16_t{102}) { // array 
         DT_array *array = static_cast<DT_array*>(ptr);
+        int size = __atomic_load_n(&array->virtual_size, __ATOMIC_ACQUIRE);
         void *datap = __atomic_load_n(&array->data, __ATOMIC_ACQUIRE);
         void **data = (void**)datap;
-        int size = __atomic_load_n(&array->virtual_size, __ATOMIC_ACQUIRE);
-        int ssize = __atomic_load_n(&array->size, __ATOMIC_ACQUIRE);
         uint16_t type = __atomic_load_n(&array->type, __ATOMIC_ACQUIRE);
-        // std::cout << "arr type: " << type << "\n";
-        // std::cout << "arr ptr: " << datap << "\n";
         if (!data)
             return;
-        if(type<100) // is primary
+        if(type<100)
             return;
 
         if (type==100) { // DT_str
             char *base = (char*)data;
             for (int i=0; i<size; ++i) {
                 void *elem = __atomic_load_n((void**)(base + i*16), __ATOMIC_ACQUIRE);
+                if (!elem) continue;
                 if(!get_is_marked(elem, mark_bit))
                     worklist_push(elem, type);
                 
@@ -187,6 +185,7 @@ void GC_Arena::gc_list(void *ptr, uint16_t root_type, uint64_t mark_bit) {
         } else { // general pointer
             for (int i=0; i<size; ++i) {
                 void *elem = __atomic_load_n(&data[i], __ATOMIC_ACQUIRE);
+                if (!elem) continue;
                 if(!get_is_marked(elem, mark_bit))
                     worklist_push(elem, type);
                 

@@ -3845,11 +3845,6 @@ void NameableCall::Checks() {
   }
 
 
-  // specify list type
-  if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="int")
-    Callee = "list_append_int";
-  if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="float")
-    Callee = "list_append_float";
 
 
 

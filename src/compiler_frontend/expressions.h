@@ -786,6 +786,7 @@ class NameableCall : public Nameable, public OwnedHolder, public ArgsBasedExpr {
 
   Value *codegen(Value *scope_struct) override;
   Value *codegen_append(Value *scope_struct);
+  Value *codegen_reserve(Value *scope_struct);
   Value *codegen_tile(Value *scope_struct);
   Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
