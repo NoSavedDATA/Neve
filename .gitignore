@@ -21,6 +21,7 @@ mall.sh
 *.tar.bz2
 *.nk
 *.nv
+*.db
 *.py
 *.o
 
